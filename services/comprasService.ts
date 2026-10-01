@@ -318,7 +318,7 @@ export const updateCompletionForecast = async (id: string, forecast: string): Pr
     if (error) throw error;
 };
 
-export const updatePurchaseStatus = async (id: string, status: string, historyEntry: any | null, budgetFileUrl?: string, completionForecast?: string): Promise<void> => {
+export const updatePurchaseStatus = async (id: string, status: string, historyEntry: any | null, budgetFileUrl?: string, completionForecast?: string, contabilidadeApproval?: any): Promise<void> => {
     // 1. Fetch current history to ensure we append to the latest version + Backend Validation
     const { data: current, error: fetchError } = await supabase
         .from('purchase_orders')
@@ -330,8 +330,6 @@ export const updatePurchaseStatus = async (id: string, status: string, historyEn
     if (current?.status === 'rejected') {
         throw new Error("Validação de Segurança: Não é possível avançar etapas nem interagir com um pedido já rejeitado.");
     }
-
-
 
     // MANDATORY RULE: Pedido Realizado requires Previsão
     if (status === 'realizado' && !completionForecast) {
@@ -352,6 +350,17 @@ export const updatePurchaseStatus = async (id: string, status: string, historyEn
 
     if (completionForecast) {
         updatePayload.completion_forecast = completionForecast;
+    }
+
+    if (contabilidadeApproval) {
+        const docSnapshot = current?.document_snapshot || {};
+        updatePayload.document_snapshot = {
+            ...docSnapshot,
+            content: {
+                ...(docSnapshot.content || {}),
+                contabilidadeApproval
+            }
+        };
     }
 
     const { error } = await supabase

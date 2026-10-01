@@ -219,11 +219,12 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     const purchaseStatusMap = {
         recebido: { label: 'Pedido Recebido', icon: PackageCheck, color: 'text-indigo-600 bg-indigo-50 border-indigo-100' },
         coletando_orcamento: { label: 'Orçamento', icon: FileSearch, color: 'text-amber-600 bg-amber-50 border-amber-100' },
-        aprovacao_orcamento: { label: 'Aprovação', icon: Scale, color: 'text-purple-600 bg-purple-50 border-purple-100' },
-        coletando_dotacao: { label: 'Dotação', icon: Landmark, color: 'text-blue-600 bg-blue-50 border-blue-100' },
+        aprovacao_orcamento: { label: 'Aprovação do Orçamento', icon: Scale, color: 'text-purple-600 bg-purple-50 border-purple-100' },
+        coletando_dotacao: { label: 'Contabilidade', icon: Landmark, color: 'text-teal-600 bg-teal-50 border-teal-100' },
         realizado: { label: 'Pedido Realizado', icon: ShoppingCart, color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
         concluido: { label: 'Concluído', icon: CheckCircle, color: 'text-slate-600 bg-slate-50 border-slate-100' },
         cancelado: { label: 'Cancelado', icon: XCircle, color: 'text-rose-600 bg-rose-50 border-rose-100' },
+        sem_movimentacao: { label: 'Sem Movimentação', icon: AlertTriangle, color: 'text-rose-700 bg-rose-50 border-rose-200 shadow-[0_0_8px_rgba(244,63,94,0.15)] animate-pulse' },
     };
 
     const priorityStyles = {

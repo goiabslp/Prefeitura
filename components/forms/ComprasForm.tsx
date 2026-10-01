@@ -4,7 +4,7 @@ import {
   ShoppingCart, FileText, PenTool, CheckCircle2, Columns,
   Plus, Trash2, Hash, Layers, MessageSquare, AlignLeft,
   Minus, ChevronDown, Package, Archive, Scale, Briefcase, Box, Lock, Key,
-  AlertTriangle, ShieldAlert, Zap, Info, User, Search, Check, UserCheck, Paperclip, Upload, ShieldCheck, QrCode, CreditCard, Loader2, Sparkles
+  AlertTriangle, ShieldAlert, Zap, Info, User, Search, Check, UserCheck, Paperclip, Upload, ShieldCheck, QrCode, CreditCard, Loader2, Sparkles, Calculator, XCircle, Clock
 } from 'lucide-react';
 import { AppState, ContentData, DocumentConfig, Signature, PurchaseItem, Person, Sector, Job, Attachment } from '../../types';
 import { uploadFile } from '../../services/storageService';

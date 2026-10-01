@@ -154,6 +154,13 @@ export interface ContentData {
     signerName?: string;
     signerRole?: string;
   };
+  contabilidadeApproval?: {
+    status: 'pending' | 'accepted' | 'rejected';
+    acceptedBy?: string;
+    acceptedAt?: string;
+    dotacaoRecursoAtestado?: boolean;
+    notes?: string;
+  };
   signatures?: { name: string; role: string; sector: string; id?: string }[];
 
   currentStageIndex?: number;
@@ -194,7 +201,7 @@ export interface AppState {
   sectors?: Sector[];
 }
 
-export type UserRole = 'admin' | 'collaborator' | 'compras' | 'marketing' | 'licitacao';
+export type UserRole = 'admin' | 'collaborator' | 'compras' | 'marketing' | 'licitacao' | 'contabilidade';
 
 export type AppPermission =
   | 'parent_criar_oficio' | 'parent_admin' | 'parent_compras' | 'parent_diarias' | 'parent_diarias_editor'
@@ -366,6 +373,7 @@ export interface Order {
   documentSnapshot?: AppState;
   paymentStatus?: 'pending' | 'contabilidade' | 'paid';
   paymentDate?: string | null;
+  contabilidadeApproval?: ContentData['contabilidadeApproval'];
   budgetFileUrl?: string;
   attachments?: Attachment[];
   documentos?: any[];

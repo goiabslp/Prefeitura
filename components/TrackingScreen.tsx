@@ -87,6 +87,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     const [purchaseStatusFilter, setPurchaseStatusFilter] = useState('all');
     const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
     const [showReportModal, setShowReportModal] = useState(false);
+    const [contabilidadeNotes, setContabilidadeNotes] = useState('');
     const [finalizadoCheckin, setFinalizadoCheckin] = useState<{ assinados: boolean, publicado: boolean, pasta: boolean } | null>(null);
     const [protocolEditOrder, setProtocolEditOrder] = useState<Order | null>(null);
     const [newProtocolValue, setNewProtocolValue] = useState('');
@@ -562,8 +563,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     const purchaseStatusMap = {
         recebido: { label: 'Pedido Recebido', icon: PackageCheck, color: 'text-indigo-600 bg-indigo-50 border-indigo-100' },
         coletando_orcamento: { label: 'Orçamento', icon: FileSearch, color: 'text-amber-600 bg-amber-50 border-amber-100' },
-        aprovacao_orcamento: { label: 'Aprovação', icon: Scale, color: 'text-purple-600 bg-purple-50 border-purple-100' },
-        coletando_dotacao: { label: 'Dotação', icon: Landmark, color: 'text-blue-600 bg-blue-50 border-blue-100' },
+        aprovacao_orcamento: { label: 'Aprovação do Orçamento', icon: Scale, color: 'text-purple-600 bg-purple-50 border-purple-100' },
+        coletando_dotacao: { label: 'Contabilidade', icon: Landmark, color: 'text-teal-600 bg-teal-50 border-teal-100' },
         realizado: { label: 'Pedido Realizado', icon: ShoppingCart, color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
         concluido: { label: 'Concluído', icon: CheckCircle, color: 'text-slate-600 bg-slate-50 border-slate-100' },
         cancelado: { label: 'Cancelado', icon: XCircle, color: 'text-rose-600 bg-rose-50 border-rose-100' },
@@ -597,7 +598,6 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         const isApproved = order.status === 'approved';
         const isEmAprovacao = !order.status || order.status === 'pending' || order.status === 'awaiting_approval' || order.status === 'payment_account' || order.status === 'awaiting_ficha';
         const isFinalized = order.status === 'rejected' || order.purchaseStatus === 'concluido' || order.purchaseStatus === 'cancelado';
-        const isRecebido = isApproved && (!order.purchaseStatus || order.purchaseStatus === 'recebido');
 
         let currentStatus: string = order.purchaseStatus || 'recebido';
 
@@ -606,12 +606,13 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
             currentStatus = 'sem_movimentacao';
         }
 
+        const isContabilidadeUser = currentUser?.role === 'contabilidade' || (currentUser as any)?.testRole === 'contabilidade' || isAdmin;
+        const isContabRejected = (order.contabilidadeApproval?.status === 'rejected' || (order.documentSnapshot?.content?.contabilidadeApproval as any)?.status === 'rejected') && currentStatus === 'coletando_dotacao';
+
         const config = purchaseStatusMap[currentStatus as keyof typeof purchaseStatusMap] || purchaseStatusMap.recebido;
 
-        const isLockedForUser = currentStatus === 'aprovacao_orcamento' && !isAdmin;
-        // O administrador sempre pode clicar para gerenciar ou fazer o fluxo rodar.
-        // O usuário do compras pode clicar se o pedido estiver aprovado e não estiver bloqueado.
-        const canClick = isAdmin || (isComprasUser && !isLockedForUser && isApproved);
+        const isLockedForUser = currentStatus === 'aprovacao_orcamento' && !isAdmin && !isComprasUser;
+        const canClick = isAdmin || isContabilidadeUser || (isComprasUser && !isLockedForUser && isApproved);
 
         const handleClick = (e: React.MouseEvent) => {
             e.stopPropagation();
@@ -627,19 +628,23 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
             if (isAdmin && isEmAprovacao) {
                 setAdminApprovalOrder(order);
-            } else if ((isComprasUser || isAdmin) && isApproved) {
+            } else if ((isComprasUser || isContabilidadeUser || isAdmin) && isApproved) {
                 setStatusSelectionOrder(order);
             }
         };
 
         if (isApproved || isSemMov) {
-            const displayConfig = config;
+            const displayConfig = isContabRejected ? {
+                label: 'Contabilidade (Recusado)',
+                icon: XCircle,
+                color: 'text-rose-700 bg-rose-50 border-rose-200 shadow-sm animate-pulse'
+            } : config;
             const isClickable = (isSemMov && (isAdmin || isComprasUser)) || canClick;
 
             return (
                 <button
                     onClick={handleClick}
-                    disabled={isLockedForUser || (isSemMov ? (!isAdmin && !isComprasUser) : (!isApproved && !isAdmin))}
+                    disabled={isLockedForUser || (isSemMov ? (!isAdmin && !isComprasUser) : (!isApproved && !isAdmin && !isContabilidadeUser))}
                     className={`flex items-center justify-between gap-2 px-3 py-1.5 rounded-full border transition-all duration-300 group
                         ${isClickable ? 'cursor-pointer hover:shadow-md active:scale-95' : 'cursor-default'}
                         ${isLockedForUser ? 'bg-purple-50 text-purple-700 border-purple-200 opacity-80' : `${displayConfig.color}`}
@@ -781,8 +786,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                     { id: 'pending_approval', label: 'Em Aprovação' },
                                                     { id: 'recebido', label: 'Pedido Recebido' },
                                                     { id: 'coletando_orcamento', label: 'Orçamento' },
-                                                    { id: 'aprovacao_orcamento', label: 'Aprovação de Orçamento' },
-                                                    { id: 'coletando_dotacao', label: 'Dotação' },
+                                                    { id: 'aprovacao_orcamento', label: 'Aprovação do Orçamento' },
+                                                    { id: 'coletando_dotacao', label: 'Contabilidade' },
                                                     { id: 'realizado', label: 'Pedido Realizado' },
                                                     { id: 'concluido', label: 'Concluído' },
                                                     { id: 'sem_movimentacao', label: 'Sem Movimentação' },
@@ -810,8 +815,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                             { id: 'pending_approval', label: 'Em Aprovação' },
                                                             { id: 'recebido', label: 'Pedido Recebido' },
                                                             { id: 'coletando_orcamento', label: 'Orçamento' },
-                                                            { id: 'aprovacao_orcamento', label: 'Aprovação de Orçamento' },
-                                                            { id: 'coletando_dotacao', label: 'Dotação' },
+                                                            { id: 'aprovacao_orcamento', label: 'Aprovação do Orçamento' },
+                                                            { id: 'coletando_dotacao', label: 'Contabilidade' },
                                                             { id: 'realizado', label: 'Pedido Realizado' },
                                                             { id: 'concluido', label: 'Concluído' },
                                                             { id: 'sem_movimentacao', label: 'Sem Movimentação' },

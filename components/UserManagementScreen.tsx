@@ -6,7 +6,7 @@ import {
   Plus, Search, Edit2, Trash2, ShieldCheck, Users, Save, X, Key,
   PenTool, LayoutGrid, User as UserIcon, CheckCircle2, Gavel, ShoppingCart, Briefcase, Network,
   Eye, EyeOff, RotateCcw, AlertTriangle, Clock, Lock, Copy, Check, Info, Trash, ToggleRight, ArrowLeft, RefreshCw, Megaphone, FlaskConical, Calendar,
-  ChevronDown, ChevronUp, CheckSquare, Square, Filter, UserCheck, ShieldAlert, Radio, Sparkles
+  ChevronDown, ChevronUp, CheckSquare, Square, Filter, UserCheck, ShieldAlert, Radio, Sparkles, Calculator
 } from 'lucide-react';
 import { googleCalendarService } from '../services/googleCalendarService';
 import { ModuleAccessControlTree } from './admin/ModuleAccessControlTree';
@@ -1183,10 +1183,11 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                       Nível de autorização geral do usuário
                     </span>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2.5">
                     {[
                       { id: 'admin', label: 'Admin', desc: 'Acesso total ao sistema', icon: <ShieldCheck className="w-4 h-4" />, color: 'indigo' },
                       { id: 'compras', label: 'Compras', desc: 'Módulos + Visão operacional', icon: <ShoppingCart className="w-4 h-4" />, color: 'emerald' },
+                      { id: 'contabilidade', label: 'Contabilidade', desc: 'Aprovação de dotação e recursos', icon: <Calculator className="w-4 h-4" />, color: 'teal' },
                       { id: 'licitacao', label: 'Licitação', desc: 'Gestão de Licitações', icon: <Gavel className="w-4 h-4" />, color: 'blue' },
                       { id: 'marketing', label: 'Marketing', desc: 'Gestão de mídia e notícias', icon: <Megaphone className="w-4 h-4" />, color: 'fuchsia' },
                       { id: 'collaborator', label: 'Colaborador', desc: 'Operação e consultas básicas', icon: <UserIcon className="w-4 h-4" />, color: 'slate' }
@@ -1243,11 +1244,12 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                         Apenas Administradores
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
                       {[
                         { id: '', label: 'Sem Teste', desc: 'Perfil real', icon: <RotateCcw className="w-3.5 h-3.5" />, color: 'slate' },
                         { id: 'admin', label: 'Admin', desc: 'Como Admin', icon: <ShieldCheck className="w-3.5 h-3.5" />, color: 'indigo' },
                         { id: 'compras', label: 'Compras', desc: 'Como Compras', icon: <ShoppingCart className="w-3.5 h-3.5" />, color: 'emerald' },
+                        { id: 'contabilidade', label: 'Contabilidade', desc: 'Como Contabilidade', icon: <Calculator className="w-3.5 h-3.5" />, color: 'teal' },
                         { id: 'licitacao', label: 'Licitação', desc: 'Como Licitação', icon: <Gavel className="w-3.5 h-3.5" />, color: 'blue' },
                         { id: 'marketing', label: 'Marketing', desc: 'Como Marketing', icon: <Megaphone className="w-3.5 h-3.5" />, color: 'fuchsia' },
                         { id: 'collaborator', label: 'Colaborador', desc: 'Como Colaborador', icon: <UserIcon className="w-3.5 h-3.5" />, color: 'slate' }

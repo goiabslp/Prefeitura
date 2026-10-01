@@ -74,7 +74,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
         const s5Valid = !!(content.fichaOrcamentaria && content.fichaOrcamentaria !== 'N/A' && content.fichaOrcamentaria.trim() !== ''); // Ficha Orçamentária
         const s6Valid = !!(content.resolucaoDescricao && (content.resolucaoDescricao === 'N/A' || content.resolucaoNumero)); // Origem
         const s7Valid = !!(content.signatureName); // Assinar
- 
+
         // Helper to check "started" (partial) - simple check if ANY field is filled
         const s1Started = !!(content.title || content.requesterName || content.priority);
         const s2Started = false; // Hard to be "partial" on items list, either have items or not
@@ -369,47 +369,47 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
     return (
         <div className="flex flex-col h-full bg-slate-50">
             {/* NEW HEADER LAYOUT: Back Button | Stepper | Action Button */}
-            <div className="sticky top-0 z-40 bg-white border-b border-slate-200 px-6 py-1 flex items-center gap-6 shadow-sm min-h-[50px]">
+            <div className="sticky top-0 z-40 bg-white border-b border-slate-200/80 px-4 md:px-6 py-0.5 flex items-center gap-4 shadow-2xs min-h-[44px]">
 
                 {/* 1. Voltar (Padrão) */}
                 <button
                     onClick={onBack}
                     disabled={isLoading}
-                    className={`flex items-center gap-2 group px-3 py-2 transition-all font-black uppercase tracking-tighter text-[11px] ${isLoading ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-slate-900'}`}
+                    className={`flex items-center gap-1.5 group px-2 py-1 transition-all font-black uppercase tracking-wider text-[10px] ${isLoading ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-slate-900'}`}
                     title="Voltar para Compras"
                 >
-                    <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                    <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" />
                     <span>Voltar</span>
                 </button>
 
                 {/* 2. Stepper */}
-                <div className="flex-1 flex justify-center">
+                <div className="flex-1 flex justify-center py-0.5">
                     <div className="w-full max-w-3xl">
                         <ComprasStepper currentStep={currentStep} stepsStatus={stepsStatus} onStepClick={handleStepClick} itemCounter={(content.purchaseItems || []).length} />
                     </div>
                 </div>
 
                 {/* 3. Botão de Ação (Avançar/Finalizar) */}
-                <div className="min-w-[140px] flex justify-end">
+                <div className="min-w-[120px] flex justify-end">
                     {/* Hide Button in Step 7 (Assinar) - Form handles it */}
                     {currentStep !== 7 && (
                         !isAllMandatoryCompleted ? (
                             <button
                                 onClick={nextStep}
                                 disabled={isLoading}
-                                className="flex items-center gap-2 px-6 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 shadow-lg shadow-slate-900/20 active:scale-95 transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="flex items-center gap-1.5 px-4 py-1.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 shadow-sm active:scale-95 transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                Avançar
-                                <ChevronRight className="w-4 h-4" />
+                                <span>Avançar</span>
+                                <ChevronRight className="w-3.5 h-3.5" />
                             </button>
                         ) : (
                             <button
                                 onClick={onFinish}
                                 disabled={isLoading}
-                                className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all text-sm animate-pulse disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 shadow-sm active:scale-95 transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                                {isLoading ? 'Salvando...' : 'Finalizar'}
+                                {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                                <span>{isLoading ? 'Salvando...' : 'Finalizar'}</span>
                             </button>
                         )
                     )}
@@ -417,8 +417,8 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
             </div>
 
             {/* CONTENT AREA */}
-            <div className={`flex-1 ${currentStep === 7 ? 'overflow-hidden flex flex-col justify-center' : 'overflow-y-auto'} p-4 md:p-8 bg-slate-50 relative`}>
-                <div className={`max-w-7xl mx-auto ${currentStep === 7 ? 'w-full h-full flex flex-col justify-center' : 'space-y-8'} animate-fade-in`}>
+            <div className={`flex-1 ${[5, 6, 7].includes(currentStep) ? 'overflow-hidden flex flex-col justify-center' : 'overflow-y-auto'} p-3 md:p-4 bg-slate-50 relative`}>
+                <div className={`max-w-7xl mx-auto ${[5, 6, 7].includes(currentStep) ? 'w-full h-full flex flex-col justify-center items-center' : 'space-y-8'} animate-fade-in`}>
                     <ComprasForm
                         state={state}
                         content={content}
