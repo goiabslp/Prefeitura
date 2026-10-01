@@ -1996,14 +1996,44 @@ export const confirmarDataAgendamento = async (
     vagaInfo?: Partial<ConsultaVaga>
 ): Promise<ConsultaAgendamento | null> => {
     try {
-        // 1. Buscar o agendamento atual para validar procedimento e integridade
-        const { data: targetBooking, error: fetchErr } = await supabase
-            .from('consultas_agendamentos')
-            .select('id, procedimento_id, patient_id, status, priority, created_at, solicitation_date, is_paused')
-            .eq('id', id)
-            .single();
+        // 1. Buscar o agendamento atual com fallback seguro de colunas e memória
+        let targetBooking: any = null;
+        let fetchErr: any = null;
 
-        if (fetchErr || !targetBooking) {
+        try {
+            const { data: bData, error: bErr } = await supabase
+                .from('consultas_agendamentos')
+                .select('id, procedimento_id, patient_id, status, priority, created_at')
+                .eq('id', id)
+                .maybeSingle();
+
+            if (bData) {
+                targetBooking = bData;
+            } else {
+                fetchErr = bErr;
+            }
+        } catch (err) {
+            fetchErr = err;
+        }
+
+        // Fallback: Se não encontrou via query direta (mismatch de coluna/schema/filtro), buscar em getAgendamentos
+        if (!targetBooking) {
+            try {
+                const all = await getAgendamentos();
+                const found = all.find(b => b.id === id);
+                if (found) {
+                    targetBooking = found;
+                    fetchErr = null;
+                }
+            } catch (fallbackErr) {
+                console.warn('[consultasService] Fallback getAgendamentos falhou em confirmarDataAgendamento:', fallbackErr);
+            }
+        }
+
+        if (!targetBooking) {
+            if (fetchErr) {
+                console.error('[consultasService] Erro na busca do agendamento (id: ' + id + '):', fetchErr);
+            }
             throw new Error('Solicitação de agendamento não encontrada.');
         }
 
