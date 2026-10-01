@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   FileText, Plus, Search, Filter, Clock, AlertCircle, CheckCircle2,
   ChevronRight, ArrowRight, UserCheck, Building2, Calendar, RefreshCw,
-  LayoutGrid, List, AlertTriangle, Layers, TrendingUp, Sparkles, Check
+  LayoutGrid, List, AlertTriangle, Layers, TrendingUp, Sparkles, Check, Send
 } from 'lucide-react';
 import { DocumentoFluxo, User } from '../../types';
 import { calcularPrazosDocumento, formatDataHoraComSegundos } from '../../services/documentosService';
@@ -17,7 +17,6 @@ interface DocumentosListScreenProps {
 }
 
 type TabType = 'meus' | 'recebidos' | 'concluidos';
-type ViewMode = 'grid' | 'table';
 
 export const DocumentosListScreen: React.FC<DocumentosListScreenProps> = ({
   documentos,
@@ -39,11 +38,9 @@ export const DocumentosListScreen: React.FC<DocumentosListScreenProps> = ({
   const [activeTab, setActiveTab] = useState<TabType>(getInitialTab());
   const [searchTerm, setSearchTerm] = useState('');
   const [tipoFiltro, setTipoFiltro] = useState<string>('todos');
-  const [prazoFiltro, setPrazoFiltro] = useState<string>('todos');
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [agora, setAgora] = useState<Date>(new Date());
 
-  // Atualização suave do relógio para manter os cronômetros dinâmicos
+  // Relógio para manter prazos atualizados
   useEffect(() => {
     const timer = setInterval(() => {
       setAgora(new Date());
@@ -61,16 +58,23 @@ export const DocumentosListScreen: React.FC<DocumentosListScreenProps> = ({
     }
   };
 
-  // Cálculo das métricas gerais (KPIs)
-  const metricas = useMemo(() => {
-    let total = documentos.length;
+  // Tipos únicos para filtro
+  const tiposDisponiveis = useMemo(() => {
+    const set = new Set<string>();
+    documentos.forEach(d => {
+      if (d.tipo_documento) set.add(d.tipo_documento);
+    });
+    return Array.from(set);
+  }, [documentos]);
+
+  // Contadores simples para as abas
+  const contadores = useMemo(() => {
     let meus = 0;
     let recebidos = 0;
     let concluidos = 0;
-    let alertasPrazo = 0;
 
     documentos.forEach(doc => {
-      const isDone = doc.concluido || doc.fase === 'Aprovado' || doc.fase === 'Parecer Concluído';
+      const isDone = doc.concluido || doc.fase === 'Aprovado' || doc.fase === 'Parecer Concluído' || doc.fase === 'Rejeitado';
       if (isDone) {
         concluidos++;
       } else {
@@ -80,35 +84,31 @@ export const DocumentosListScreen: React.FC<DocumentosListScreenProps> = ({
 
         if (souCriador || souResponsavel) meus++;
         if (souResponsavel || eMeuSetor) recebidos++;
-
-        const p = calcularPrazosDocumento(doc, agora);
-        if (p.alerta !== 'no_prazo') {
-          alertasPrazo++;
-        }
       }
     });
 
-    return { total, meus, recebidos, concluidos, alertasPrazo };
-  }, [documentos, currentUser, agora]);
+    return { meus, recebidos, concluidos };
+  }, [documentos, currentUser]);
 
   // Filtragem dos documentos
   const documentosFiltrados = useMemo(() => {
     return documentos.filter(doc => {
+      const isDone = doc.concluido || doc.fase === 'Aprovado' || doc.fase === 'Parecer Concluído' || doc.fase === 'Rejeitado';
+
       // 1. Filtro por Aba
       if (activeTab === 'concluidos') {
-        if (!doc.concluido && doc.fase !== 'Aprovado' && doc.fase !== 'Parecer Concluído') {
-          return false;
-        }
-      } else if (activeTab === 'meus') {
-        const souCriador = doc.criado_por_id === currentUser?.id || doc.criado_por_nome === currentUser?.name;
-        const souResponsavel = doc.responsavel_atual_id === currentUser?.id || doc.responsavel_atual_nome === currentUser?.name;
-        if (!souCriador && !souResponsavel) return false;
-        if (doc.concluido) return false;
+        if (!isDone) return false;
       } else if (activeTab === 'recebidos') {
+        if (isDone) return false;
         const souResponsavel = doc.responsavel_atual_id === currentUser?.id || doc.responsavel_atual_nome === currentUser?.name;
         const eMeuSetor = currentUser?.sector && doc.setor_atual?.toLowerCase() === currentUser.sector.toLowerCase();
         if (!souResponsavel && !eMeuSetor) return false;
-        if (doc.concluido) return false;
+      } else {
+        // Meus Documentos
+        if (isDone) return false;
+        const souCriador = doc.criado_por_id === currentUser?.id || doc.criado_por_nome === currentUser?.name;
+        const souResponsavel = doc.responsavel_atual_id === currentUser?.id || doc.responsavel_atual_nome === currentUser?.name;
+        if (!souCriador && !souResponsavel) return false;
       }
 
       // 2. Filtro por Tipo
@@ -116,432 +116,215 @@ export const DocumentosListScreen: React.FC<DocumentosListScreenProps> = ({
         return false;
       }
 
-      // 3. Filtro por Prazo / Alerta
-      if (prazoFiltro !== 'todos') {
-        const p = calcularPrazosDocumento(doc, agora);
-        if (prazoFiltro === 'atrasados' && p.alerta !== 'geral_vencido' && p.alerta !== 'etapa_atrasada') {
-          return false;
-        }
-        if (prazoFiltro === 'atencao' && p.alerta !== 'prazo_proximo') {
-          return false;
-        }
-        if (prazoFiltro === 'normal' && p.alerta !== 'no_prazo') {
-          return false;
-        }
-      }
-
-      // 4. Busca por texto
+      // 3. Filtro por Busca de Texto
       if (searchTerm.trim()) {
-        const query = searchTerm.toLowerCase();
-        const num = (doc.numero_sequencial || '').toLowerCase();
-        const tit = (doc.titulo || '').toLowerCase();
-        const tipo = (doc.tipo_documento || '').toLowerCase();
-        const resp = (doc.responsavel_atual_nome || '').toLowerCase();
-        const setor = (doc.setor_atual || '').toLowerCase();
-        const status = (doc.status || '').toLowerCase();
-        const fase = (doc.fase || '').toLowerCase();
-
-        return (
-          num.includes(query) ||
-          tit.includes(query) ||
-          tipo.includes(query) ||
-          resp.includes(query) ||
-          setor.includes(query) ||
-          status.includes(query) ||
-          fase.includes(query)
-        );
+        const term = searchTerm.toLowerCase().trim();
+        const matchesSeq = doc.numero_sequencial?.toLowerCase().includes(term);
+        const matchesTitulo = doc.titulo?.toLowerCase().includes(term);
+        const matchesDesc = doc.descricao?.toLowerCase().includes(term);
+        const matchesStatus = doc.status?.toLowerCase().includes(term);
+        const matchesFase = doc.fase?.toLowerCase().includes(term);
+        const matchesResp = doc.responsavel_atual_nome?.toLowerCase().includes(term);
+        const matchesSetor = doc.setor_atual?.toLowerCase().includes(term);
+        if (!matchesSeq && !matchesTitulo && !matchesDesc && !matchesStatus && !matchesFase && !matchesResp && !matchesSetor) {
+          return false;
+        }
       }
 
       return true;
     });
-  }, [documentos, activeTab, tipoFiltro, prazoFiltro, searchTerm, currentUser, agora]);
-
-  // Lista de tipos únicos para o filtro
-  const tiposDisponiveis = useMemo(() => {
-    const list = documentos.map(d => d.tipo_documento).filter(Boolean);
-    return Array.from(new Set(list));
-  }, [documentos]);
+  }, [documentos, activeTab, tipoFiltro, searchTerm, currentUser]);
 
   return (
-    <div className="w-full flex-1 flex flex-col bg-slate-50 min-h-0 text-slate-800 font-sans overflow-hidden">
-      {/* 1. TOPO COMPACTO 100% VIEWPORT */}
-      <header className="w-full bg-white border-b border-slate-200 shrink-0 z-20 shadow-2xs">
-        <div className="w-full px-4 sm:px-6 py-2 flex items-center justify-between gap-3">
+    <div className="w-full flex-1 flex flex-col bg-slate-50 font-sans min-h-0 overflow-hidden">
+      {/* Topo / Header Limpo */}
+      <div className="bg-white border-b border-slate-200/80 px-4 md:px-6 py-4 flex flex-col gap-3 shrink-0 shadow-xs">
+        <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-xs shrink-0">
-              <FileText className="w-4 h-4" />
+            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-sm shrink-0">
+              <FileText className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-1.5">
-                <h1 className="text-sm sm:text-base font-black text-slate-900 tracking-tight leading-tight">
-                  Documentos & Tramitações
-                </h1>
-                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.2 rounded-full bg-blue-50 border border-blue-200/80 text-blue-700 text-[10px] font-bold">
-                  <Sparkles className="w-2.5 h-2.5 text-blue-500" /> Fluxo Oficial
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 font-medium leading-none mt-0.5">
-                Controle interno, encaminhamento entre setores e prazos oficiais
-              </p>
+              <h1 className="text-lg font-bold text-slate-900 leading-tight">Documentos Internos</h1>
+              <p className="text-xs text-slate-500">Fluxo, encaminhamento e acompanhamento entre setores</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onRefresh}
-              title="Recarregar dados"
-              className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-all active:scale-95 shadow-2xs"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-blue-600' : ''}`} />
-            </button>
-
-            <button
-              onClick={onNovoDocumento}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold shadow-xs hover:from-blue-700 hover:to-indigo-700 transition-all active:scale-95 cursor-pointer shrink-0"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Novo Documento</span>
-            </button>
-          </div>
+          <button
+            onClick={onNovoDocumento}
+            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5 shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Criar Documento</span>
+            <span className="sm:hidden">Novo</span>
+          </button>
         </div>
-      </header>
 
-      {/* CONTEÚDO PRINCIPAL 100% FLUIDO E COMPACTO (FITS IN VIEWPORT) */}
-      <div className="w-full px-4 sm:px-6 py-2.5 flex flex-col gap-2.5 flex-1 min-h-0 overflow-y-auto">
+        {/* Abas e Filtros Simples */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-1">
+          {/* Abas Tab Pill */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/60 shrink-0">
+            <button
+              onClick={() => handleTabChange('meus')}
+              className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                activeTab === 'meus' ? 'bg-white text-blue-600 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>Meus Documentos</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'meus' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'}`}>
+                {contadores.meus}
+              </span>
+            </button>
 
-        {/* 2. PAINEL DE KPIS / MÉTRICAS COMPACTOS (1 LINHA DE ALTURA BAIXA) */}
-        <section className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 shrink-0">
-          {/* KPI 1: Total */}
-          <div className="bg-white px-3 py-2 rounded-xl border border-slate-200/90 shadow-2xs flex items-center justify-between">
-            <div className="min-w-0">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block leading-tight truncate">Total no Fluxo</span>
-              <span className="text-base font-black text-slate-900 leading-tight">{metricas.total}</span>
-            </div>
-            <div className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
-              <Layers className="w-3 h-3" />
-            </div>
+            <button
+              onClick={() => handleTabChange('recebidos')}
+              className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                activeTab === 'recebidos' ? 'bg-white text-blue-600 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>Recebidos / Setor</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'recebidos' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'}`}>
+                {contadores.recebidos}
+              </span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange('concluidos')}
+              className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                activeTab === 'concluidos' ? 'bg-white text-blue-600 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>Concluidos</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'concluidos' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'}`}>
+                {contadores.concluidos}
+              </span>
+            </button>
           </div>
 
-          {/* KPI 2: Meus Documentos */}
-          <div 
-            onClick={() => handleTabChange('meus')}
-            className={`px-3 py-2 rounded-xl border shadow-2xs flex items-center justify-between transition-all cursor-pointer ${
-              activeTab === 'meus' 
-                ? 'bg-blue-50/80 border-blue-300 ring-1 ring-blue-500/30' 
-                : 'bg-white border-slate-200/90 hover:border-blue-200'
-            }`}
-          >
-            <div className="min-w-0">
-              <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider block leading-tight truncate">Meus Ativos</span>
-              <span className="text-base font-black text-blue-900 leading-tight">{metricas.meus}</span>
-            </div>
-            <div className="w-6 h-6 rounded-lg bg-blue-100 flex items-center justify-center text-blue-700 shrink-0">
-              <UserCheck className="w-3 h-3" />
-            </div>
-          </div>
-
-          {/* KPI 3: Recebidos no Setor */}
-          <div 
-            onClick={() => handleTabChange('recebidos')}
-            className={`px-3 py-2 rounded-xl border shadow-2xs flex items-center justify-between transition-all cursor-pointer ${
-              activeTab === 'recebidos' 
-                ? 'bg-indigo-50/80 border-indigo-300 ring-1 ring-indigo-500/30' 
-                : 'bg-white border-slate-200/90 hover:border-indigo-200'
-            }`}
-          >
-            <div className="min-w-0">
-              <span className="text-[10px] font-bold text-indigo-800 uppercase tracking-wider block leading-tight truncate">Recebidos Setor</span>
-              <span className="text-base font-black text-indigo-900 leading-tight">{metricas.recebidos}</span>
-            </div>
-            <div className="w-6 h-6 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-700 shrink-0">
-              <Building2 className="w-3 h-3" />
-            </div>
-          </div>
-
-          {/* KPI 4: Concluídos */}
-          <div 
-            onClick={() => handleTabChange('concluidos')}
-            className={`px-3 py-2 rounded-xl border shadow-2xs flex items-center justify-between transition-all cursor-pointer ${
-              activeTab === 'concluidos' 
-                ? 'bg-emerald-50/80 border-emerald-300 ring-1 ring-emerald-500/30' 
-                : 'bg-white border-slate-200/90 hover:border-emerald-200'
-            }`}
-          >
-            <div className="min-w-0">
-              <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block leading-tight truncate">Concluídos</span>
-              <span className="text-base font-black text-emerald-900 leading-tight">{metricas.concluidos}</span>
-            </div>
-            <div className="w-6 h-6 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">
-              <CheckCircle2 className="w-3 h-3" />
-            </div>
-          </div>
-
-          {/* KPI 5: Alertas de Prazos */}
-          <div 
-            onClick={() => setPrazoFiltro(prazoFiltro === 'atrasados' ? 'todos' : 'atrasados')}
-            className={`px-3 py-2 rounded-xl border shadow-2xs flex items-center justify-between transition-all cursor-pointer col-span-2 sm:col-span-1 ${
-              metricas.alertasPrazo > 0 
-                ? 'bg-amber-50/80 border-amber-300 hover:border-amber-400' 
-                : 'bg-white border-slate-200/90 hover:border-slate-300'
-            }`}
-          >
-            <div className="min-w-0">
-              <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider block leading-tight truncate">Prazos & Atenção</span>
-              <span className="text-base font-black text-amber-900 leading-tight">{metricas.alertasPrazo}</span>
-            </div>
-            <div className="w-6 h-6 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700 shrink-0">
-              <Clock className="w-3 h-3" />
-            </div>
-          </div>
-        </section>
-
-        {/* 3. BARRA DE CONTROLE COMPACTA: ABAS + BUSCA + FILTROS */}
-        <div className="bg-white rounded-xl border border-slate-200/90 p-2 sm:p-2.5 shadow-2xs flex flex-col gap-2 shrink-0">
-          {/* Linha Superior: Abas de Navegação Compactas */}
-          <div className="flex items-center justify-between flex-wrap gap-2 pb-1.5 border-b border-slate-100">
-            <div className="flex items-center gap-1 overflow-x-auto w-full sm:w-auto">
-              <button
-                onClick={() => handleTabChange('meus')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer ${
-                  activeTab === 'meus'
-                    ? 'bg-blue-600 text-white shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <span>Meus Documentos</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                  activeTab === 'meus' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {metricas.meus}
-                </span>
-              </button>
-
-              <button
-                onClick={() => handleTabChange('recebidos')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer ${
-                  activeTab === 'recebidos'
-                    ? 'bg-blue-600 text-white shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <span>Recebidos ({currentUser?.sector || 'Setor'})</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                  activeTab === 'recebidos' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {metricas.recebidos}
-                </span>
-              </button>
-
-              <button
-                onClick={() => handleTabChange('concluidos')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer ${
-                  activeTab === 'concluidos'
-                    ? 'bg-blue-600 text-white shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <span>Concluídos</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                  activeTab === 'concluidos' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {metricas.concluidos}
-                </span>
-              </button>
-            </div>
-
-            {/* Alternância Grid / Tabela */}
-            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg shrink-0 self-end sm:self-auto">
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
-                  viewMode === 'grid' ? 'bg-white text-blue-600 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
-                }`}
-                title="Modo Grade (Cards)"
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">Grade</span>
-              </button>
-              <button
-                onClick={() => setViewMode('table')}
-                className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
-                  viewMode === 'table' ? 'bg-white text-blue-600 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
-                }`}
-                title="Modo Tabela Widescreen"
-              >
-                <List className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">Tabela</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Linha Inferior: Busca + Filtros Dropdown Compactos */}
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-            {/* Input de Busca */}
-            <div className="relative sm:col-span-6 lg:col-span-7">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          {/* Busca & Filtro de Tipo */}
+          <div className="flex items-center gap-2 flex-1 max-w-md">
+            <div className="relative flex-1">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                placeholder="Buscar por protocolo, título, assunto, responsável, fase ou setor..."
-                className="w-full pl-9 pr-8 py-1.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por número, título, setor..."
+                className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
               />
               {searchTerm && (
                 <button
                   onClick={() => setSearchTerm('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-400 hover:text-slate-700 font-bold p-0.5"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
                 >
-                  ✕
+                  ×
                 </button>
               )}
             </div>
 
-            {/* Filtro por Tipo de Documento */}
-            <div className="sm:col-span-3 lg:col-span-3">
+            {tiposDisponiveis.length > 0 && (
               <select
                 value={tipoFiltro}
-                onChange={e => setTipoFiltro(e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-lg text-xs text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                onChange={(e) => setTipoFiltro(e.target.value)}
+                className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-blue-500 transition-all cursor-pointer"
               >
-                <option value="todos">Todos os Tipos de Documento</option>
+                <option value="todos">Todos os Tipos</option>
                 {tiposDisponiveis.map(t => (
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
-            </div>
+            )}
 
-            {/* Filtro por Situação de Prazos */}
-            <div className="sm:col-span-3 lg:col-span-2">
-              <select
-                value={prazoFiltro}
-                onChange={e => setPrazoFiltro(e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-lg text-xs text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-              >
-                <option value="todos">Todos os Prazos</option>
-                <option value="atrasados">Atrasados / Vencidos</option>
-                <option value="atencao">Prazo Próximo (&lt; 2 dias)</option>
-                <option value="normal">No Prazo Regular</option>
-              </select>
-            </div>
+            <button
+              onClick={onRefresh}
+              className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-xl transition-all shrink-0"
+              title="Atualizar lista"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-blue-600' : ''}`} />
+            </button>
           </div>
         </div>
+      </div>
 
-        {/* 4. LISTA OU GRADE DE DOCUMENTOS 100% FLUIDA E COMPACTA */}
-        {documentosFiltrados.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 text-center my-auto flex flex-col items-center justify-center gap-2.5 shadow-2xs w-full max-w-xl mx-auto">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
-              <FileText className="w-5 h-5" />
-            </div>
-            <div className="max-w-md">
-              <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                Nenhum documento encontrado
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                {searchTerm || tipoFiltro !== 'todos' || prazoFiltro !== 'todos'
-                  ? 'Não encontramos nenhum documento com os filtros aplicados.'
-                  : activeTab === 'meus'
-                  ? 'Você ainda não cadastrou nenhum documento nesta aba.'
-                  : activeTab === 'recebidos'
-                  ? `Nenhum documento aguardando ação do seu setor (${currentUser?.sector || 'Geral'}) no momento.`
-                  : 'Nenhum documento finalizado registrado.'}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 pt-1">
-              {(searchTerm || tipoFiltro !== 'todos' || prazoFiltro !== 'todos') && (
-                <button
-                  onClick={() => { setSearchTerm(''); setTipoFiltro('todos'); setPrazoFiltro('todos'); }}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all"
-                >
-                  Limpar Filtros
-                </button>
-              )}
-
-              <button
-                onClick={onNovoDocumento}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Criar Novo Documento
-              </button>
-            </div>
-          </div>
-        ) : viewMode === 'grid' ? (
-          /* MODO GRID RESPONSIVO COMPACTO */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
+      {/* Conteúdo Principal: Lista de Cards Limpos */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6">
+        {documentosFiltrados.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 max-w-7xl mx-auto">
             {documentosFiltrados.map(doc => {
-              const prazoInfo = calcularPrazosDocumento(doc, agora);
-
-              let badgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-200';
-              let dotColor = 'bg-emerald-500';
-              if (prazoInfo.alerta === 'geral_vencido') {
-                badgeColor = 'bg-rose-50 text-rose-800 border-rose-200 font-bold';
-                dotColor = 'bg-rose-600 animate-pulse';
-              } else if (prazoInfo.alerta === 'etapa_atrasada') {
-                badgeColor = 'bg-red-50 text-red-700 border-red-200 font-semibold';
-                dotColor = 'bg-red-500 animate-pulse';
-              } else if (prazoInfo.alerta === 'prazo_proximo') {
-                badgeColor = 'bg-amber-50 text-amber-800 border-amber-200 font-semibold';
-                dotColor = 'bg-amber-500';
-              }
+              const prazos = calcularPrazosDocumento(doc, agora);
 
               return (
                 <div
                   key={doc.id}
                   onClick={() => onVisualizarDocumento(doc.id)}
-                  className="bg-white rounded-xl border border-slate-200/90 p-3.5 hover:border-blue-400 hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between gap-2.5 group relative overflow-hidden"
+                  className="bg-white rounded-2xl border border-slate-200/90 hover:border-blue-400 shadow-2xs hover:shadow-md transition-all p-4 flex flex-col justify-between cursor-pointer group relative overflow-hidden"
                 >
-                  {/* Linha 1: Tipo + Número + Alerta de Prazo */}
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200 uppercase tracking-wider">
+                  {/* Topo do Card: Número Sequencial + Badge Tipo */}
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className="text-[11px] font-bold font-mono text-blue-700 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100">
+                        {doc.numero_sequencial}
+                      </span>
+
+                      <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200/60 truncate max-w-[140px]">
                         {doc.tipo_documento}
                       </span>
-                      {doc.numero_sequencial && (
-                        <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-50 px-1 py-0.2 rounded border border-slate-100">
-                          {doc.numero_sequencial}
+                    </div>
+
+                    {/* Título do Documento */}
+                    <h3 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2 leading-snug mb-1.5">
+                      {doc.titulo}
+                    </h3>
+
+                    {/* Descrição em miniatura */}
+                    {doc.descricao && (
+                      <p className="text-xs text-slate-500 line-clamp-2 mb-3 leading-relaxed">
+                        {doc.descricao}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Detalhes de Localização, Status e Fase */}
+                  <div className="pt-3 border-t border-slate-100 space-y-2 mt-2">
+                    {/* Localização Atual */}
+                    <div className="flex items-center justify-between text-xs text-slate-600">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span className="font-semibold text-slate-800 truncate">{doc.setor_atual}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-[11px] text-slate-500 shrink-0">
+                        <UserCheck className="w-3 h-3 text-slate-400" />
+                        <span className="truncate max-w-[110px]">{doc.responsavel_atual_nome}</span>
+                      </div>
+                    </div>
+
+                    {/* Badges de Status & Fase */}
+                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                      <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
+                        {doc.status}
+                      </span>
+                      <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">
+                        {doc.fase}
+                      </span>
+
+                      {/* Prazo */}
+                      {prazos.alerta !== 'no_prazo' && !doc.concluido && (
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${
+                          prazos.alerta === 'geral_vencido' ? 'bg-rose-100 text-rose-700' :
+                          prazos.alerta === 'etapa_atrasada' ? 'bg-amber-100 text-amber-800' :
+                          'bg-amber-50 text-amber-700'
+                        }`}>
+                          {prazos.alertaLabel}
                         </span>
                       )}
                     </div>
 
-                    <div className={`text-[10px] px-2 py-0.2 rounded-full border flex items-center gap-1 shrink-0 ${badgeColor}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`}></span>
-                      <span>{prazoInfo.alertaLabel}</span>
-                    </div>
-                  </div>
-
-                  {/* Linha 2: Título do Documento */}
-                  <div>
-                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2 leading-snug">
-                      {doc.titulo}
-                    </h3>
-                  </div>
-
-                  {/* Linha 3: Badges de Fase e Status */}
-                  <div className="flex flex-wrap items-center gap-1 text-[10px]">
-                    <span className="px-1.5 py-0.2 bg-blue-50 text-blue-800 font-bold rounded border border-blue-100 flex items-center gap-1">
-                      <Building2 className="w-2.5 h-2.5 text-blue-500" />
-                      {doc.status}
-                    </span>
-                    <span className="px-1.5 py-0.2 bg-slate-100 text-slate-700 font-semibold rounded border border-slate-200">
-                      Fase: {doc.fase}
-                    </span>
-                  </div>
-
-                  {/* Linha 4: Responsável Atual e Prazos Regressivos */}
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 text-[11px]">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <div className="w-5 h-5 rounded-full bg-slate-100 text-slate-700 font-black text-[9px] flex items-center justify-center uppercase shrink-0 border border-slate-200">
-                        {(doc.responsavel_atual_nome || 'A')[0]}
-                      </div>
-                      <p className="text-slate-800 font-bold truncate text-[10px]">
-                        {doc.responsavel_atual_nome || 'A Definir'}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-1 text-[10px] font-mono font-semibold text-slate-700 shrink-0">
-                      <Clock className="w-3 h-3 text-blue-500" />
-                      <span>{prazoInfo.geralRestanteTexto}</span>
+                    {/* Rodapé do Card: Data de Criação + Ação */}
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
+                      <span>Criado em: {new Date(doc.data_criacao).toLocaleDateString('pt-BR')}</span>
+                      <span className="text-blue-600 font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                        Ver Detalhes <ChevronRight className="w-3.5 h-3.5" />
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -549,87 +332,18 @@ export const DocumentosListScreen: React.FC<DocumentosListScreenProps> = ({
             })}
           </div>
         ) : (
-          /* MODO TABELA WIDESCREEN COMPACTA */
-          <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden w-full">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[9px]">
-                    <th className="py-2 px-3">Protocolo / Tipo</th>
-                    <th className="py-2 px-3">Título & Assunto</th>
-                    <th className="py-2 px-3">Status / Fase</th>
-                    <th className="py-2 px-3">Responsável & Setor</th>
-                    <th className="py-2 px-3">Prazo Geral</th>
-                    <th className="py-2 px-3 text-right">Ação</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {documentosFiltrados.map(doc => {
-                    const prazoInfo = calcularPrazosDocumento(doc, agora);
-                    let badgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-200';
-                    if (prazoInfo.alerta === 'geral_vencido') {
-                      badgeColor = 'bg-rose-50 text-rose-800 border-rose-200 font-bold';
-                    } else if (prazoInfo.alerta === 'etapa_atrasada') {
-                      badgeColor = 'bg-red-50 text-red-700 border-red-200 font-semibold';
-                    } else if (prazoInfo.alerta === 'prazo_proximo') {
-                      badgeColor = 'bg-amber-50 text-amber-800 border-amber-200 font-semibold';
-                    }
-
-                    return (
-                      <tr
-                        key={doc.id}
-                        onClick={() => onVisualizarDocumento(doc.id)}
-                        className="hover:bg-blue-50/40 transition-colors cursor-pointer group"
-                      >
-                        <td className="py-2 px-3">
-                          <div className="font-mono font-bold text-slate-800 text-[11px]">
-                            {doc.numero_sequencial || 'S/N'}
-                          </div>
-                          <span className="text-[9px] font-semibold text-slate-500 uppercase">
-                            {doc.tipo_documento}
-                          </span>
-                        </td>
-                        <td className="py-2 px-3 max-w-xs">
-                          <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors truncate text-xs">
-                            {doc.titulo}
-                          </div>
-                        </td>
-                        <td className="py-2 px-3 whitespace-nowrap">
-                          <span className="inline-block px-1.5 py-0.2 rounded bg-blue-50 border border-blue-100 text-blue-800 font-bold text-[9px]">
-                            {doc.status}
-                          </span>
-                          <span className="text-[9px] text-slate-500 ml-1">
-                            ({doc.fase})
-                          </span>
-                        </td>
-                        <td className="py-2 px-3">
-                          <div className="font-bold text-slate-800 truncate max-w-[160px] text-[11px]">
-                            {doc.responsavel_atual_nome || 'A Definir'}
-                          </div>
-                          <div className="text-[9px] text-slate-400 truncate">
-                            {doc.setor_atual}
-                          </div>
-                        </td>
-                        <td className="py-2 px-3 whitespace-nowrap">
-                          <span className={`inline-block px-2 py-0.2 rounded-full border text-[9px] font-semibold ${badgeColor}`}>
-                            {prazoInfo.geralRestanteTexto}
-                          </span>
-                        </td>
-                        <td className="py-2 px-3 text-right whitespace-nowrap">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); onVisualizarDocumento(doc.id); }}
-                            className="px-2.5 py-1 rounded-lg bg-slate-100 group-hover:bg-blue-600 group-hover:text-white text-slate-700 font-bold text-[10px] transition-all inline-flex items-center gap-1"
-                          >
-                            <span>Abrir</span>
-                            <ChevronRight className="w-3 h-3" />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+          <div className="h-64 flex flex-col items-center justify-center text-center p-6 bg-white rounded-2xl border border-dashed border-slate-200 max-w-md mx-auto my-12">
+            <FileText className="w-12 h-12 text-slate-300 mb-3" />
+            <h3 className="text-sm font-bold text-slate-700">Nenhum documento encontrado</h3>
+            <p className="text-xs text-slate-500 mt-1 mb-4">
+              {searchTerm ? 'Nenhum resultado corresponde à sua busca.' : 'Não há documentos nesta categoria ainda.'}
+            </p>
+            <button
+              onClick={onNovoDocumento}
+              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" /> Criar Novo Documento
+            </button>
           </div>
         )}
       </div>
