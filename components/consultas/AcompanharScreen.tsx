@@ -3521,18 +3521,28 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
 
                             {/* SEÇÃO 2: DETALHES DO AGENDAMENTO */}
                             <div className="space-y-4">
-                                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-                                    <Calendar className="w-4 h-4 text-sky-600" />
-                                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Detalhes do Agendamento</h4>
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                    <div className="flex items-center gap-2">
+                                        <Calendar className="w-4 h-4 text-sky-600" />
+                                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Detalhes do Agendamento</h4>
+                                    </div>
+                                    {!isAdmin && (
+                                        <span className="text-[10px] font-extrabold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 flex items-center gap-1">
+                                            <Lock className="w-3 h-3 text-amber-600" /> Edição Restrita a Administradores
+                                        </span>
+                                    )}
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="md:col-span-2">
-                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Exame / Consulta *</label>
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
+                                            Exame / Consulta * {!isAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
+                                        </label>
                                         <select
                                             value={editProcedimentoId}
                                             onChange={(e) => setEditProcedimentoId(e.target.value)}
-                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none uppercase"
+                                            disabled={!isAdmin}
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none uppercase disabled:opacity-75 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
                                             required
                                         >
                                             <option value="">Selecione um procedimento</option>
@@ -3544,42 +3554,30 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                         </select>
                                     </div>
 
-                                    <div>
-                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Data Agendada</label>
-                                        <input
-                                            type="date"
-                                            value={editAppointmentDate}
-                                            onChange={(e) => setEditAppointmentDate(e.target.value)}
-                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none"
-                                        />
-                                    </div>
+                                    {/* Data Agendada e Horário Agendado OCULTOS */}
 
                                     <div>
-                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Horário Agendado</label>
-                                        <input
-                                            type="time"
-                                            value={editAppointmentTime}
-                                            onChange={(e) => setEditAppointmentTime(e.target.value)}
-                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Data de Solicitação</label>
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
+                                            Data de Solicitação {!isAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
+                                        </label>
                                         <input
                                             type="date"
                                             value={editSolicitationDate}
                                             onChange={(e) => setEditSolicitationDate(e.target.value)}
-                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none"
+                                            disabled={!isAdmin}
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none disabled:opacity-75 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
                                         />
                                     </div>
 
                                     <div>
-                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Prioridade</label>
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
+                                            Prioridade {!isAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
+                                        </label>
                                         <select
                                             value={editPriority}
                                             onChange={(e) => setEditPriority(e.target.value as 'Normal' | 'Urgência' | 'Especial')}
-                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none"
+                                            disabled={!isAdmin}
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none disabled:opacity-75 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
                                         >
                                             <option value="Normal">Normal</option>
                                             <option value="Urgência">Urgência</option>
@@ -3588,11 +3586,14 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                     </div>
 
                                     <div>
-                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Status</label>
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
+                                            Status {!isAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
+                                        </label>
                                         <select
                                             value={editStatus}
                                             onChange={(e) => setEditStatus(e.target.value as ConsultaAgendamento['status'])}
-                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none"
+                                            disabled={!isAdmin}
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none disabled:opacity-75 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
                                         >
                                             <option value="Solicitado">Solicitado</option>
                                             <option value="Agendado">Agendado</option>
@@ -3606,11 +3607,14 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                     </div>
 
                                     <div>
-                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">É Retorno?</label>
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
+                                            É Retorno? {!isAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
+                                        </label>
                                         <select
                                             value={editIsRetorno ? 'sim' : 'nao'}
                                             onChange={(e) => setEditIsRetorno(e.target.value === 'sim')}
-                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none"
+                                            disabled={!isAdmin}
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none disabled:opacity-75 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
                                         >
                                             <option value="nao">Não (Primeiro Atendimento)</option>
                                             <option value="sim">Sim (Paciente de Retorno)</option>
@@ -3619,11 +3623,14 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
 
                                     {editIsRetorno && (
                                         <div>
-                                            <label className="block text-[10px] font-black uppercase text-teal-700 mb-1">Etapa de Retorno</label>
+                                            <label className="block text-[10px] font-black uppercase text-teal-700 mb-1">
+                                                Etapa de Retorno {!isAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
+                                            </label>
                                             <select
                                                 value={editRetornoTipo || '1º Retorno'}
                                                 onChange={(e) => setEditRetornoTipo(e.target.value as any)}
-                                                className="w-full p-3 bg-teal-50/50 border border-teal-200 rounded-xl text-xs font-black text-teal-900 focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none"
+                                                disabled={!isAdmin}
+                                                className="w-full p-3 bg-teal-50/50 border border-teal-200 rounded-xl text-xs font-black text-teal-900 focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none disabled:opacity-75 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
                                             >
                                                 <option value="1º Retorno">1º Retorno</option>
                                                 <option value="2º Retorno">2º Retorno</option>
@@ -3635,13 +3642,16 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                     )}
 
                                     <div>
-                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Quantidade de Vagas</label>
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
+                                            Quantidade de Vagas {!isAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
+                                        </label>
                                         <input
                                             type="number"
                                             min={1}
                                             value={editQuantity}
                                             onChange={(e) => setEditQuantity(parseInt(e.target.value) || 1)}
-                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none"
+                                            disabled={!isAdmin}
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none disabled:opacity-75 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
                                         />
                                     </div>
                                 </div>
