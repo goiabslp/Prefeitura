@@ -1,5 +1,5 @@
 import { User } from '../types';
-import { canUserAccessRoute, isSuperAdminUser } from './permissionService';
+import { canUserAccessRoute } from './permissionService';
 import { auditLogService } from './auditLogService';
 import { calendarService } from './calendarService';
 import * as vehicleService from './vehicleSchedulingService';
@@ -8,7 +8,6 @@ import * as farmaciaService from './farmaciaService';
 import { supabase } from './supabaseClient';
 
 function checkRouteAccess(user: User, route: string): boolean {
-  if (isSuperAdminUser(user)) return true;
   return canUserAccessRoute(route, user).allowed;
 }
 
@@ -101,7 +100,7 @@ export const SYSTEM_AI_TOOLS: Record<string, ToolDefinition> = {
       return {
         success: true,
         message: `Módulos consultados com base nas permissões de ${user.name || user.username}.`,
-        data: modulos.filter(m => m.permitido || isSuperAdminUser(user)),
+        data: modulos.filter(m => m.permitido),
         cardType: 'info'
       };
     }
@@ -339,10 +338,10 @@ export const SYSTEM_AI_TOOLS: Record<string, ToolDefinition> = {
       }
     },
     execute: async (params, user) => {
-      if (!checkRouteAccess(user, '/Admin/Usuarios') && !isSuperAdminUser(user)) {
+      if (!checkRouteAccess(user, '/Admin/Usuarios')) {
         return {
           success: false,
-          message: 'Acesso restrito: Apenas administradores com permissão em /Admin/Usuarios podem consultar a lista de usuários do sistema.'
+          message: 'Acesso restrito: Apenas usuários com permissão em /Admin/Usuarios podem consultar a lista de usuários do sistema.'
         };
       }
 

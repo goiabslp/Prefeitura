@@ -540,8 +540,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               </div>
             </div>
 
-            {/* Botão de Configurações - Visível apenas para quem possui permissão de Administração */}
-            {(currentUser.role === 'admin' || (currentUser.permissions || []).includes('parent_admin' as any)) && (
+            {/* Botão de Configurações - Visível apenas para quem possui permissão de Administração ativa */}
+            {((currentUser.permissions || []).some(p => p === 'parent_admin' || p.startsWith('sub_admin_') || p.startsWith('parent_admin_'))) && (
               <button
                 onClick={() => onOpenAdmin(null)}
                 className="p-2 rounded-xl text-slate-500 hover:bg-slate-50 hover:text-indigo-600 transition-all active:scale-95 group"

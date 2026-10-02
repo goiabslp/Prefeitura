@@ -1,5 +1,5 @@
 import { User } from '../types';
-import { canUserAccessRoute, isSuperAdminUser } from './permissionService';
+import { canUserAccessRoute } from './permissionService';
 import { getScreenMetadata, ScreenField, ScreenMetadata } from './systemScreenKnowledge';
 
 export interface FlowStepProgress {
@@ -439,7 +439,7 @@ export class SystemAIFlowEngine {
   ): FlowEngineResult {
     // Valida permissão na tela de destino
     const check = canUserAccessRoute(workflow.route, user);
-    if (!check.allowed && !isSuperAdminUser(user)) {
+    if (!check.allowed) {
       return {
         handled: true,
         messageText: `Essa tarefa pertence ao módulo de **${workflow.module}**, mas você não possui permissão para acessar essa funcionalidade (${check.reason || 'Restrição de perfil'}).`,
@@ -508,7 +508,7 @@ export class SystemAIFlowEngine {
   private static startWorkflow(workflow: WorkflowDef, rawText: string, user: User): FlowEngineResult {
     // 1. Checa permissão do usuário
     const check = canUserAccessRoute(workflow.route, user);
-    if (!check.allowed && !isSuperAdminUser(user)) {
+    if (!check.allowed) {
       return {
         handled: true,
         messageText: `Não posso realizar essa ação porque seu usuário não possui permissão para o fluxo de **${workflow.name}** no módulo de **${workflow.module}**.`

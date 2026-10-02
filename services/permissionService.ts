@@ -952,53 +952,9 @@ export function cleanPermissionsArray(
 }
 
 /**
- * Determina se o usuário é o Administrador Geral do Sistema ("GAF" ou role admin não simulada).
- * Diretriz do sistema:
- * O usuário "GAF" deve ter acesso a todo o sistema, não deve ser impedido de acessar nenhuma rota URL,
- * é o administrador do sistema e possui acesso completo e irrestrito.
+ * Helper informativo de papel de usuário (NUNCA concede bypass em autorizações ou Controle de Acesso).
  */
 export function isSuperAdminUser(user: User | null): boolean {
-  if (!user) return false;
-
-  // REGRA FUNDAMENTAL DE IMPERSONAÇÃO:
-  // Ao acessar outro usuário, o administrador deve enxergar e utilizar o sistema EXATAMENTE
-  // com as mesmas permissões desse usuário, sem privilégios administrativos adicionais.
-  if ((user as any).impersonatedBy) {
-    const targetUsername = (user.username || '').toLowerCase().trim();
-    const targetEmail = (user.email || '').toLowerCase().trim();
-    const targetId = (user.id || '').toLowerCase().trim();
-    // Apenas se a conta acessada for ela própria a conta GAF
-    return (
-      targetUsername === 'gaf' ||
-      targetEmail === 'gaf' ||
-      targetEmail.startsWith('gaf@') ||
-      targetId === 'user_guilherme'
-    );
-  }
-
-  const username = (user.username || '').toLowerCase().trim();
-  const email = (user.email || '').toLowerCase().trim();
-  const id = (user.id || '').toLowerCase().trim();
-  const name = (user.name || '').toLowerCase().trim();
-
-  // 1. Identificação direta do usuário "GAF" (Guilherme Araújo Ferreira dos Santos)
-  if (
-    username === 'gaf' ||
-    email === 'gaf' ||
-    email.startsWith('gaf@') ||
-    id === 'user_guilherme' ||
-    name.includes('guilherme araújo ferreira')
-  ) {
-    return true;
-  }
-
-  // 2. Administrador com papel ativo de admin (caso não esteja testando conscientemente um perfil inferior via testRole)
-  const isRealAdmin = user.role === 'admin' || (user as any).realRole === 'admin';
-  const activeTestRole = user.testRole;
-  if (isRealAdmin && (!activeTestRole || activeTestRole === 'admin')) {
-    return true;
-  }
-
   return false;
 }
 
@@ -1022,6 +978,9 @@ export function getAllPermissionKeys(): string[] {
 
 /**
  * Valida se o usuário tem permissão para o módulo pai
+ * REGRA RIGOROSA: Aplica-se a TODOS os usuários, inclusive Administradores.
+ * PERMISSÃO ATIVA -> Módulo visível e acessível.
+ * PERMISSÃO DESATIVADA -> Módulo completamente invisível e inacessível.
  */
 export function userCanAccessModuleParent(
   user: User | null, 
@@ -1030,34 +989,18 @@ export function userCanAccessModuleParent(
 ): boolean {
   if (!user) return false;
 
-  // SUPER ADMIN / GAF: Acesso completo e irrestrito a qualquer módulo (apenas quando não impersonando outro usuário)
-  if (isSuperAdminUser(user)) {
-    return true;
-  }
-
-  // 1. Dependência global: se desativado no global, usuários regulares não acessam (regra: Global prevalece)
+  // 1. Dependência global: se desativado no global, nenhum usuário acessa (regra: Global prevalece)
   if (!isModuleActiveGlobally(parentDef.key, globalSettings)) {
     return false;
   }
 
-  // 2. Permissão do usuário
-  const userRole = (user.testRole !== undefined && user.testRole !== null) ? user.testRole : user.role;
-  
-  // Salvaguarda: Administrador tem acesso ao módulo Admin para não ser bloqueado acidentalmente
-  if (parentDef.key === 'parent_admin') {
-    if (userRole === 'admin' || userHasPermissionKey(user.permissions, 'parent_admin', parentDef.legacyKeys)) {
-      return true;
-    }
-    return false;
-  }
-
-  // Verifica permissão explícita do módulo pai
+  // 2. Verifica permissão explícita do módulo pai no perfil individual do usuário
   if (userHasPermissionKey(user.permissions, parentDef.key, parentDef.legacyKeys)) {
     return true;
   }
 
-  // REGRA OBRIGATÓRIA DE 2 NÍVEIS:
-  // Se qualquer submódulo (ou todos) estiver liberado para o usuário, o módulo pai DEVE obrigatoriamente aparecer e estar acessível.
+  // 3. REGRA OBRIGATÓRIA DE 2 NÍVEIS (Módulo -> Submódulo):
+  // Se qualquer submódulo deste módulo estiver liberado individualmente para o usuário, o módulo pai DEVE aparecer e estar acessível.
   if (parentDef.submodules && parentDef.submodules.length > 0) {
     const hasAnySubmodule = parentDef.submodules.some(sub =>
       userHasPermissionKey(user.permissions, sub.key, sub.legacyKeys)
@@ -1072,6 +1015,7 @@ export function userCanAccessModuleParent(
 
 /**
  * Valida se o usuário tem permissão para um submódulo específico
+ * REGRA RIGOROSA: Aplica-se a TODOS os usuários, inclusive Administradores.
  */
 export function userCanAccessSubmodule(
   user: User | null,
@@ -1082,7 +1026,7 @@ export function userCanAccessSubmodule(
   if (!user) return false;
 
   const parentDef = MODULE_ACCESS_TREE.find(m => m.key === parentKey);
-  if (!parentDef) return true;
+  if (!parentDef) return false;
 
   // 1. Dependência global do pai: Se o pai estiver inativo no global, submódulo inativo para todos
   if (!isModuleActiveGlobally(parentKey, globalSettings)) {
@@ -1094,11 +1038,6 @@ export function userCanAccessSubmodule(
     return false;
   }
 
-  // 3. SUPER ADMIN / GAF: Acesso completo caso o módulo e submódulo estejam ativos globalmente
-  if (isSuperAdminUser(user)) {
-    return true;
-  }
-
   // 3. Dependência do pai no usuário: Se o usuário não tem o pai, NÃO acessa o filho de jeito nenhum!
   if (!userCanAccessModuleParent(user, parentDef, globalSettings)) {
     return false;
@@ -1107,18 +1046,7 @@ export function userCanAccessSubmodule(
   const subDef = parentDef.submodules?.find(s => s.key === subKey);
   if (!subDef) return true;
 
-  const userRole = (user.testRole !== undefined && user.testRole !== null) ? user.testRole : user.role;
-
-  // Salvaguarda administrativa para o módulo de administração
-  if (parentKey === 'parent_admin' && userRole === 'admin') {
-    return true;
-  }
-
   // 4. Checa a permissão individual do submódulo
-  // Para que o usuário acesse o submódulo específico, ele DEVE possuir a permissão explícita
-  // do submódulo (chave canônica ou chaves legadas aceitas).
-  // A posse da permissão do módulo pai concede acesso ao módulo em geral, mas NÃO sobrepõe
-  // a desativação de submódulos individuais quando configurados no controle de acesso.
   const hasSubPerm = userHasPermissionKey(user.permissions, subDef.key, subDef.legacyKeys);
   if (hasSubPerm) {
     return true;
@@ -1133,8 +1061,7 @@ export function userCanAccessSubmodule(
     return false;
   }
 
-  // Salvaguarda para usuários legados: se o usuário possui APENAS a chave pai antiga e nenhuma
-  // permissão granular de submódulos registrada no array, mantém compatibilidade retrógrada.
+  // Se o usuário possui APENAS a chave pai e nenhuma permissão granular de submódulos registrada no array, mantém compatibilidade retrógrada.
   const hasParentPerm = userHasPermissionKey(user.permissions, parentDef.key, parentDef.legacyKeys);
   return hasParentPerm;
 }
@@ -1260,10 +1187,6 @@ export function checkUserPermissionAndLog(
     return false;
   }
 
-  if (isSuperAdminUser(user)) {
-    return true;
-  }
-
   const hasPerm = userHasPermissionKey(user.permissions, permissionKey, legacyKeys);
   if (!hasPerm) {
     logAccessDenied({
@@ -1349,13 +1272,6 @@ export function canUserAccessRoute(
     return { allowed: true };
   }
 
-  const userRole = (user.testRole !== undefined && user.testRole !== null) ? user.testRole : user.role;
-
-  // Salvaguarda administrativa: Administrador nunca é bloqueado no módulo de Administração
-  if (binding.parentKey === 'parent_admin' && userRole === 'admin') {
-    return { allowed: true };
-  }
-
   // 4. Validação do Módulo Pai no Global: SE O PAI ESTIVER DESATIVADO NO GLOBAL, NENHUM USUÁRIO ACESSA!
   if (!isModuleActiveGlobally(binding.parentKey, globalSettings)) {
     const reason = `O módulo "${binding.moduleLabel}" está temporariamente desativado no sistema.`;
@@ -1420,12 +1336,7 @@ export function canUserAccessRoute(
     }
   }
 
-  // 6. SUPER ADMIN / USUÁRIO "GAF": Acesso completo e irrestrito caso o módulo e submódulo estejam ativos globalmente
-  if (isSuperAdminUser(user)) {
-    return { allowed: true };
-  }
-
-  // 7. Validação do Módulo Pai no Usuário
+  // 6. Validação do Módulo Pai no Usuário: Válido para TODOS os perfis (inclusive Administradores)
   if (!userCanAccessModuleParent(user, parentDef, globalSettings)) {
     const reason = `Seu usuário não possui permissão de acesso ao módulo "${binding.moduleLabel}".`;
     logAccessDenied({
@@ -1453,7 +1364,7 @@ export function canUserAccessRoute(
     };
   }
 
-  // 8. Se a rota possui submódulo específico, valida no Usuário
+  // 7. Se a rota possui submódulo específico, valida no Usuário: Válido para TODOS os perfis (inclusive Administradores)
   if (binding.subKey) {
     const subDef = parentDef.submodules?.find(s => s.key === binding.subKey);
     const itemTitle = subDef?.label || binding.itemLabel;
