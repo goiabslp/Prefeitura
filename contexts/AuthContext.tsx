@@ -48,7 +48,7 @@ const hasStoredSession = (): boolean => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [session, setSession] = useState<Session | null>(null);
-    const [loading, setLoading] = useState<boolean>(() => hasStoredSession());
+    const [loading, setLoading] = useState<boolean>(true);
 
     useEffect(() => {
         // Check active session
@@ -65,7 +65,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         // Listen for changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            console.log(`[AUTH-DIAGNOSTIC] onAuthStateChange event: ${event}, user: ${session?.user?.id || 'none'}`);
             setSession(session);
             if (session?.user) {
                 fetchProfile(session.user.id, session.user.email || '');
