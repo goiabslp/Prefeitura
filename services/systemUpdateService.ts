@@ -10,12 +10,19 @@ export const LAST_FORCED_UPDATE_KEY = 'last_forced_update_target';
 
 /**
  * Verifica se um updateId já foi executado e processado no navegador do usuário
+ * Retorna TRUE para qualquer ID inexistente, no passado (<= agora) ou já registrado
  */
 export const isUpdateAlreadyProcessed = (updateId: number | string | null | undefined): boolean => {
   if (!updateId) return true;
   try {
     const parsedId = Number(updateId);
     if (isNaN(parsedId) || parsedId <= 0) return true;
+
+    // Se o target já expirou no passado (tempo de execução já passou), ele NUNCA é uma atualização pendente
+    const now = Date.now();
+    if (parsedId <= now) {
+      return true;
+    }
 
     const lastProcessed = localStorage.getItem(LAST_PROCESSED_UPDATE_ID_KEY) || 
                           localStorage.getItem(LAST_FORCED_UPDATE_KEY) ||
@@ -577,21 +584,12 @@ export const markUserUpdateCompleted = async (userId: string, version?: number |
   const nowIso = new Date().toISOString();
 
   try {
-    // 1. Notifica o Admin em tempo real
-    await Promise.all([
-      sendRealtimeBroadcast('global-updates', 'user_update_status', {
-        targetUserId: userId,
-        status: 'completed',
-        timestamp: nowIso
-      }),
-      sendRealtimeBroadcast(`user-channel-${userId}`, 'user_update_status', {
-        targetUserId: userId,
-        status: 'completed',
-        timestamp: nowIso
-      })
-    ]);
+    // 1. Grava no localStorage para proteger imediatamente a sessão local
+    if (version) {
+      markUpdateAsProcessed(version);
+    }
 
-    // 2. Grava no banco de dados
+    // 2. Busca configurações atuais
     const { data: existingSettings } = await supabase
       .from('organization_settings')
       .select('ui_config')
@@ -600,6 +598,11 @@ export const markUserUpdateCompleted = async (userId: string, version?: number |
 
     const existingUiConfig = existingSettings?.ui_config || {};
     const existingRequests: Record<string, UserUpdateRequest> = existingUiConfig.user_update_requests || {};
+
+    // Se já estiver com status completed no banco de dados, não precisa reescrever nem retransmitir
+    if (existingRequests[userId] && existingRequests[userId].status === 'completed') {
+      return true;
+    }
 
     if (!existingRequests[userId]) {
       existingRequests[userId] = {
@@ -624,6 +627,20 @@ export const markUserUpdateCompleted = async (userId: string, version?: number |
       ...existingUiConfig,
       user_update_requests: existingRequests
     };
+
+    // 3. Notifica o Admin em tempo real
+    await Promise.all([
+      sendRealtimeBroadcast('global-updates', 'user_update_status', {
+        targetUserId: userId,
+        status: 'completed',
+        timestamp: nowIso
+      }),
+      sendRealtimeBroadcast(`user-channel-${userId}`, 'user_update_status', {
+        targetUserId: userId,
+        status: 'completed',
+        timestamp: nowIso
+      })
+    ]);
 
     const { error } = await supabase
       .from('organization_settings')
@@ -667,10 +684,11 @@ export const checkAndApplyUserOfflineUpdate = async (
 
     if (userReq && (userReq.status === 'pending' || userReq.status === 'notified' || userReq.status === 'in_progress')) {
       const now = Date.now();
-      // Se o prazo da atualização já passou enquanto o usuário estava offline, apenas marca como concluída sem derrubar a sessão
-      if (now >= userReq.target) {
+      // Se o prazo da atualização já passou ou já foi processado, apenas marca como concluída sem derrubar a sessão
+      if (now >= userReq.target || isUpdateAlreadyProcessed(userReq.target)) {
         console.log(`[SystemUpdate] Atualização individual anterior finalizada para o usuário ${userId}. Sincronizando estado silenciosamente...`);
-        await markUserUpdateCompleted(userId, userReq.version);
+        markUpdateAsProcessed(userReq.version || userReq.target);
+        await markUserUpdateCompleted(userId, userReq.version || userReq.target);
         return false;
       }
     }

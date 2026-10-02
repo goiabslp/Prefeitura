@@ -1632,10 +1632,13 @@ const App: React.FC = () => {
         // Verifica se há atualização global ativa no futuro (sem deslogar quem está entrando e ignorando se já foi processada)
         const { data } = await supabase.from('organization_settings').select('system_update_target').eq('id', 'global_config').single();
         const serverTarget = data?.system_update_target ? Number(data.system_update_target) : null;
-        if (serverTarget && serverTarget > Date.now() && !isUpdateAlreadyProcessed(serverTarget)) {
+        if (serverTarget && serverTarget > (Date.now() + 3000) && !isUpdateAlreadyProcessed(serverTarget)) {
           setSystemUpdateTarget(serverTarget);
           setIsUpdateModalDismissed(false);
         } else {
+          if (serverTarget && serverTarget <= Date.now()) {
+            markUpdateAsProcessed(serverTarget);
+          }
           setSystemUpdateTarget(null);
         }
       }
@@ -1942,7 +1945,7 @@ const App: React.FC = () => {
           const now = Date.now();
           if (payload.new && 'system_update_target' in payload.new) {
             const target = Number(payload.new.system_update_target);
-            if (target && target > now && !isUpdateAlreadyProcessed(target)) {
+            if (target && target > (now + 3000) && !isUpdateAlreadyProcessed(target)) {
               setSystemUpdateTarget(target);
               setSystemUpdateDetails({
                 isIndividual: false,
@@ -1962,22 +1965,25 @@ const App: React.FC = () => {
                 (activeUsername && String(r.targetUserUsername || '').trim().toLowerCase() === String(activeUsername).trim().toLowerCase())
               ) as any;
 
-            if (myReq && (myReq.status === 'pending' || myReq.status === 'notified' || myReq.status === 'in_progress') && myReq.target) {
+            if (myReq && myReq.target) {
               const reqTarget = Number(myReq.target);
-              if (reqTarget > now && !isUpdateAlreadyProcessed(reqTarget)) {
-                setSystemUpdateTarget(reqTarget);
-                setSystemUpdateDetails({
-                  isIndividual: true,
-                  triggeredBy: myReq.triggeredBy,
-                  triggeredAt: myReq.triggeredAt
-                });
-                setIsUpdateModalDismissed(false);
-                if (activeUserId && myReq.status === 'pending') {
-                  acknowledgeUserUpdate(activeUserId, myReq.version || myReq.target, 'notified');
+              if (myReq.status === 'pending' || myReq.status === 'notified' || myReq.status === 'in_progress') {
+                if (reqTarget > (now + 3000) && !isUpdateAlreadyProcessed(reqTarget)) {
+                  setSystemUpdateTarget(reqTarget);
+                  setSystemUpdateDetails({
+                    isIndividual: true,
+                    triggeredBy: myReq.triggeredBy || 'Administrador',
+                    triggeredAt: myReq.triggeredAt
+                  });
+                  setIsUpdateModalDismissed(false);
+                  if (activeUserId && myReq.status === 'pending') {
+                    acknowledgeUserUpdate(activeUserId, myReq.version || myReq.target, 'notified');
+                  }
+                } else if (activeUserId && reqTarget <= now) {
+                  // Atualização individual anterior expirada: marca silenciosamente como concluída e processada
+                  markUpdateAsProcessed(reqTarget);
+                  markUserUpdateCompleted(activeUserId, myReq.version || myReq.target);
                 }
-              } else if (activeUserId) {
-                // Atualização anterior já expirada ou já processada: marca silenciosamente como concluída
-                markUserUpdateCompleted(activeUserId, myReq.version || myReq.target);
               }
             }
           }
@@ -1990,7 +1996,7 @@ const App: React.FC = () => {
           const p = payload.payload;
           const now = Date.now();
           const targetNum = p?.target ? Number(p.target) : 0;
-          if (targetNum > now && !isUpdateAlreadyProcessed(targetNum)) {
+          if (targetNum > (now + 3000) && !isUpdateAlreadyProcessed(targetNum)) {
             const activeUserId = currentUserRef.current?.id;
             const activeUsername = currentUserRef.current?.username;
             const isForMe = p.targetUserId
@@ -2045,7 +2051,7 @@ const App: React.FC = () => {
           const p = payload.payload;
           const now = Date.now();
           const targetNum = p?.target ? Number(p.target) : 0;
-          if (targetNum > now && !isUpdateAlreadyProcessed(targetNum)) {
+          if (targetNum > (now + 3000) && !isUpdateAlreadyProcessed(targetNum)) {
             console.log('[SystemUpdate] Evento de atualização recebido no canal dedicado do usuário:', p);
             setSystemUpdateTarget(targetNum);
             setSystemUpdateDetails({
@@ -2628,6 +2634,8 @@ const App: React.FC = () => {
     };
   }, [currentView, activeBlock, adminTab, appState.view]);
 
+  const isLoggingOutRef = useRef(false);
+
   // System Update Countdown Logic com cálculo preciso de expires_at
   useEffect(() => {
     if (!systemUpdateTarget) {
@@ -2642,7 +2650,7 @@ const App: React.FC = () => {
     }
 
     const now = Date.now();
-    // Se o target já expirou antes do início da contagem, limpa o estado e não exibe contagem
+    // Se o target já expirou antes do início da contagem, limpa o estado e não exibe contagem nem desloga
     if (now >= systemUpdateTarget) {
       markUpdateAsProcessed(systemUpdateTarget);
       setSystemUpdateCountdown(null);
@@ -2656,13 +2664,9 @@ const App: React.FC = () => {
 
       if (diff > 0) {
         setSystemUpdateCountdown(diff);
-      } else if (diff >= -5) {
-        // Janela no momento exato do término
-        setSystemUpdateCountdown(0);
       } else {
-        markUpdateAsProcessed(systemUpdateTarget);
-        setSystemUpdateCountdown(null);
-        setSystemUpdateTarget(null);
+        // Chegou a zero durante uma contagem ativa legítima
+        setSystemUpdateCountdown(0);
       }
     };
 
@@ -2694,6 +2698,9 @@ const App: React.FC = () => {
 
   // Desconexão e Limpeza Completa de Cache ao término do countdown ou por ação imediata
   const handleImmediateSystemUpdateLogout = useCallback(async () => {
+    if (isLoggingOutRef.current) return;
+    isLoggingOutRef.current = true;
+
     try {
       const target = systemUpdateTarget || Date.now();
       markUpdateAsProcessed(target);
@@ -2730,7 +2737,12 @@ timestamp: ${new Date().toISOString()}`);
 
       // Garante que o usuário seja desconectado e atualizado após o tempo máximo do modal (12 segundos de segurança)
       const safetyTimer = setTimeout(() => {
-        handleImmediateSystemUpdateLogout();
+        if (!isUpdateAlreadyProcessed(systemUpdateTarget)) {
+          handleImmediateSystemUpdateLogout();
+        } else {
+          setSystemUpdateCountdown(null);
+          setSystemUpdateTarget(null);
+        }
       }, 12000);
 
       return () => clearTimeout(safetyTimer);
