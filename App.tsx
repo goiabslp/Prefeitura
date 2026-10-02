@@ -27,6 +27,8 @@ import { auditLogService } from './services/auditLogService';
 import { impersonationService, ImpersonationSession } from './services/impersonationService';
 import { 
   assistedSessionService, 
+  setReactInputValue,
+  resolveElementRelativePosition,
   AssistedMouseMovePayload, 
   AssistedClickPayload,
   AssistedOperationMode,
@@ -771,7 +773,7 @@ const App: React.FC = () => {
   const [assistedUserLastTap, setAssistedUserLastTap] = useState<AssistedClickPayload | null>(null);
 
   // Função auxiliar para aplicar alterações de input recebidas remotamente sem disparar loop
-  const applyRemoteInput = useCallback((input: AssistedInputPayload | { selector?: string; dataAssistId?: string; id?: string; name?: string; value: string; checked?: boolean; isSearch?: boolean }) => {
+  const applyRemoteInput = useCallback((input: AssistedInputPayload | { fieldId?: string; selector?: string; dataAssistId?: string; id?: string; name?: string; value: string; checked?: boolean; isSearch?: boolean }) => {
     if (!input) return;
     let el: HTMLElement | null = null;
     if (input.dataAssistId) el = document.querySelector(`[data-assist-id="${input.dataAssistId}"]`);
@@ -783,13 +785,8 @@ const App: React.FC = () => {
     if (el) {
       const formEl = el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
       isApplyingRemoteSyncRef.current = true;
-      if (input.checked !== undefined && 'checked' in formEl && (formEl as HTMLInputElement).type === 'checkbox') {
-        (formEl as HTMLInputElement).checked = input.checked;
-      } else if ('value' in formEl) {
-        formEl.value = input.value;
-      }
-      formEl.dispatchEvent(new Event('input', { bubbles: true }));
-      formEl.dispatchEvent(new Event('change', { bubbles: true }));
+      // Atualiza o estado real do React e formulário nativo sem flicker
+      setReactInputValue(formEl, input.value, input.checked);
       setTimeout(() => {
         isApplyingRemoteSyncRef.current = false;
       }, 50);
@@ -907,21 +904,17 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!impersonationSession || assistedAdminMode !== 'simulation') return;
 
-    // Mouse move com throttle (~35ms para movimento fluido de ~30fps)
+    // Mouse move com throttle ultra responsivo (~20ms / ~50fps para fidelidade absoluta)
     let lastMouseTime = 0;
     const handleMouseMove = (e: MouseEvent) => {
       const now = Date.now();
-      if (now - lastMouseTime < 35) return;
+      if (now - lastMouseTime < 20) return;
       lastMouseTime = now;
-      const xPct = Math.round((e.clientX / window.innerWidth) * 10000) / 100;
-      const yPct = Math.round((e.clientY / window.innerHeight) * 10000) / 100;
-      assistedSessionService.broadcastMouseMove(xPct, yPct, false, impersonationSession.realAdmin.name, 'admin');
+      assistedSessionService.broadcastMouseMove(e.clientX, e.clientY, false, impersonationSession.realAdmin.name, 'admin');
     };
 
-    // Cliques do Administrador com detecção precisa de seletores e coordenadas
+    // Cliques do Administrador com detecção precisa de elemento relativo
     const handleClick = (e: MouseEvent) => {
-      const xPct = Math.round((e.clientX / window.innerWidth) * 10000) / 100;
-      const yPct = Math.round((e.clientY / window.innerHeight) * 10000) / 100;
       const target = e.target as HTMLElement | null;
       let selector = '';
       let dataAssistId = '';
@@ -952,14 +945,14 @@ const App: React.FC = () => {
       }
       const text = target?.innerText?.slice(0, 30);
       const tag = target?.tagName?.toLowerCase();
-      assistedSessionService.broadcastClick(xPct, yPct, { tag, text, selector, dataAssistId, id, name, userName: impersonationSession.realAdmin.name }, 'admin');
+      assistedSessionService.broadcastClick(e.clientX, e.clientY, { tag, text, selector, dataAssistId, id, name, userName: impersonationSession.realAdmin.name }, 'admin');
     };
 
-    // Scroll com throttle (~50ms)
+    // Scroll com throttle (~40ms)
     let lastScrollTime = 0;
     const handleScroll = () => {
       const now = Date.now();
-      if (now - lastScrollTime < 50) return;
+      if (now - lastScrollTime < 40) return;
       lastScrollTime = now;
       const scrollY = window.scrollY || document.documentElement.scrollTop;
       const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
@@ -967,7 +960,7 @@ const App: React.FC = () => {
       assistedSessionService.broadcastScroll(scrollPctY, scrollY, 'admin');
     };
 
-    // Digitação e buscas com throttle ultra rápido (~35ms para digitação em tempo real caractere a caractere)
+    // Digitação e buscas com throttle rápido (~20ms) e versão incremental por campo
     let lastInputTime = 0;
     let inputTimeout: any = null;
     const handleInput = (e: Event) => {
@@ -997,6 +990,7 @@ const App: React.FC = () => {
 
       const sendValue = () => {
         assistedSessionService.broadcastInputChange({
+          fieldId: dataAssistId || id || name || selector || 'admin_input',
           selector,
           dataAssistId,
           name: target.name,
@@ -1009,7 +1003,7 @@ const App: React.FC = () => {
       };
 
       const now = Date.now();
-      if (now - lastInputTime > 35) {
+      if (now - lastInputTime > 20) {
         lastInputTime = now;
         sendValue();
       } else {
@@ -1017,7 +1011,7 @@ const App: React.FC = () => {
         inputTimeout = setTimeout(() => {
           lastInputTime = Date.now();
           sendValue();
-        }, 35);
+        }, 20);
       }
     };
 
@@ -1253,13 +1247,18 @@ const App: React.FC = () => {
             if (click.dataAssistId) {
               targetEl = document.querySelector(`[data-assist-id="${click.dataAssistId}"]`);
             }
+            if (!targetEl && click.targetElementId) {
+              targetEl = document.getElementById(click.targetElementId);
+            }
+            if (!targetEl && click.id) {
+              targetEl = document.getElementById(click.id);
+            }
             if (!targetEl && click.selector) {
               try { targetEl = document.querySelector(click.selector); } catch (e) {}
             }
-            if (!targetEl && click.xPct !== undefined && click.yPct !== undefined) {
-              const clientX = (click.xPct / 100) * window.innerWidth;
-              const clientY = (click.yPct / 100) * window.innerHeight;
-              targetEl = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+            if (!targetEl) {
+              const pos = resolveElementRelativePosition(click);
+              targetEl = document.elementFromPoint(pos.pixelX, pos.pixelY) as HTMLElement | null;
             }
             if (targetEl) {
               targetEl.click();
@@ -1305,11 +1304,12 @@ const App: React.FC = () => {
       });
     }
 
-    // Rastreia inputs do usuário acompanhado quando em modo Observador para espelhamento em tempo real
+    // Rastreia inputs do usuário acompanhado APENAS quando em modo Observador (Single Writer: em Simulação apenas o Admin escreve)
     let lastUserInputTime = 0;
     let userInputTimeout: any = null;
     const handleUserDocumentInput = (e: Event) => {
       if (isApplyingRemoteSyncRef.current) return;
+      if (assistedViewerData?.mode === 'simulation') return; // Bloqueia retransmissão de input durante simulação!
       const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
       if (!target) return;
 
@@ -1335,6 +1335,7 @@ const App: React.FC = () => {
 
       const sendUserInputValue = () => {
         userHandlers.sendUserInput({
+          fieldId: dataAssistId || id || name || selector || 'user_input',
           selector,
           dataAssistId,
           name: target.name,
@@ -1347,7 +1348,7 @@ const App: React.FC = () => {
       };
 
       const now = Date.now();
-      if (now - lastUserInputTime > 35) {
+      if (now - lastUserInputTime > 20) {
         lastUserInputTime = now;
         sendUserInputValue();
       } else {
@@ -1355,7 +1356,7 @@ const App: React.FC = () => {
         userInputTimeout = setTimeout(() => {
           lastUserInputTime = Date.now();
           sendUserInputValue();
-        }, 35);
+        }, 20);
       }
     };
 
@@ -1363,7 +1364,7 @@ const App: React.FC = () => {
     let userScrollTimer: any = null;
     const handleUserScroll = () => {
       const now = Date.now();
-      if (now - userScrollTimer < 50) return;
+      if (now - userScrollTimer < 40) return;
       userScrollTimer = now;
       const scrollY = window.scrollY || document.documentElement.scrollTop;
       const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
@@ -1371,17 +1372,13 @@ const App: React.FC = () => {
       userHandlers.sendUserScroll(scrollPctY, scrollY);
     };
 
-    // Rastreia movimentação do mouse do usuário para o Cursor Assistido (Apontador Visual)
+    // Rastreia movimentação do mouse do usuário para o Cursor Assistido (Apontador Visual) com elemento relativo
     let userMouseTimer: any = null;
     const handleUserMouseMove = (e: MouseEvent) => {
       const now = Date.now();
-      if (now - userMouseTimer < 35) return; // Throttle ~35ms para transmissão fluida de ~30fps
+      if (now - userMouseTimer < 20) return; // Throttle ~20ms (~50fps)
       userMouseTimer = now;
-
-      const xPct = Math.round((e.clientX / window.innerWidth) * 10000) / 100;
-      const yPct = Math.round((e.clientY / window.innerHeight) * 10000) / 100;
-
-      userHandlers.sendUserMouseMove(xPct, yPct, false);
+      userHandlers.sendUserMouseMove(e.clientX, e.clientY, false);
     };
 
     // Rastreia toques em dispositivos móveis / touch para Apontamento Visual Mobile
@@ -1389,17 +1386,14 @@ const App: React.FC = () => {
     const handleUserTouchMove = (e: TouchEvent) => {
       if (!e.touches || e.touches.length === 0) return;
       const now = Date.now();
-      if (now - userTouchTimer < 35) return;
+      if (now - userTouchTimer < 20) return;
       userTouchTimer = now;
 
       const touch = e.touches[0];
-      const xPct = Math.round((touch.clientX / window.innerWidth) * 10000) / 100;
-      const yPct = Math.round((touch.clientY / window.innerHeight) * 10000) / 100;
-
-      userHandlers.sendUserMouseMove(xPct, yPct, true);
+      userHandlers.sendUserMouseMove(touch.clientX, touch.clientY, true);
     };
 
-    // Rastreia clique ou toque para enviar efeito visual de radar/pulso (apontador virtual)
+    // Rastreia clique ou toque para enviar efeito visual de radar/pulso efêmero (apontador virtual)
     const handleUserClickOrTap = (e: MouseEvent | TouchEvent) => {
       let clientX = 0;
       let clientY = 0;
@@ -1418,10 +1412,7 @@ const App: React.FC = () => {
         clientY = (e as MouseEvent).clientY;
       }
 
-      const xPct = Math.round((clientX / window.innerWidth) * 10000) / 100;
-      const yPct = Math.round((clientY / window.innerHeight) * 10000) / 100;
-
-      userHandlers.sendUserTapPulse(xPct, yPct, isTouch);
+      userHandlers.sendUserTapPulse(clientX, clientY, isTouch);
     };
 
     // Controlador de Bloqueio de Interação do Usuário Acompanhado quando em modo Simulação
@@ -1455,9 +1446,7 @@ const App: React.FC = () => {
           }
 
           if (clientX > 0 || clientY > 0) {
-            const xPct = Math.round((clientX / window.innerWidth) * 10000) / 100;
-            const yPct = Math.round((clientY / window.innerHeight) * 10000) / 100;
-            userHandlers.sendUserTapPulse(xPct, yPct, isTouch);
+            userHandlers.sendUserTapPulse(clientX, clientY, isTouch);
           }
         }
       }

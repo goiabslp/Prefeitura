@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ShieldCheck, 
   Radio, 
@@ -14,7 +14,8 @@ import {
 import { 
   AssistedMouseMovePayload, 
   AssistedClickPayload, 
-  AssistedOperationMode 
+  AssistedOperationMode,
+  resolveElementRelativePosition 
 } from '../services/assistedSessionService';
 
 interface AssistedUserViewerOverlayProps {
@@ -27,6 +28,12 @@ interface AssistedUserViewerOverlayProps {
   lastClick?: AssistedClickPayload | null;
 }
 
+interface ActiveRipple {
+  id: string;
+  xPct: number;
+  yPct: number;
+}
+
 export const AssistedUserViewerOverlay: React.FC<AssistedUserViewerOverlayProps> = ({
   adminName,
   adminEmail,
@@ -36,27 +43,70 @@ export const AssistedUserViewerOverlay: React.FC<AssistedUserViewerOverlayProps>
   virtualCursor,
   lastClick
 }) => {
-  const [clickRipples, setClickRipples] = useState<Array<{ id: number; x: number; y: number }>>([]);
+  const [clickRipples, setClickRipples] = useState<ActiveRipple[]>([]);
   const [isBannerCollapsed, setIsBannerCollapsed] = useState(false);
 
-  // Renderiza efeito visual de pulso/ripple quando houver clique do Administrador em modo de simulação
+  // Calcula a posição real do cursor do Admin na tela do usuário via elemento relativo
+  const computedCursorPos = useMemo(() => {
+    if (!virtualCursor || isPaused) return { xPct: 50, yPct: 50, pixelX: 0, pixelY: 0 };
+    return resolveElementRelativePosition({
+      targetElementId: virtualCursor.targetElementId,
+      dataAssistId: virtualCursor.dataAssistId,
+      selector: virtualCursor.selector,
+      elemXRel: virtualCursor.elemXRel,
+      elemYRel: virtualCursor.elemYRel,
+      viewportXRel: virtualCursor.viewportXRel,
+      viewportYRel: virtualCursor.viewportYRel,
+      xPct: virtualCursor.xPct,
+      yPct: virtualCursor.yPct
+    });
+  }, [
+    virtualCursor?.targetElementId,
+    virtualCursor?.dataAssistId,
+    virtualCursor?.selector,
+    virtualCursor?.elemXRel,
+    virtualCursor?.elemYRel,
+    virtualCursor?.viewportXRel,
+    virtualCursor?.viewportYRel,
+    virtualCursor?.xPct,
+    virtualCursor?.yPct,
+    virtualCursor?.timestamp,
+    isPaused
+  ]);
+
+  // Renderiza efeito visual de pulso/ripple efêmero (400ms) quando o Administrador clica
   useEffect(() => {
     if (!lastClick || isPaused) return;
 
-    const newRipple = {
-      id: Date.now() + Math.random(),
-      x: lastClick.xPct,
-      y: lastClick.yPct
+    const clickPos = resolveElementRelativePosition({
+      targetElementId: lastClick.targetElementId,
+      dataAssistId: lastClick.dataAssistId,
+      selector: lastClick.selector,
+      elemXRel: lastClick.elemXRel,
+      elemYRel: lastClick.elemYRel,
+      viewportXRel: lastClick.viewportXRel,
+      viewportYRel: lastClick.viewportYRel,
+      xPct: lastClick.xPct,
+      yPct: lastClick.yPct
+    });
+
+    const rippleId = lastClick.eventId || `clk_admin_${Date.now()}_${Math.random()}`;
+
+    const newRipple: ActiveRipple = {
+      id: rippleId,
+      xPct: clickPos.xPct,
+      yPct: clickPos.yPct
     };
 
-    setClickRipples((prev) => [...prev.slice(-4), newRipple]);
+    setClickRipples((prev) => [...prev.filter(r => r.id !== rippleId).slice(-3), newRipple]);
 
+    // Destruição imediata e estrita após 400ms (duração do efeito visual)
     const timer = setTimeout(() => {
-      setClickRipples((prev) => prev.filter((r) => r.id !== newRipple.id));
-    }, 1200);
+      setClickRipples((prev) => prev.filter((r) => r.id !== rippleId));
+    }, 400);
 
     return () => clearTimeout(timer);
-  }, [lastClick, isPaused]);
+  }, [lastClick?.eventId, lastClick?.timestamp, isPaused]);
 
   const displayAdminName = (virtualCursor?.userName || adminName || 'Administrador').split(' ')[0];
 
@@ -115,7 +165,7 @@ export const AssistedUserViewerOverlay: React.FC<AssistedUserViewerOverlayProps>
               <button
                 type="button"
                 onClick={() => setIsBannerCollapsed(!isBannerCollapsed)}
-                className="text-[10px] font-bold text-slate-400 hover:text-white px-2 py-1 rounded-lg hover:bg-white/10 transition-colors"
+                className="text-[10px] font-bold text-slate-400 hover:text-white px-2 py-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
                 title={isBannerCollapsed ? 'Expandir detalhes' : 'Recolher detalhes'}
               >
                 {isBannerCollapsed ? 'Detalhes' : 'Ocultar'}
@@ -125,13 +175,13 @@ export const AssistedUserViewerOverlay: React.FC<AssistedUserViewerOverlayProps>
         </div>
       </div>
 
-      {/* 2. CURSOR VIRTUAL DO ADMINISTRADOR (QUANDO EM SIMULAÇÃO/DEMONSTRAÇÃO) */}
+      {/* 2. CURSOR VIRTUAL DO ADMINISTRADOR (POSIÇÃO EXATA NO ELEMENTO) */}
       {virtualCursor && !isPaused && (
         <div
           className="fixed z-[9995] pointer-events-none transition-all duration-75 ease-out"
           style={{
-            left: `${virtualCursor.xPct}%`,
-            top: `${virtualCursor.yPct}%`,
+            left: `${computedCursorPos.xPct}%`,
+            top: `${computedCursorPos.yPct}%`,
             transform: 'translate(-2px, -2px)'
           }}
         >
@@ -159,18 +209,19 @@ export const AssistedUserViewerOverlay: React.FC<AssistedUserViewerOverlayProps>
         </div>
       )}
 
-      {/* 3. ANIMAÇÕES DE RIPPLE PARA CLIQUES DO ADMINISTRADOR */}
+      {/* 3. RIPPLES DE CLIQUE EFÊMEROS (350-400ms) */}
       {clickRipples.map((ripple) => (
         <div
           key={ripple.id}
-          className="fixed z-[9994] pointer-events-none"
+          className="fixed pointer-events-none z-[9996]"
           style={{
-            left: `${ripple.x}%`,
-            top: `${ripple.y}%`,
+            left: `${ripple.xPct}%`,
+            top: `${ripple.yPct}%`,
             transform: 'translate(-50%, -50%)'
           }}
         >
           <span className="block w-10 h-10 rounded-full border-2 border-indigo-400 bg-indigo-500/30 animate-ping opacity-90" />
+          <span className="absolute inset-0 block w-5 h-5 m-auto rounded-full border border-indigo-300 bg-indigo-400/50 animate-pulse" />
         </div>
       ))}
     </>

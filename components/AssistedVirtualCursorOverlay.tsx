@@ -1,5 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { AssistedMouseMovePayload, AssistedClickPayload } from '../services/assistedSessionService';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { 
+  AssistedMouseMovePayload, 
+  AssistedClickPayload,
+  resolveElementRelativePosition 
+} from '../services/assistedSessionService';
 
 interface AssistedVirtualCursorOverlayProps {
   userCursor: AssistedMouseMovePayload | null;
@@ -8,19 +12,53 @@ interface AssistedVirtualCursorOverlayProps {
   role?: 'user' | 'admin';
 }
 
+interface ActiveRipple {
+  id: string;
+  xPct: number;
+  yPct: number;
+  isTouch?: boolean;
+}
+
 export const AssistedVirtualCursorOverlay: React.FC<AssistedVirtualCursorOverlayProps> = ({
   userCursor,
   userLastClick,
   targetUserName,
   role = 'user'
 }) => {
-  const [ripples, setRipples] = useState<Array<{ id: number; x: number; y: number; isTouch?: boolean }>>([]);
+  const [ripples, setRipples] = useState<ActiveRipple[]>([]);
   const [isVisible, setIsVisible] = useState(false);
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const isAdmin = role === 'admin' || userCursor?.source === 'admin';
 
-  // Monitora movimentos e gerencia auto-hide caso fique inativo
+  // Calcula a posição real na tela do receptor usando o elemento relativo
+  const computedPos = useMemo(() => {
+    if (!userCursor) return { xPct: 50, yPct: 50, pixelX: 0, pixelY: 0 };
+    return resolveElementRelativePosition({
+      targetElementId: userCursor.targetElementId,
+      dataAssistId: userCursor.dataAssistId,
+      selector: userCursor.selector,
+      elemXRel: userCursor.elemXRel,
+      elemYRel: userCursor.elemYRel,
+      viewportXRel: userCursor.viewportXRel,
+      viewportYRel: userCursor.viewportYRel,
+      xPct: userCursor.xPct,
+      yPct: userCursor.yPct
+    });
+  }, [
+    userCursor?.targetElementId,
+    userCursor?.dataAssistId,
+    userCursor?.selector,
+    userCursor?.elemXRel,
+    userCursor?.elemYRel,
+    userCursor?.viewportXRel,
+    userCursor?.viewportYRel,
+    userCursor?.xPct,
+    userCursor?.yPct,
+    userCursor?.timestamp
+  ]);
+
+  // Monitora movimentos e gerencia visibilidade
   useEffect(() => {
     if (!userCursor) {
       setIsVisible(false);
@@ -33,35 +71,51 @@ export const AssistedVirtualCursorOverlay: React.FC<AssistedVirtualCursorOverlay
       clearTimeout(hideTimerRef.current);
     }
 
-    // Oculta suavemente após 10 segundos sem novos movimentos
+    // Oculta suavemente após 8 segundos de inatividade
     hideTimerRef.current = setTimeout(() => {
       setIsVisible(false);
-    }, 10000);
+    }, 8000);
 
     return () => {
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     };
-  }, [userCursor?.xPct, userCursor?.yPct, userCursor?.timestamp]);
+  }, [userCursor?.timestamp]);
 
-  // Renderiza efeito visual de pulso / onda de radar (apontamento) quando o usuário clica ou toca
+  // Renderiza efeito visual de pulso / onda de radar (apontamento efêmero de 400ms)
   useEffect(() => {
     if (!userLastClick) return;
 
-    const newRipple = {
-      id: Date.now() + Math.random(),
-      x: userLastClick.xPct,
-      y: userLastClick.yPct,
+    // Resolve a posição exata do clique em relação ao elemento
+    const clickPos = resolveElementRelativePosition({
+      targetElementId: userLastClick.targetElementId,
+      dataAssistId: userLastClick.dataAssistId,
+      selector: userLastClick.selector,
+      elemXRel: userLastClick.elemXRel,
+      elemYRel: userLastClick.elemYRel,
+      viewportXRel: userLastClick.viewportXRel,
+      viewportYRel: userLastClick.viewportYRel,
+      xPct: userLastClick.xPct,
+      yPct: userLastClick.yPct
+    });
+
+    const rippleId = userLastClick.eventId || `clk_${Date.now()}_${Math.random()}`;
+
+    const newRipple: ActiveRipple = {
+      id: rippleId,
+      xPct: clickPos.xPct,
+      yPct: clickPos.yPct,
       isTouch: userLastClick.isTouch
     };
 
-    setRipples((prev) => [...prev.slice(-4), newRipple]);
+    setRipples((prev) => [...prev.filter(r => r.id !== rippleId).slice(-3), newRipple]);
 
+    // Destruição automática e rigorosa após 400ms (duração efêmera)
     const timer = setTimeout(() => {
-      setRipples((prev) => prev.filter((r) => r.id !== newRipple.id));
-    }, 1400);
+      setRipples((prev) => prev.filter((r) => r.id !== rippleId));
+    }, 400);
 
     return () => clearTimeout(timer);
-  }, [userLastClick?.timestamp, userLastClick?.xPct, userLastClick?.yPct]);
+  }, [userLastClick?.eventId, userLastClick?.timestamp]);
 
   const rawName = userCursor?.userName || targetUserName || (isAdmin ? 'Administrador' : 'Usuário');
   const displayName = rawName.split(' ')[0] || rawName;
@@ -71,13 +125,13 @@ export const AssistedVirtualCursorOverlay: React.FC<AssistedVirtualCursorOverlay
       className="fixed inset-0 pointer-events-none z-[9999] overflow-hidden select-none"
       aria-hidden="true"
     >
-      {/* 1. CURSOR VIRTUAL (APONTADOR VISUAL) */}
+      {/* 1. CURSOR VIRTUAL (APONTADOR VISUAL 100% FIEL AO ELEMENTO) */}
       {userCursor && isVisible && (
         <div
           className="fixed pointer-events-none transition-all duration-75 ease-out"
           style={{
-            left: `${userCursor.xPct}%`,
-            top: `${userCursor.yPct}%`,
+            left: `${computedPos.xPct}%`,
+            top: `${computedPos.yPct}%`,
             transform: 'translate(-2px, -2px)'
           }}
         >
@@ -95,7 +149,6 @@ export const AssistedVirtualCursorOverlay: React.FC<AssistedVirtualCursorOverlay
           ) : (
             /* CURSOR DESKTOP COM PONTEIRO ESTILIZADO E ETIQUETA */
             <div className="relative">
-              {/* SVG do ponteiro do mouse */}
               <svg
                 className={`w-6 h-6 ${isAdmin ? 'text-indigo-500' : 'text-cyan-500'} drop-shadow-[0_2px_10px_rgba(0,0,0,0.7)]`}
                 viewBox="0 0 24 24"
@@ -120,19 +173,19 @@ export const AssistedVirtualCursorOverlay: React.FC<AssistedVirtualCursorOverlay
         </div>
       )}
 
-      {/* 2. RIPPLES DE APONTAMENTO / PULSO QUANDO INDICA UM ELEMENTO */}
+      {/* 2. RIPPLES DE APONTAMENTO / PULSO EFÊMERO (350-400ms) */}
       {ripples.map((ripple) => (
         <div
           key={ripple.id}
           className="fixed pointer-events-none"
           style={{
-            left: `${ripple.x}%`,
-            top: `${ripple.y}%`,
+            left: `${ripple.xPct}%`,
+            top: `${ripple.yPct}%`,
             transform: 'translate(-50%, -50%)'
           }}
         >
-          <span className={`block w-12 h-12 rounded-full border-2 ${isAdmin ? 'border-indigo-400 bg-indigo-500/25' : 'border-cyan-400 bg-cyan-500/25'} animate-ping opacity-90`} />
-          <span className={`absolute inset-0 block w-6 h-6 m-auto rounded-full border ${isAdmin ? 'border-indigo-300 bg-indigo-400/40' : 'border-cyan-300 bg-cyan-400/40'} animate-pulse`} />
+          <span className={`block w-10 h-10 rounded-full border-2 ${isAdmin ? 'border-indigo-400 bg-indigo-500/30' : 'border-cyan-400 bg-cyan-500/30'} animate-ping opacity-90`} />
+          <span className={`absolute inset-0 block w-5 h-5 m-auto rounded-full border ${isAdmin ? 'border-indigo-300 bg-indigo-400/50' : 'border-cyan-300 bg-cyan-400/50'} animate-pulse`} />
         </div>
       ))}
     </div>

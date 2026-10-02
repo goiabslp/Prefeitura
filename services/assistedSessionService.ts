@@ -41,12 +41,14 @@ export interface AssistedStateSnapshotPayload {
   step?: number | null;
   scrollY?: number;
   formInputs?: Array<{
+    fieldId?: string;
     selector?: string;
     dataAssistId?: string;
     id?: string;
     name?: string;
     value: string;
     checked?: boolean;
+    version?: number;
     isSearch?: boolean;
   }>;
   timestamp: number;
@@ -61,14 +63,24 @@ export interface AssistedMouseMovePayload {
   senderName: string;
   senderRole: 'admin' | 'user';
   route: string;
-  xRelative: number; // 0-100% relativo à largura do viewport
-  yRelative: number; // 0-100% relativo à altura do viewport
-  xPct: number;      // Compatibilidade
-  yPct: number;      // Compatibilidade
+  // Posicionamento relativo ao elemento / âncora (Independente de resolução)
+  targetElementId?: string | null;
+  dataAssistId?: string | null;
+  selector?: string | null;
+  elemXRel?: number; // 0.0 a 1.0 (percentual dentro do elemento)
+  elemYRel?: number; // 0.0 a 1.0 (percentual dentro do elemento)
+  // Posicionamento normalizado por viewport (fallback para áreas livres)
+  viewportXRel: number; // 0.0 a 1.0
+  viewportYRel: number; // 0.0 a 1.0
+  xRelative: number;    // 0-100% relativo ao viewport
+  yRelative: number;    // 0-100% relativo ao viewport
+  xPct: number;         // Compatibilidade (0-100)
+  yPct: number;         // Compatibilidade (0-100)
   scrollX: number;
   scrollY: number;
   viewportWidth: number;
   viewportHeight: number;
+  dpr?: number;
   isTouch?: boolean;
   userName?: string;
   timestamp: number;
@@ -76,16 +88,21 @@ export interface AssistedMouseMovePayload {
 }
 
 export interface AssistedClickPayload {
-  eventId?: string;
+  eventId: string; // clickEventId único e efêmero
   sessionId?: string;
+  targetElementId?: string | null;
+  dataAssistId?: string | null;
+  selector?: string | null;
+  elemXRel?: number;
+  elemYRel?: number;
+  viewportXRel?: number;
+  viewportYRel?: number;
   xPct: number;
   yPct: number;
   xRelative?: number;
   yRelative?: number;
   tag?: string;
   text?: string;
-  selector?: string;
-  dataAssistId?: string;
   id?: string;
   name?: string;
   isTouch?: boolean;
@@ -106,8 +123,9 @@ export interface AssistedScrollPayload {
 }
 
 export interface AssistedInputPayload {
-  eventId?: string;
+  eventId: string;
   sessionId?: string;
+  fieldId: string; // Identificador estável (data-assist-id, id, name ou selector)
   selector?: string;
   dataAssistId?: string;
   name?: string;
@@ -115,9 +133,10 @@ export interface AssistedInputPayload {
   value: string;
   checked?: boolean;
   tagName?: string;
+  version: number; // Versão incremental (v1, v2, v3...)
   isSearch?: boolean;
-  timestamp?: number;
-  source?: 'admin' | 'user';
+  timestamp: number;
+  source: 'admin' | 'user';
   senderId?: string;
 }
 
@@ -191,6 +210,192 @@ export interface AdminSessionObserverListeners {
   onUserTapPulse?: (payload: AssistedClickPayload) => void;
 }
 
+/**
+ * Utilitário para atualizar inputs controlados pelo React via DOM nativo
+ */
+export function setReactInputValue(
+  element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+  value: string,
+  checked?: boolean
+) {
+  if (!element) return;
+
+  if (element instanceof HTMLInputElement && (element.type === 'checkbox' || element.type === 'radio')) {
+    const nativeCheckboxSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'checked')?.set;
+    if (nativeCheckboxSetter) {
+      nativeCheckboxSetter.call(element, !!checked);
+    } else {
+      element.checked = !!checked;
+    }
+  } else {
+    const proto = element instanceof HTMLTextAreaElement
+      ? window.HTMLTextAreaElement.prototype
+      : element instanceof HTMLSelectElement
+        ? window.HTMLSelectElement.prototype
+        : window.HTMLInputElement.prototype;
+
+    const nativeValueSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+    if (nativeValueSetter) {
+      nativeValueSetter.call(element, value);
+    } else {
+      element.value = value;
+    }
+  }
+
+  // Dispara eventos nativos borbulhantes para o React processar o onChange
+  element.dispatchEvent(new Event('input', { bubbles: true }));
+  element.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+/**
+ * Calcula a posição relativa precisa do cursor em relação a elementos na interface
+ */
+export function computeElementRelativePosition(
+  clientX: number,
+  clientY: number,
+  source: 'admin' | 'user' = 'admin'
+): {
+  targetElementId?: string | null;
+  dataAssistId?: string | null;
+  selector?: string | null;
+  elemXRel?: number;
+  elemYRel?: number;
+  viewportXRel: number;
+  viewportYRel: number;
+  scrollX: number;
+  scrollY: number;
+  dpr: number;
+  viewportWidth: number;
+  viewportHeight: number;
+} {
+  const viewportW = typeof window !== 'undefined' ? window.innerWidth : 1920;
+  const viewportH = typeof window !== 'undefined' ? window.innerHeight : 1080;
+  const scrollX = typeof window !== 'undefined' ? (window.scrollX || document.documentElement.scrollLeft || 0) : 0;
+  const scrollY = typeof window !== 'undefined' ? (window.scrollY || document.documentElement.scrollTop || 0) : 0;
+  const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
+
+  const viewportXRel = Math.max(0, Math.min(1, clientX / Math.max(1, viewportW)));
+  const viewportYRel = Math.max(0, Math.min(1, clientY / Math.max(1, viewportH)));
+
+  if (typeof document === 'undefined') {
+    return {
+      viewportXRel,
+      viewportYRel,
+      scrollX,
+      scrollY,
+      dpr,
+      viewportWidth: viewportW,
+      viewportHeight: viewportH
+    };
+  }
+
+  const el = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+  if (!el) {
+    return {
+      viewportXRel,
+      viewportYRel,
+      scrollX,
+      scrollY,
+      dpr,
+      viewportWidth: viewportW,
+      viewportHeight: viewportH
+    };
+  }
+
+  // Procura âncora mais próxima estável
+  const anchor = el.closest('[data-assist-id], [id], button, input, select, textarea, a, [role="button"], [role="tab"], tr, [data-card]') as HTMLElement | null || el;
+
+  const dataAssistId = anchor.getAttribute('data-assist-id') || undefined;
+  const id = anchor.id && !anchor.id.startsWith('react-') ? anchor.id : undefined;
+  let selector: string | undefined = undefined;
+
+  if (dataAssistId) selector = `[data-assist-id="${dataAssistId}"]`;
+  else if (id) selector = `#${id}`;
+  else {
+    const name = anchor.getAttribute('name');
+    if (name) selector = `[name="${name}"]`;
+    else if (anchor.getAttribute('data-tab')) selector = `[data-tab="${anchor.getAttribute('data-tab')}"]`;
+  }
+
+  const rect = anchor.getBoundingClientRect();
+  let elemXRel: number | undefined = undefined;
+  let elemYRel: number | undefined = undefined;
+
+  if (rect.width > 0 && rect.height > 0) {
+    elemXRel = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    elemYRel = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+  }
+
+  return {
+    targetElementId: id || null,
+    dataAssistId: dataAssistId || null,
+    selector: selector || null,
+    elemXRel,
+    elemYRel,
+    viewportXRel,
+    viewportYRel,
+    scrollX,
+    scrollY,
+    dpr,
+    viewportWidth: viewportW,
+    viewportHeight: viewportH
+  };
+}
+
+/**
+ * Reconstrói a posição exata em pixels na tela de destino baseada no elemento relativo
+ */
+export function resolveElementRelativePosition(payload: {
+  targetElementId?: string | null;
+  dataAssistId?: string | null;
+  selector?: string | null;
+  elemXRel?: number;
+  elemYRel?: number;
+  viewportXRel?: number;
+  viewportYRel?: number;
+  xPct?: number;
+  yPct?: number;
+}): { pixelX: number; pixelY: number; xPct: number; yPct: number } {
+  const winW = typeof window !== 'undefined' ? window.innerWidth : 1920;
+  const winH = typeof window !== 'undefined' ? window.innerHeight : 1080;
+
+  if (typeof document === 'undefined') {
+    const xPct = payload.xPct ?? (payload.viewportXRel ? payload.viewportXRel * 100 : 50);
+    const yPct = payload.yPct ?? (payload.viewportYRel ? payload.viewportYRel * 100 : 50);
+    return { pixelX: (xPct / 100) * winW, pixelY: (yPct / 100) * winH, xPct, yPct };
+  }
+
+  let targetEl: HTMLElement | null = null;
+
+  if (payload.dataAssistId) {
+    targetEl = document.querySelector(`[data-assist-id="${payload.dataAssistId}"]`);
+  }
+  if (!targetEl && payload.targetElementId) {
+    targetEl = document.getElementById(payload.targetElementId);
+  }
+  if (!targetEl && payload.selector) {
+    try { targetEl = document.querySelector(payload.selector); } catch (e) {}
+  }
+
+  if (targetEl && payload.elemXRel !== undefined && payload.elemYRel !== undefined) {
+    const rect = targetEl.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      const pixelX = rect.left + (payload.elemXRel * rect.width);
+      const pixelY = rect.top + (payload.elemYRel * rect.height);
+      const xPct = Math.max(0, Math.min(100, (pixelX / winW) * 100));
+      const yPct = Math.max(0, Math.min(100, (pixelY / winH) * 100));
+      return { pixelX, pixelY, xPct, yPct };
+    }
+  }
+
+  // Fallback: normalizado por viewport
+  const vpX = payload.viewportXRel !== undefined ? payload.viewportXRel : ((payload.xPct || 0) / 100);
+  const vpY = payload.viewportYRel !== undefined ? payload.viewportYRel : ((payload.yPct || 0) / 100);
+  const pixelX = vpX * winW;
+  const pixelY = vpY * winH;
+  return { pixelX, pixelY, xPct: vpX * 100, yPct: vpY * 100 };
+}
+
 class AssistedSessionManager {
   private activeChannel: any = null;
   private currentSession: ImpersonationSession | null = null;
@@ -204,9 +409,10 @@ class AssistedSessionManager {
   private reconnectAttempts: number = 0;
   private reconnectTimer: any = null;
 
-  /**
-   * Assina atualizações de estado local do suporte assistido
-   */
+  // Mapa de versões incrementais de campos para garantir idempotência e ordem estrita
+  private fieldVersionsMap: Map<string, number> = new Map();
+  private localFieldSequence: Map<string, number> = new Map();
+
   subscribeState(callback: (state: AssistedSessionState) => void) {
     this.stateSubscribers.push(callback);
     callback(this.getStateSnapshot());
@@ -256,9 +462,6 @@ class AssistedSessionManager {
     return this.currentSession;
   }
 
-  /**
-   * Altera o modo entre Acompanhamento (Observador) e Simulação Interativa
-   */
   async setMode(newMode: AssistedOperationMode): Promise<void> {
     if (this.mode === newMode) return;
     this.mode = newMode;
@@ -267,7 +470,6 @@ class AssistedSessionManager {
     if (this.currentSession) {
       await this.broadcastControl(this.isPaused ? 'paused' : 'active');
       
-      // Se alternou para o modo observador, solicita snapshot atual da tela do usuário
       if (newMode === 'observer') {
         this.syncStatus = 'syncing';
         this.notifyState();
@@ -288,9 +490,6 @@ class AssistedSessionManager {
     }
   }
 
-  /**
-   * Inicializa a sessão assistida pelo Administrador
-   */
   async initAdminSession(session: ImpersonationSession, initialMode: AssistedOperationMode = 'simulation'): Promise<void> {
     this.currentSession = session;
     this.isPaused = false;
@@ -299,6 +498,8 @@ class AssistedSessionManager {
     this.syncStatus = 'syncing';
     this.lastSyncTime = Date.now();
     this.reconnectAttempts = 0;
+    this.fieldVersionsMap.clear();
+    this.localFieldSequence.clear();
     this.notifyState();
 
     if (this.activeChannel) {
@@ -316,7 +517,6 @@ class AssistedSessionManager {
       }
     });
 
-    // Rastreia presença do usuário alvo no canal da sessão
     channel.on('presence', { event: 'sync' }, () => {
       const state = channel.presenceState();
       let foundUser = false;
@@ -337,7 +537,6 @@ class AssistedSessionManager {
       this.notifyState();
     });
 
-    // Subscrição com tratamento de reconexão
     channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         this.syncStatus = this.isPaused ? 'paused' : 'connected';
@@ -357,7 +556,6 @@ class AssistedSessionManager {
             isPaused: this.isPaused
           });
           
-          // Confirma início da sessão e solicita snapshot inicial do usuário
           await this.broadcastControl(this.isPaused ? 'paused' : 'active');
           this.requestFullState();
         } catch (err) {
@@ -372,7 +570,6 @@ class AssistedSessionManager {
 
     this.activeChannel = channel;
 
-    // Log de auditoria indelével
     await auditLogService.logAction({
       action_type: 'ASSISTED_SESSION_START',
       module: 'Segurança / Suporte Assistido',
@@ -405,31 +602,14 @@ class AssistedSessionManager {
     }, delay);
   }
 
-  /**
-   * Pausa a transmissão em tempo real
-   */
   async pauseTransmission(): Promise<void> {
     if (!this.currentSession || this.isPaused) return;
     this.isPaused = true;
     this.syncStatus = 'paused';
     this.notifyState();
     await this.broadcastControl('paused');
-
-    await auditLogService.logAction({
-      action_type: 'ASSISTED_SESSION_PAUSED',
-      module: 'Segurança / Suporte Assistido',
-      description: `Transmissão do acompanhamento assistido pausada pelo Administrador "${this.currentSession.realAdmin.name}".`,
-      details: {
-        sessionId: this.currentSession.sessionId,
-        admin_id: this.currentSession.realAdmin.id,
-        target_user_id: this.currentSession.targetUser.id
-      }
-    });
   }
 
-  /**
-   * Retoma a transmissão em tempo real
-   */
   async resumeTransmission(): Promise<void> {
     if (!this.currentSession || !this.isPaused) return;
     this.isPaused = false;
@@ -437,38 +617,19 @@ class AssistedSessionManager {
     this.lastSyncTime = Date.now();
     this.notifyState();
     await this.broadcastControl('active');
-
-    // Ao retomar, sincroniza o estado atual
     this.requestFullState();
-
-    await auditLogService.logAction({
-      action_type: 'ASSISTED_SESSION_RESUMED',
-      module: 'Segurança / Suporte Assistido',
-      description: `Transmissão do acompanhamento assistido retomada pelo Administrador "${this.currentSession.realAdmin.name}".`,
-      details: {
-        sessionId: this.currentSession.sessionId,
-        admin_id: this.currentSession.realAdmin.id,
-        target_user_id: this.currentSession.targetUser.id
-      }
-    });
   }
 
-  /**
-   * Finaliza a sessão assistida
-   */
   async endSession(): Promise<void> {
     if (!this.currentSession) return;
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-
+    const session = this.currentSession;
     await this.broadcastControl('ended');
 
     if (this.activeChannel) {
       try {
         await this.activeChannel.untrack();
         await supabase.removeChannel(this.activeChannel);
-      } catch (e) {
-        console.warn('[AssistedSession] Erro ao remover canal:', e);
-      }
+      } catch (e) {}
       this.activeChannel = null;
     }
 
@@ -476,16 +637,16 @@ class AssistedSessionManager {
     this.isPaused = false;
     this.isTargetUserConnected = false;
     this.syncStatus = 'disconnected';
+    this.fieldVersionsMap.clear();
+    this.localFieldSequence.clear();
     this.notifyState();
   }
 
-  /**
-   * Envia controle de status e modo da sessão
-   */
   private async broadcastControl(status: 'active' | 'paused' | 'ended'): Promise<void> {
     if (!this.currentSession) return;
+
     const payload: AssistedControlPayload = {
-      eventId: `ctrl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      eventId: `ctrl_${Date.now()}`,
       status,
       mode: this.mode,
       sessionId: this.currentSession.sessionId,
@@ -496,23 +657,19 @@ class AssistedSessionManager {
     };
 
     if (this.activeChannel) {
-      this.activeChannel.send({
+      await this.activeChannel.send({
         type: 'broadcast',
         event: 'assisted-control',
         payload
       });
     }
 
-    // Emite nos canais globais para alertar o usuário caso ele abra a aba depois
     try {
       const globalCh = supabase.channel('user_impersonation_alerts', { config: { broadcast: { self: true } } });
       globalCh.send({ type: 'broadcast', event: 'assisted-control', payload });
     } catch (e) {}
   }
 
-  /**
-   * Solicita snapshot de estado completo do outro lado
-   */
   requestFullState() {
     if (!this.activeChannel || this.isPaused) return;
     this.activeChannel.send({
@@ -525,9 +682,6 @@ class AssistedSessionManager {
     });
   }
 
-  /**
-   * Transmite snapshot de estado completo
-   */
   broadcastStateSnapshot(data: Omit<AssistedStateSnapshotPayload, 'timestamp' | 'source' | 'senderId'>) {
     if (!this.activeChannel || this.isPaused) return;
 
@@ -551,9 +705,6 @@ class AssistedSessionManager {
     });
   }
 
-  /**
-   * Transmite navegação de rota e tela (sincronização de URL e visão)
-   */
   broadcastNavigation(data: Omit<AssistedNavPayload, 'timestamp' | 'source' | 'senderId'>) {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
 
@@ -573,44 +724,21 @@ class AssistedSessionManager {
       event: 'assisted-nav',
       payload
     });
-
-    // Registra log de página acessada para auditoria
-    if (this.lastLoggedPage !== data.path) {
-      this.lastLoggedPage = data.path;
-      auditLogService.logAction({
-        action_type: 'ASSISTED_PAGE_VISITED',
-        module: 'Suporte Assistido / Navegação',
-        description: `Administrador "${this.currentSession.realAdmin.name}" navegou para "${data.path}" (Visualização: ${data.currentView || 'padrão'}) na sessão de "${this.currentSession.targetUser.name}".`,
-        details: {
-          sessionId: this.currentSession.sessionId,
-          admin_id: this.currentSession.realAdmin.id,
-          target_user_id: this.currentSession.targetUser.id,
-          path: data.path,
-          view: data.currentView,
-          block: data.activeBlock,
-          tab: data.adminTab,
-          visited_at: new Date().toISOString()
-        }
-      }).catch(err => console.warn('[AssistedSession] Erro ao registrar log de navegação:', err));
-    }
   }
 
   /**
-   * Transmite movimentação do cursor do Administrador (com coordenadas relativas e dimensões)
+   * Transmite movimentação do cursor do Administrador com elemento relativo preciso
    */
   broadcastMouseMove(
-    xPct: number, 
-    yPct: number, 
-    isTouch: boolean = false, 
-    userName?: string, 
+    clientX: number,
+    clientY: number,
+    isTouch: boolean = false,
+    userName?: string,
     source: 'admin' | 'user' = 'admin'
   ) {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
 
-    const viewportW = typeof window !== 'undefined' ? window.innerWidth : 1920;
-    const viewportH = typeof window !== 'undefined' ? window.innerHeight : 1080;
-    const scrollX = typeof window !== 'undefined' ? (window.scrollX || document.documentElement.scrollLeft || 0) : 0;
-    const scrollY = typeof window !== 'undefined' ? (window.scrollY || document.documentElement.scrollTop || 0) : 0;
+    const relPos = computeElementRelativePosition(clientX, clientY, source);
     const currentRoute = typeof window !== 'undefined' ? (window.location.pathname + window.location.search) : '/';
 
     const payload: AssistedMouseMovePayload = {
@@ -620,21 +748,28 @@ class AssistedSessionManager {
       senderName: userName || this.currentSession.realAdmin.name,
       senderRole: 'admin',
       route: currentRoute,
-      xRelative: xPct,
-      yRelative: yPct,
-      xPct,
-      yPct,
-      scrollX,
-      scrollY,
-      viewportWidth: viewportW,
-      viewportHeight: viewportH,
+      targetElementId: relPos.targetElementId,
+      dataAssistId: relPos.dataAssistId,
+      selector: relPos.selector,
+      elemXRel: relPos.elemXRel,
+      elemYRel: relPos.elemYRel,
+      viewportXRel: relPos.viewportXRel,
+      viewportYRel: relPos.viewportYRel,
+      xRelative: relPos.viewportXRel * 100,
+      yRelative: relPos.viewportYRel * 100,
+      xPct: relPos.viewportXRel * 100,
+      yPct: relPos.viewportYRel * 100,
+      scrollX: relPos.scrollX,
+      scrollY: relPos.scrollY,
+      viewportWidth: relPos.viewportWidth,
+      viewportHeight: relPos.viewportHeight,
+      dpr: relPos.dpr,
       isTouch,
       userName: userName || this.currentSession.realAdmin.name,
       timestamp: Date.now(),
       source
     };
 
-    // Publica em ambos os eventos para compatibilidade
     this.activeChannel.send({
       type: 'broadcast',
       event: 'assisted-mouse',
@@ -649,27 +784,34 @@ class AssistedSessionManager {
   }
 
   /**
-   * Transmite clique/toque de indicação ou ação
+   * Transmite clique com identificador efêmero e posição relativa precisa
    */
   broadcastClick(
-    xPct: number, 
-    yPct: number, 
+    clientX: number,
+    clientY: number,
     targetInfo?: { tag?: string; text?: string; selector?: string; dataAssistId?: string; id?: string; name?: string; isTouch?: boolean; userName?: string },
     source: 'admin' | 'user' = 'admin'
   ) {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
 
+    const relPos = computeElementRelativePosition(clientX, clientY, source);
+
     const payload: AssistedClickPayload = {
-      eventId: `clk_${Date.now()}`,
+      eventId: `clk_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       sessionId: this.currentSession.sessionId,
-      xPct,
-      yPct,
-      xRelative: xPct,
-      yRelative: yPct,
+      targetElementId: relPos.targetElementId || targetInfo?.id || null,
+      dataAssistId: relPos.dataAssistId || targetInfo?.dataAssistId || null,
+      selector: relPos.selector || targetInfo?.selector || null,
+      elemXRel: relPos.elemXRel,
+      elemYRel: relPos.elemYRel,
+      viewportXRel: relPos.viewportXRel,
+      viewportYRel: relPos.viewportYRel,
+      xPct: relPos.viewportXRel * 100,
+      yPct: relPos.viewportYRel * 100,
+      xRelative: relPos.viewportXRel * 100,
+      yRelative: relPos.viewportYRel * 100,
       tag: targetInfo?.tag,
       text: targetInfo?.text,
-      selector: targetInfo?.selector,
-      dataAssistId: targetInfo?.dataAssistId,
       id: targetInfo?.id,
       name: targetInfo?.name,
       isTouch: targetInfo?.isTouch,
@@ -686,9 +828,6 @@ class AssistedSessionManager {
     });
   }
 
-  /**
-   * Transmite rolagem de tela (scroll)
-   */
   broadcastScroll(scrollPctY: number, scrollY: number, source: 'admin' | 'user' = 'admin') {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
 
@@ -710,15 +849,31 @@ class AssistedSessionManager {
   }
 
   /**
-   * Transmite preenchimento de campos de formulário, buscas e filtros
+   * Transmite preenchimento de formulário com versão incremental e fieldId estável
    */
-  broadcastInputChange(data: Omit<AssistedInputPayload, 'timestamp' | 'source' | 'senderId'>) {
+  broadcastInputChange(data: {
+    fieldId?: string;
+    selector?: string;
+    dataAssistId?: string;
+    name?: string;
+    id?: string;
+    value: string;
+    checked?: boolean;
+    tagName?: string;
+    isSearch?: boolean;
+  }) {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
+
+    const fieldKey = data.fieldId || data.dataAssistId || data.id || data.name || data.selector || 'unknown_field';
+    const nextVersion = (this.localFieldSequence.get(fieldKey) || 0) + 1;
+    this.localFieldSequence.set(fieldKey, nextVersion);
 
     const payload: AssistedInputPayload = {
       ...data,
+      fieldId: fieldKey,
+      version: nextVersion,
       sessionId: this.currentSession.sessionId,
-      eventId: `inp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      eventId: `inp_${Date.now()}_v${nextVersion}`,
       senderId: `admin_${this.currentSession.realAdmin.id}`,
       source: 'admin',
       timestamp: Date.now()
@@ -731,9 +886,6 @@ class AssistedSessionManager {
     });
   }
 
-  /**
-   * Transmite abertura, fechamento de modais ou troca de abas
-   */
   broadcastModalState(modalId: string, action: 'open' | 'close' | 'change_tab' | 'step_change', data?: any, step?: number | null, source: 'admin' | 'user' = 'admin') {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
 
@@ -756,9 +908,6 @@ class AssistedSessionManager {
     });
   }
 
-  /**
-   * Transmite alteração de abas de tela ou filtros
-   */
   broadcastTabChange(tabId: string, section?: string, filterValue?: string | null, source: 'admin' | 'user' = 'admin') {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
 
@@ -781,7 +930,7 @@ class AssistedSessionManager {
   }
 
   /**
-   * Conecta o cliente do usuário assistido ao canal da sessão para receber comandos e enviar transmissões
+   * Conecta o cliente do usuário assistido ao canal da sessão
    */
   listenAsTargetUser(
     currentUser: User,
@@ -791,13 +940,13 @@ class AssistedSessionManager {
     unsubscribe: () => void;
     sendUserStateSnapshot: (snapshot: Omit<AssistedStateSnapshotPayload, 'timestamp' | 'source' | 'senderId'>) => void;
     sendUserNav: (nav: Omit<AssistedNavPayload, 'timestamp' | 'source' | 'senderId'>) => void;
-    sendUserInput: (input: Omit<AssistedInputPayload, 'timestamp' | 'source' | 'senderId'>) => void;
+    sendUserInput: (input: Omit<AssistedInputPayload, 'timestamp' | 'source' | 'senderId' | 'eventId' | 'version'>) => void;
     sendUserModal: (modalId: string, action: 'open' | 'close' | 'change_tab' | 'step_change', data?: any, step?: number | null) => void;
     sendUserTab: (tabId: string, section?: string, filterValue?: string | null) => void;
     sendUserScroll: (scrollPctY: number, scrollY: number) => void;
-    sendUserClick: (xPct: number, yPct: number, targetInfo?: { tag?: string; text?: string; selector?: string; dataAssistId?: string; isTouch?: boolean; userName?: string }) => void;
-    sendUserMouseMove: (xPct: number, yPct: number, isTouch?: boolean) => void;
-    sendUserTapPulse: (xPct: number, yPct: number, isTouch?: boolean) => void;
+    sendUserClick: (clientX: number, clientY: number, targetInfo?: { tag?: string; text?: string; selector?: string; dataAssistId?: string; isTouch?: boolean; userName?: string }) => void;
+    sendUserMouseMove: (clientX: number, clientY: number, isTouch?: boolean) => void;
+    sendUserTapPulse: (clientX: number, clientY: number, isTouch?: boolean) => void;
   } {
     if (!sessionId) {
       return {
@@ -822,7 +971,6 @@ class AssistedSessionManager {
       }
     });
 
-    // Registra presença do usuário assistido
     channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         try {
@@ -840,7 +988,6 @@ class AssistedSessionManager {
       }
     });
 
-    // Eventos recebidos do Administrador
     channel.on('broadcast', { event: 'assisted-control' }, (event: any) => {
       const payload: AssistedControlPayload = event.payload;
       if (payload) {
@@ -870,7 +1017,6 @@ class AssistedSessionManager {
       }
     });
 
-    // Escuta cursor do Administrador
     const handleAdminMouse = (event: any) => {
       const payload: AssistedMouseMovePayload = event.payload;
       if (payload && payload.source !== 'user') {
@@ -897,7 +1043,12 @@ class AssistedSessionManager {
     channel.on('broadcast', { event: 'assisted-input' }, (event: any) => {
       const payload: AssistedInputPayload = event.payload;
       if (payload && payload.source !== 'user') {
-        listeners.onInputChange?.(payload);
+        // Validação de Versão Incremental: descarta pacotes antigos fora de ordem
+        const lastVer = this.fieldVersionsMap.get(payload.fieldId) || 0;
+        if (payload.version > lastVer) {
+          this.fieldVersionsMap.set(payload.fieldId, payload.version);
+          listeners.onInputChange?.(payload);
+        }
       }
     });
 
@@ -945,14 +1096,20 @@ class AssistedSessionManager {
       });
     };
 
-    const sendUserInput = (input: Omit<AssistedInputPayload, 'timestamp' | 'source' | 'senderId'>) => {
+    const sendUserInput = (input: Omit<AssistedInputPayload, 'timestamp' | 'source' | 'senderId' | 'eventId'>) => {
+      const fieldKey = input.fieldId || input.dataAssistId || input.id || input.name || input.selector || 'user_field';
+      const nextVer = (this.localFieldSequence.get(fieldKey) || 0) + 1;
+      this.localFieldSequence.set(fieldKey, nextVer);
+
       channel.send({
         type: 'broadcast',
         event: 'assisted-input',
         payload: {
           ...input,
+          fieldId: fieldKey,
+          version: nextVer,
           sessionId,
-          eventId: `inp_u_${Date.now()}`,
+          eventId: `inp_u_${Date.now()}_v${nextVer}`,
           senderId: `target_${currentUser.id}`,
           source: 'user',
           timestamp: Date.now()
@@ -1011,23 +1168,30 @@ class AssistedSessionManager {
       });
     };
 
-    const sendUserClick = (xPct: number, yPct: number, targetInfo?: { tag?: string; text?: string; selector?: string; dataAssistId?: string; isTouch?: boolean; userName?: string }) => {
+    const sendUserClick = (clientX: number, clientY: number, targetInfo?: { tag?: string; text?: string; selector?: string; dataAssistId?: string; isTouch?: boolean; userName?: string }) => {
+      const relPos = computeElementRelativePosition(clientX, clientY, 'user');
+
       channel.send({
         type: 'broadcast',
         event: 'assisted-click',
         payload: {
           sessionId,
-          xPct,
-          yPct,
-          xRelative: xPct,
-          yRelative: yPct,
+          targetElementId: relPos.targetElementId || null,
+          dataAssistId: relPos.dataAssistId || targetInfo?.dataAssistId || null,
+          selector: relPos.selector || targetInfo?.selector || null,
+          elemXRel: relPos.elemXRel,
+          elemYRel: relPos.elemYRel,
+          viewportXRel: relPos.viewportXRel,
+          viewportYRel: relPos.viewportYRel,
+          xPct: relPos.viewportXRel * 100,
+          yPct: relPos.viewportYRel * 100,
+          xRelative: relPos.viewportXRel * 100,
+          yRelative: relPos.viewportYRel * 100,
           tag: targetInfo?.tag,
           text: targetInfo?.text,
-          selector: targetInfo?.selector,
-          dataAssistId: targetInfo?.dataAssistId,
           isTouch: targetInfo?.isTouch,
           userName: targetInfo?.userName || currentUser.name,
-          eventId: `clk_u_${Date.now()}`,
+          eventId: `clk_u_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           senderId: `target_${currentUser.id}`,
           source: 'user',
           timestamp: Date.now()
@@ -1035,29 +1199,33 @@ class AssistedSessionManager {
       });
     };
 
-    // Transmite movimentação do cursor do Usuário (Cursor do Dono da Tela / Apontador Remoto)
-    const sendUserMouseMove = (xPct: number, yPct: number, isTouch: boolean = false) => {
-      const viewportW = typeof window !== 'undefined' ? window.innerWidth : 1920;
-      const viewportH = typeof window !== 'undefined' ? window.innerHeight : 1080;
-      const scrollX = typeof window !== 'undefined' ? (window.scrollX || document.documentElement.scrollLeft || 0) : 0;
-      const scrollY = typeof window !== 'undefined' ? (window.scrollY || document.documentElement.scrollTop || 0) : 0;
+    const sendUserMouseMove = (clientX: number, clientY: number, isTouch: boolean = false) => {
+      const relPos = computeElementRelativePosition(clientX, clientY, 'user');
       const currentRoute = typeof window !== 'undefined' ? (window.location.pathname + window.location.search) : '/';
 
       const payload: AssistedMouseMovePayload = {
-        eventId: `m_u_${Date.now()}`,
+        eventId: `m_u_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         sessionId,
         senderId: `target_${currentUser.id}`,
         senderName: currentUser.name,
         senderRole: 'user',
         route: currentRoute,
-        xRelative: xPct,
-        yRelative: yPct,
-        xPct,
-        yPct,
-        scrollX,
-        scrollY,
-        viewportWidth: viewportW,
-        viewportHeight: viewportH,
+        targetElementId: relPos.targetElementId,
+        dataAssistId: relPos.dataAssistId,
+        selector: relPos.selector,
+        elemXRel: relPos.elemXRel,
+        elemYRel: relPos.elemYRel,
+        viewportXRel: relPos.viewportXRel,
+        viewportYRel: relPos.viewportYRel,
+        xRelative: relPos.viewportXRel * 100,
+        yRelative: relPos.viewportYRel * 100,
+        xPct: relPos.viewportXRel * 100,
+        yPct: relPos.viewportYRel * 100,
+        scrollX: relPos.scrollX,
+        scrollY: relPos.scrollY,
+        viewportWidth: relPos.viewportWidth,
+        viewportHeight: relPos.viewportHeight,
+        dpr: relPos.dpr,
         isTouch,
         userName: currentUser.name,
         timestamp: Date.now(),
@@ -1077,24 +1245,8 @@ class AssistedSessionManager {
       });
     };
 
-    const sendUserTapPulse = (xPct: number, yPct: number, isTouch: boolean = false) => {
-      channel.send({
-        type: 'broadcast',
-        event: 'assisted-click',
-        payload: {
-          sessionId,
-          xPct,
-          yPct,
-          xRelative: xPct,
-          yRelative: yPct,
-          isTouch,
-          userName: currentUser.name,
-          eventId: `clk_u_${Date.now()}`,
-          senderId: `target_${currentUser.id}`,
-          source: 'user',
-          timestamp: Date.now()
-        }
-      });
+    const sendUserTapPulse = (clientX: number, clientY: number, isTouch: boolean = false) => {
+      sendUserClick(clientX, clientY, { isTouch, userName: currentUser.name });
     };
 
     return {
@@ -1114,9 +1266,6 @@ class AssistedSessionManager {
     };
   }
 
-  /**
-   * Conecta o Administrador como receptor de eventos no Acompanhamento Assistido
-   */
   listenAsAdminObserver(
     listeners: AdminSessionObserverListeners
   ): () => void {
@@ -1147,7 +1296,11 @@ class AssistedSessionManager {
     ch.on('broadcast', { event: 'assisted-input' }, (event: any) => {
       const payload: AssistedInputPayload = event.payload;
       if (payload && payload.source === 'user') {
-        listeners.onInputChange?.(payload);
+        const lastVer = this.fieldVersionsMap.get(payload.fieldId) || 0;
+        if (payload.version > lastVer) {
+          this.fieldVersionsMap.set(payload.fieldId, payload.version);
+          listeners.onInputChange?.(payload);
+        }
       }
     });
 
@@ -1184,7 +1337,6 @@ class AssistedSessionManager {
     ch.on('broadcast', { event: 'assisted-click' }, (event: any) => {
       const payload: AssistedClickPayload = event.payload;
       if (payload && payload.source === 'user') {
-        // Evento 100% visual de apontamento (ripple/pulso)
         listeners.onUserTapPulse?.(payload);
         listeners.onClick?.(payload);
       }
