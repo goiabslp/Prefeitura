@@ -697,105 +697,115 @@ export const VehicleScheduleDashboard: React.FC<DashboardProps> = ({
             {/* Total de Viagens */}
             <div 
               onClick={() => handleOpenDrillDown('Todas as Viagens do Período', `${totalTrips} solicitações registradas`, () => true)}
-              className="bg-white p-4.5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden"
+              className="bg-white p-4 sm:p-5 pl-5 sm:pl-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden flex flex-col justify-between"
             >
               <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-indigo-500 rounded-l-full"></div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="w-9 h-9 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-                  <TrendingUp className="w-5 h-5" />
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-9 h-9 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                    <TrendingUp className="w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg uppercase tracking-wider">
+                    Total
+                  </span>
                 </div>
-                <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg uppercase tracking-wider">
-                  Total
-                </span>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">Viagens Solicitadas</p>
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 mt-1">{totalTrips}</div>
               </div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Viagens Solicitadas</p>
-              <div className="text-2xl sm:text-3xl font-black text-slate-900 mt-1">{totalTrips}</div>
               <div className="flex items-center gap-1 mt-2 text-[10px] font-bold text-slate-400">
-                <span>{confirmedTrips} ativas / programadas</span>
+                <span className="truncate">{confirmedTrips} ativas / programadas</span>
               </div>
             </div>
 
             {/* Concluídas */}
             <div 
               onClick={() => handleOpenDrillDown('Viagens Concluídas', `${completedTrips} viagens finalizadas com sucesso`, (s) => s.status === 'concluido')}
-              className="bg-white p-4.5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden"
+              className="bg-white p-4 sm:p-5 pl-5 sm:pl-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden flex flex-col justify-between"
             >
               <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-emerald-500 rounded-l-full"></div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="w-9 h-9 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                  <CheckCircle2 className="w-5 h-5" />
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-9 h-9 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg uppercase tracking-wider">
+                    {completionRate.toFixed(0)}%
+                  </span>
                 </div>
-                <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg uppercase tracking-wider">
-                  {completionRate.toFixed(0)}%
-                </span>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">Viagens Concluídas</p>
+                <div className="text-2xl sm:text-3xl font-black text-emerald-600 mt-1">{completedTrips}</div>
               </div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Viagens Concluídas</p>
-              <div className="text-2xl sm:text-3xl font-black text-emerald-600 mt-1">{completedTrips}</div>
               <div className="flex items-center gap-1 mt-2 text-[10px] font-bold text-emerald-600">
-                <span>Taxa de sucesso operacional</span>
+                <span className="truncate">Taxa de sucesso operacional</span>
               </div>
             </div>
 
             {/* Em Andamento / Agora */}
             <div 
               onClick={() => handleOpenDrillDown('Viagens em Andamento', `${inProgressTrips} veículos em circulação`, (s) => s.status === 'em_curso' || (s.status === 'confirmado' && new Date(s.departureDateTime) <= now && new Date(s.returnDateTime) >= now))}
-              className="bg-white p-4.5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden"
+              className="bg-white p-4 sm:p-5 pl-5 sm:pl-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden flex flex-col justify-between"
             >
               <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-blue-500 rounded-l-full"></div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="w-9 h-9 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                  <Car className="w-5 h-5" />
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-9 h-9 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                    <Car className="w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded-lg uppercase tracking-wider animate-pulse">
+                    Agora
+                  </span>
                 </div>
-                <span className="text-[10px] font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded-lg uppercase tracking-wider animate-pulse">
-                  Agora
-                </span>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">Em Andamento</p>
+                <div className="text-2xl sm:text-3xl font-black text-blue-600 mt-1">{inProgressTrips}</div>
               </div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Em Andamento</p>
-              <div className="text-2xl sm:text-3xl font-black text-blue-600 mt-1">{inProgressTrips}</div>
               <div className="flex items-center gap-1 mt-2 text-[10px] font-bold text-blue-600">
-                <span>{vehiclesInTripNow} veículos na rua</span>
+                <span className="truncate">{vehiclesInTripNow} veículos na rua</span>
               </div>
             </div>
 
             {/* Passageiros */}
             <div 
               onClick={() => handleOpenDrillDown('Passageiros Transportados', `${totalPassengers} pessoas atendidas no período`, (s) => s.status !== 'cancelado')}
-              className="bg-white p-4.5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden"
+              className="bg-white p-4 sm:p-5 pl-5 sm:pl-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden flex flex-col justify-between"
             >
               <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-purple-500 rounded-l-full"></div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="w-9 h-9 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-                  <Users className="w-5 h-5" />
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-9 h-9 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                    <Users className="w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] font-black text-purple-700 bg-purple-50 px-2 py-0.5 rounded-lg uppercase tracking-wider">
+                    {(totalPassengers / Math.max(1, totalTrips)).toFixed(1)} / viagem
+                  </span>
                 </div>
-                <span className="text-[10px] font-black text-purple-700 bg-purple-50 px-2 py-0.5 rounded-lg uppercase tracking-wider">
-                  {(totalPassengers / Math.max(1, totalTrips)).toFixed(1)} / viagem
-                </span>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">Passageiros Transport.</p>
+                <div className="text-2xl sm:text-3xl font-black text-purple-600 mt-1">{totalPassengers}</div>
               </div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Passageiros Transport.</p>
-              <div className="text-2xl sm:text-3xl font-black text-purple-600 mt-1">{totalPassengers}</div>
               <div className="flex items-center gap-1 mt-2 text-[10px] font-bold text-slate-400">
-                <span>{averageCapacityOccupancy.toFixed(0)}% ocupação média</span>
+                <span className="truncate">{averageCapacityOccupancy.toFixed(0)}% ocupação média</span>
               </div>
             </div>
 
             {/* Canceladas / Rejeitadas */}
             <div 
               onClick={() => handleOpenDrillDown('Viagens Canceladas e Rejeitadas', `${canceledTrips} solicitações canceladas ou negadas`, (s) => s.status === 'cancelado')}
-              className="bg-white p-4.5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden col-span-2 sm:col-span-1"
+              className="bg-white p-4 sm:p-5 pl-5 sm:pl-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden col-span-2 sm:col-span-1 flex flex-col justify-between"
             >
               <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-rose-500 rounded-l-full"></div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="w-9 h-9 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
-                  <XCircle className="w-5 h-5" />
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-9 h-9 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+                    <XCircle className="w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] font-black text-rose-700 bg-rose-50 px-2 py-0.5 rounded-lg uppercase tracking-wider">
+                    {cancellationRate.toFixed(1)}%
+                  </span>
                 </div>
-                <span className="text-[10px] font-black text-rose-700 bg-rose-50 px-2 py-0.5 rounded-lg uppercase tracking-wider">
-                  {cancellationRate.toFixed(1)}%
-                </span>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">Canceladas / Rejeitadas</p>
+                <div className="text-2xl sm:text-3xl font-black text-rose-600 mt-1">{canceledTrips}</div>
               </div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Canceladas / Rejeitadas</p>
-              <div className="text-2xl sm:text-3xl font-black text-rose-600 mt-1">{canceledTrips}</div>
               <div className="flex items-center gap-1 mt-2 text-[10px] font-bold text-rose-500">
-                <span>{rejectedTrips} rejeitadas por gestor</span>
+                <span className="truncate">{rejectedTrips} rejeitadas por gestor</span>
               </div>
             </div>
 

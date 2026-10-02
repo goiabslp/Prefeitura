@@ -1342,7 +1342,7 @@ export const EventModal: React.FC<Props> = ({
                 <div className="lg:col-span-5 flex flex-col space-y-4">
                   
                   {/* Bloco de Agendamento Moderno & Dinâmico */}
-                  <div className="bg-gradient-to-b from-slate-50/90 to-slate-100/50 p-4.5 rounded-3xl border border-slate-200/90 space-y-3.5 shadow-xs">
+                  <div className="bg-gradient-to-b from-slate-50/90 to-slate-100/50 p-4 sm:p-5 rounded-3xl border border-slate-200/90 space-y-3.5 shadow-xs">
                     
                     {/* Header com Ícone e Toggles em Pílula (Pill Switchers) */}
                     <div className="flex items-center justify-between gap-2 border-b border-slate-200/70 pb-2.5">

@@ -296,7 +296,7 @@ export const SystemDynamicUpdateModal: React.FC<SystemDynamicUpdateModalProps> =
               </div>
 
               {/* Card com as Novidades Reais da Versão (Convertidas em PT-BR) */}
-              <div className="w-full bg-slate-50/90 rounded-2xl p-4 sm:p-4.5 border border-slate-200/80 shadow-inner text-left space-y-2.5 max-h-48 overflow-y-auto">
+              <div className="w-full bg-slate-50/90 rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-inner text-left space-y-2.5 max-h-48 overflow-y-auto">
                 <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-amber-500" />

@@ -1451,7 +1451,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
                 cardGap = 'gap-2.5 md:gap-3';
             } else if (processCount > 4) {
                 gridLayout = 'grid-cols-2 md:grid-cols-3';
-                cardPadding = 'p-3.5 2xl:p-4.5';
+                cardPadding = 'p-3.5 2xl:p-5';
                 titleSize = 'text-sm md:text-base xl:text-lg';
                 cardGap = 'gap-3 md:gap-4';
             } else if (processCount > 1) {

@@ -330,7 +330,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
         <div className="hidden lg:flex flex-col justify-between h-full w-[54%] xl:w-[56%] py-2 xl:py-4 select-none">
           
           {/* Bloco Superior: Logo, Título, Subtítulo e 3 Badges */}
-          <div className="flex flex-col gap-3.5 xl:gap-4.5 max-w-xl">
+          <div className="flex flex-col gap-3.5 xl:gap-4 max-w-xl">
             
             {/* Logo Oficial da Prefeitura (com dimensões rígidas contra estouro/FOUC) */}
             <div className="flex items-center gap-3.5 h-14 min-h-[56px]" style={{ minHeight: '56px' }}>
