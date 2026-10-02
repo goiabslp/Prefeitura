@@ -4828,15 +4828,6 @@ const App: React.FC = () => {
             />
           )}
 
-          {/* HUD de Controle de Suporte Assistido para o Administrador */}
-          {impersonationSession && (
-            <AssistedSessionControlHUD
-              session={impersonationSession}
-              onStop={handleStopImpersonation}
-              onRefreshState={() => assistedSessionService.requestFullState()}
-            />
-          )}
-
           <div className="w-full shrink-0 sticky top-0 z-40">
             {(currentUser || currentView === 'licitacao:kanban-view') && <AppHeader
               currentUser={currentUser || ({ id: 'view-user', name: 'Modo Sala', username: 'sala', role: 'viewer', sector: '', permissions: [] } as any)}

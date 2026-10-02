@@ -27,6 +27,7 @@ import { OnlineUsers } from './OnlineUsers';
 import { useState } from 'react';
 import { getCachedImage, IMAGE_KEYS } from '../services/cacheService';
 import { useLicitacaoProcesses } from '../hooks/useLicitacaoModule';
+import { AssistedSessionControlHUD } from './AssistedSessionControlHUD';
 
 interface AppHeaderProps {
   currentUser: User;
@@ -349,34 +350,16 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               <div className="h-6 w-px bg-slate-200 hidden desktop:block"></div>
 
               {impersonationSession ? (
-                <div className="flex items-center gap-2.5 px-3 py-1.5 bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-xl border border-indigo-500/30 shadow-md">
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                    </span>
-                    <span className="text-[11px] font-black uppercase tracking-wider text-cyan-300">
-                      ACOMPANHAMENTO ASSISTIDO — {impersonationSession.targetUser.name}
-                    </span>
+                <div className="flex items-center gap-3">
+                  <AssistedSessionControlHUD
+                    session={impersonationSession}
+                    onStop={onStopImpersonation || (() => {})}
+                    onRefreshState={() => onRefresh(false)}
+                  />
+                  <div className="hidden xl:flex items-center gap-1.5 text-xs text-slate-500 font-medium bg-slate-100/80 px-2.5 py-1 rounded-lg border border-slate-200/60">
+                    <span className="text-slate-400 font-bold uppercase text-[9px]">Tela:</span>
+                    <strong className="text-slate-700 font-bold">{getModuleTitle()}</strong>
                   </div>
-
-                  <span className="text-white/40 hidden sm:inline">•</span>
-
-                  <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-medium text-slate-300">
-                    <span>Tela:</span>
-                    <strong className="text-white font-bold">{getModuleTitle()}</strong>
-                  </div>
-
-                  {onStopImpersonation && (
-                    <button
-                      type="button"
-                      onClick={onStopImpersonation}
-                      className="ml-1 px-2 py-0.5 bg-rose-600/80 hover:bg-rose-600 text-white rounded-lg text-[10px] font-bold uppercase transition-all"
-                      title="Sair do acompanhamento assistido"
-                    >
-                      Sair
-                    </button>
-                  )}
                 </div>
               ) : (
                 <div className="hidden desktop:flex flex-col">
