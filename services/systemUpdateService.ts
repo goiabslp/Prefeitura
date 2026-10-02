@@ -2,6 +2,8 @@ import { supabase } from './supabaseClient';
 import { auditLogService } from './auditLogService';
 import { User } from '../types';
 
+declare const __LATEST_COMMIT__: string | undefined;
+
 export const APPLIED_SYSTEM_VERSION_KEY = 'system_applied_version';
 export const LAST_FORCED_UPDATE_KEY = 'last_forced_update_target';
 
@@ -25,6 +27,121 @@ export interface UserUpdateRequest {
   startedAt?: string; // momento em que o contador começou a rodar
   status: 'pending' | 'notified' | 'in_progress' | 'completed';
   completedAt?: string;
+}
+
+/**
+ * Traduz e formata mensagens de commit/deploy para PT-BR simples e amigável ao usuário comum
+ */
+export async function fetchAndTranslateChangelog(rawCommit?: string): Promise<string[]> {
+  const commitText = rawCommit || (typeof __LATEST_COMMIT__ !== 'undefined' ? __LATEST_COMMIT__ : '');
+  
+  if (!commitText || commitText.trim().length === 0) {
+    return ['Melhorias e correções do sistema estão sendo aplicadas.'];
+  }
+
+  // Divide o commit em linhas ou itens
+  const rawLines = commitText
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(l => l.length > 0 && !l.startsWith('#') && !l.startsWith('Signed-off-by:'));
+
+  if (rawLines.length === 0) {
+    return ['Melhorias e correções do sistema estão sendo aplicadas.'];
+  }
+
+  // Lista de substituições comuns de termos técnicos em inglês para PT-BR amigável
+  const dictionary: Array<[RegExp, string]> = [
+    [/^fix(\([^)]+\))?:\s*/i, 'Correção de '],
+    [/^feat(\([^)]+\))?:\s*/i, 'Novo recurso: '],
+    [/^perf(\([^)]+\))?:\s*/i, 'Melhoria de desempenho em '],
+    [/^refactor(\([^)]+\))?:\s*/i, 'Otimização do sistema: '],
+    [/^chore(\([^)]+\))?:\s*/i, 'Manutenção preventiva: '],
+    [/^style(\([^)]+\))?:\s*/i, 'Aprimoramento visual em '],
+    [/^docs(\([^)]+\))?:\s*/i, 'Atualização de documentação: '],
+    [/\bprevent\b/gi, 'evitar'],
+    [/\bduplicate notifications\b/gi, 'notificações duplicadas'],
+    [/\bnotification\b/gi, 'notificação'],
+    [/\bnotifications\b/gi, 'notificações'],
+    [/\bimprove\b/gi, 'melhorias em'],
+    [/\brealtime\b/gi, 'em tempo real'],
+    [/\buser update\b/gi, 'atualização de usuários'],
+    [/\buser\b/gi, 'usuário'],
+    [/\busers\b/gi, 'usuários'],
+    [/\bvehicle\b/gi, 'veículo'],
+    [/\bvehicles\b/gi, 'veículos'],
+    [/\bschedule\b/gi, 'agendamento'],
+    [/\bdashboard\b/gi, 'painel gerencial'],
+    [/\bpermission\b/gi, 'permissão'],
+    [/\bpermissions\b/gi, 'permissões'],
+    [/\brole\b/gi, 'perfil'],
+    [/\baccess\b/gi, 'acesso'],
+    [/\bsession\b/gi, 'sessão'],
+    [/\bsimulation\b/gi, 'simulação assistida'],
+    [/\bcursor\b/gi, 'cursor'],
+    [/\bflicker\b/gi, 'oscilações'],
+    [/\binput\b/gi, 'campo'],
+    [/\binputs\b/gi, 'campos e formulários'],
+    [/\bloading\b/gi, 'carregamento'],
+    [/\bperformance\b/gi, 'desempenho'],
+    [/\bsecurity\b/gi, 'segurança'],
+    [/\bcleanup\b/gi, 'limpeza'],
+    [/\bcache\b/gi, 'cache e dados locais'],
+    [/\bmodal\b/gi, 'janela'],
+    [/\brouting\b/gi, 'navegação de telas'],
+    [/\broute\b/gi, 'tela'],
+    [/\bbutton\b/gi, 'botão']
+  ];
+
+  const processedItems: string[] = [];
+
+  for (const rawLine of rawLines) {
+    let cleanLine = rawLine
+      .replace(/^[-*•]\s*/, '') // Remove marcadores de lista
+      .replace(/\b([a-f0-9]{7,40})\b/gi, '') // Remove hashes de commit
+      .replace(/\(#\d+\)/g, '') // Remove referências a PRs (#123)
+      .trim();
+
+    if (!cleanLine || cleanLine.length < 3) continue;
+
+    // Tenta traduzir via API ou dicionário
+    let translatedLine = cleanLine;
+
+    // Aplica regras de prefixo e dicionário
+    for (const [pattern, replacement] of dictionary) {
+      translatedLine = translatedLine.replace(pattern, replacement);
+    }
+
+    // Se a linha ainda contiver trecho significativo em inglês e tivermos internet, tenta traduzir
+    const containsEnglishKeywords = /\b(and|with|for|to|from|by|on|in|of|the|a|an|is|are|was|were|fix|fixed|fixing|add|added|adding|update|updated|updating|remove|removed|removing|clean|cleaner|prevent|prevented|preventing)\b/i.test(translatedLine);
+
+    if (containsEnglishKeywords) {
+      try {
+        const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=pt&dt=t&q=${encodeURIComponent(cleanLine)}`);
+        if (res.ok) {
+          const data = await res.json();
+          const googleTranslated = data[0].map((item: any) => item[0]).join('').trim();
+          if (googleTranslated && googleTranslated.length > 2) {
+            translatedLine = googleTranslated.charAt(0).toUpperCase() + googleTranslated.slice(1);
+          }
+        }
+      } catch (e) {
+        // Fallback silencioso
+      }
+    }
+
+    // Limpa pontuações no final e normaliza
+    translatedLine = translatedLine.replace(/[.;,]+$/, '').trim();
+    if (translatedLine) {
+      translatedLine = translatedLine.charAt(0).toUpperCase() + translatedLine.slice(1);
+      processedItems.push(translatedLine);
+    }
+  }
+
+  if (processedItems.length === 0) {
+    return ['Melhorias e correções do sistema estão sendo aplicadas.'];
+  }
+
+  return processedItems.slice(0, 5);
 }
 
 /**

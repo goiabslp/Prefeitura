@@ -84,6 +84,7 @@ import { TwoFactorModal } from './components/TwoFactorModal';
 import { OficioNumberingModal } from './components/modals/OficioNumberingModal';
 import { ProcessStepper } from './components/common/ProcessStepper';
 import { ActionProcessingModal, ProcessingStage } from './components/modals/ActionProcessingModal';
+import { SystemDynamicUpdateModal } from './components/SystemDynamicUpdateModal';
 
 import { SystemAccessControl } from './components/admin/SystemAccessControl';
 import { SystemLogs } from './components/admin/SystemLogs';
@@ -2661,7 +2662,7 @@ const App: React.FC = () => {
     }
   }, [systemUpdateTarget, currentUser?.id, signOut]);
 
-  // Forçar Desconexão e Limpeza de Cache APENAS para usuários autenticados no momento do término do countdown
+  // Timeout de segurança para caso o modal não seja concluído por qualquer exceção externa
   useEffect(() => {
     if (systemUpdateCountdown === 0 && currentUser && systemUpdateTarget) {
       const FORCED_KEY = 'last_forced_update_target';
@@ -2672,7 +2673,12 @@ const App: React.FC = () => {
         return;
       }
 
-      handleImmediateSystemUpdateLogout();
+      // Garante que o usuário seja desconectado e atualizado após o tempo máximo do modal (12 segundos de segurança)
+      const safetyTimer = setTimeout(() => {
+        handleImmediateSystemUpdateLogout();
+      }, 12000);
+
+      return () => clearTimeout(safetyTimer);
     }
   }, [systemUpdateCountdown, currentUser, systemUpdateTarget, handleImmediateSystemUpdateLogout]);
 
@@ -6834,69 +6840,15 @@ const App: React.FC = () => {
         customLabels={actionProcessing.customLabels}
       />
 
-      {/* GLOBAL / INDIVIDUAL SYSTEM UPDATE NOTIFICATION (TRIGERRED BY ADMIN) */}
-      {systemUpdateCountdown !== null && systemUpdateCountdown >= 0 && createPortal(
-        <div className="fixed inset-0 z-[99999] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-fade-in pointer-events-auto select-none">
-          <div className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 p-8 sm:p-10 text-center transform scale-in-center overflow-hidden relative space-y-6">
-            {/* Faixa superior com gradiente */}
-            <div className="absolute top-0 left-0 right-0 h-2.5 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-600"></div>
-
-            {/* Contador / Spinner em Destaque */}
-            <div className="relative w-28 h-28 mx-auto flex items-center justify-center">
-              <div className="absolute inset-0 rounded-full bg-orange-50 ring-8 ring-orange-100/60 animate-pulse"></div>
-              {systemUpdateCountdown > 0 ? (
-                <div className="relative flex flex-col items-center justify-center text-orange-600">
-                  <span className="text-5xl font-black tracking-tighter tabular-nums leading-none">
-                    {systemUpdateCountdown}
-                  </span>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-orange-500 mt-1">
-                    segundos
-                  </span>
-                </div>
-              ) : (
-                <div className="relative flex flex-col items-center justify-center text-orange-600">
-                  <RefreshCw className="w-12 h-12 animate-spin text-orange-500 mb-1" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-orange-600 animate-pulse">
-                    Atualizando...
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
-                Atualização do sistema
-              </h2>
-              <p className="text-sm text-slate-600 font-medium leading-relaxed px-2">
-                Uma atualização foi iniciada pelo administrador. O sistema será atualizado em:
-              </p>
-            </div>
-
-            {/* Barra de Progresso Regressiva */}
-            <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-              <div
-                className="bg-gradient-to-r from-amber-500 to-orange-500 h-full rounded-full transition-all duration-500 ease-linear"
-                style={{
-                  width: `${Math.min(100, Math.max(0, (systemUpdateCountdown / (systemUpdateDetails?.isIndividual ? 10 : 60)) * 100))}%`
-                }}
-              ></div>
-            </div>
-
-            {/* Informação e Status */}
-            <div className="pt-2">
-              <div className="inline-flex items-center justify-center gap-2 py-3 px-5 bg-orange-50 rounded-2xl border border-orange-100 text-orange-700 text-xs font-bold w-full">
-                <RefreshCw className="w-3.5 h-3.5 animate-spin-slow text-orange-600 shrink-0" />
-                <span>
-                  {systemUpdateCountdown > 0
-                    ? `Encerrando sessão e limpando cache em ${systemUpdateCountdown}s`
-                    : 'Aplicando limpeza de cache e recarregando...'}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      {/* MODAL DINÂMICO DE ATUALIZAÇÃO DO SISTEMA EM DUAS ETAPAS COM NOVIDADES E ANIMAÇÃO */}
+      <SystemDynamicUpdateModal
+        isOpen={systemUpdateCountdown !== null && systemUpdateCountdown >= 0}
+        countdown={systemUpdateCountdown ?? 0}
+        totalDuration={systemUpdateDetails?.isIndividual ? 10 : 60}
+        isIndividual={systemUpdateDetails?.isIndividual}
+        adminName={systemUpdateDetails?.triggeredBy}
+        onFinishUpdate={handleImmediateSystemUpdateLogout}
+      />
 
       {/* Remote Access Global Cursor and Ripples */}
       {remoteAccessState?.mode === 'host' && remoteAccessState.remoteCursor?.visible && (
