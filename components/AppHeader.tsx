@@ -348,10 +348,42 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             <>
               <div className="h-6 w-px bg-slate-200 hidden desktop:block"></div>
 
-              <div className="hidden desktop:flex flex-col">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-1">Tela Atual</span>
-                <span className="text-sm font-bold text-slate-900 tracking-tight">{getModuleTitle()}</span>
-              </div>
+              {impersonationSession ? (
+                <div className="flex items-center gap-2.5 px-3 py-1.5 bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-xl border border-indigo-500/30 shadow-md">
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span className="text-[11px] font-black uppercase tracking-wider text-cyan-300">
+                      ACOMPANHAMENTO ASSISTIDO — {impersonationSession.targetUser.name}
+                    </span>
+                  </div>
+
+                  <span className="text-white/40 hidden sm:inline">•</span>
+
+                  <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-medium text-slate-300">
+                    <span>Tela:</span>
+                    <strong className="text-white font-bold">{getModuleTitle()}</strong>
+                  </div>
+
+                  {onStopImpersonation && (
+                    <button
+                      type="button"
+                      onClick={onStopImpersonation}
+                      className="ml-1 px-2 py-0.5 bg-rose-600/80 hover:bg-rose-600 text-white rounded-lg text-[10px] font-bold uppercase transition-all"
+                      title="Sair do acompanhamento assistido"
+                    >
+                      Sair
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="hidden desktop:flex flex-col">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-1">Tela Atual</span>
+                  <span className="text-sm font-bold text-slate-900 tracking-tight">{getModuleTitle()}</span>
+                </div>
+              )}
 
               {systemUpdateCountdown !== null && systemUpdateCountdown > 0 && (
                 <div className="flex items-center gap-2 sm:gap-2.5 px-3 py-1.5 sm:px-3.5 sm:py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl shadow-lg shadow-orange-500/20 ring-4 ring-orange-500/10 animate-pulse-glow z-30 shrink-0">

@@ -6,7 +6,7 @@ import {
   Plus, Search, Edit2, Trash2, ShieldCheck, Users, Save, X, Key,
   PenTool, LayoutGrid, User as UserIcon, CheckCircle2, Gavel, ShoppingCart, Briefcase, Network,
   Eye, EyeOff, RotateCcw, AlertTriangle, Clock, Lock, Copy, Check, Info, Trash, ToggleRight, ArrowLeft, RefreshCw, Megaphone, FlaskConical, Calendar,
-  ChevronDown, ChevronUp, CheckSquare, Square, Filter, UserCheck, ShieldAlert, Radio, Sparkles, Calculator
+  ChevronDown, ChevronUp, CheckSquare, Square, Filter, UserCheck, ShieldAlert, Radio, Sparkles, Calculator, MousePointer
 } from 'lucide-react';
 import { googleCalendarService } from '../services/googleCalendarService';
 import { ModuleAccessControlTree } from './admin/ModuleAccessControlTree';
@@ -54,7 +54,7 @@ interface UserManagementScreenProps {
   onAddUser: (user: User) => void;
   onUpdateUser: (user: User) => void;
   onDeleteUser: (userId: string) => Promise<{ success: boolean; message?: string } | void> | void;
-  onImpersonateUser?: (user: User) => void;
+  onImpersonateUser?: (user: User, initialMode?: 'observer' | 'simulation') => void;
   availableSignatures: Signature[];
   jobs: Job[];
   sectors: Sector[];
@@ -1995,7 +1995,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
         {
           impersonateModal.isOpen && impersonateModal.targetUser && createPortal(
             <div className="fixed inset-0 z-[220] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md animate-fade-in">
-              <div className="w-full max-w-xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden animate-slide-up border border-slate-100 flex flex-col max-h-[90vh]">
+              <div className="w-full max-w-2xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden animate-slide-up border border-slate-100 flex flex-col max-h-[92vh]">
                 {/* Header do Modal */}
                 <div className="p-6 md:p-7 bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-950 text-white relative overflow-hidden shrink-0 border-b border-indigo-500/30">
                   <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
@@ -2007,18 +2007,18 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                     </div>
                     <span className="px-3 py-1 bg-indigo-500/20 text-cyan-300 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest border border-indigo-400/30 flex items-center gap-1.5">
                       <Sparkles className="w-3 h-3 text-cyan-300" />
-                      Modo Assistido em Tempo Real
+                      Espelhamento 100% Fiel em Tempo Real
                     </span>
                   </div>
                   <h3 className="text-xl md:text-2xl font-black tracking-tight text-white">
                     Simulação & Acompanhamento Assistido
                   </h3>
                   <p className="text-slate-300 text-xs md:text-sm font-medium mt-1 leading-relaxed">
-                    Você navegará com as permissões do usuário enquanto ele acompanha cada demonstração e ação diretamente na tela dele em tempo real.
+                    Reproduza e acompanhe com fidelidade absoluta a sessão do usuário, facilitando diagnóstico de erros, problemas de permissões, rotas e comportamento.
                   </p>
                 </div>
 
-                {/* Corpo com Detalhes do Usuário */}
+                {/* Corpo com Detalhes do Usuário e Seleção de Modo */}
                 <div className="p-6 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
                   {/* Card do Usuário Alvo */}
                   <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center gap-4">
@@ -2042,53 +2042,95 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                           </span>
                         )}
                         <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded text-[10px] font-bold">
-                          {impersonateModal.targetUser.permissions?.length || 0} permissões
+                          {impersonateModal.targetUser.permissions?.length || 0} permissões ativas
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Recursos Sincronizados em Tempo Real */}
-                  <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-100 space-y-2.5 text-xs text-indigo-950">
-                    <div className="flex items-center gap-2 font-black text-indigo-900 uppercase tracking-wider text-[11px]">
-                      <Radio className="w-4 h-4 text-indigo-600 shrink-0 animate-pulse" />
-                      O que o usuário verá na tela dele:
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-medium text-indigo-900/90">
-                      <div className="flex items-center gap-2 bg-white/70 p-2 rounded-xl border border-indigo-100/60">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                        <span>Mudanças de páginas e rotas URL</span>
-                      </div>
-                      <div className="flex items-center gap-2 bg-white/70 p-2 rounded-xl border border-indigo-100/60">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                        <span>Abertura de menus e modais</span>
-                      </div>
-                      <div className="flex items-center gap-2 bg-white/70 p-2 rounded-xl border border-indigo-100/60">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                        <span>Cliques e cursor do Administrador</span>
-                      </div>
-                      <div className="flex items-center gap-2 bg-white/70 p-2 rounded-xl border border-indigo-100/60">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                        <span>Filtros, pesquisas e rolagem</span>
-                      </div>
+                  {/* Seleção do Modo de Início */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                      <Radio className="w-4 h-4 text-indigo-600" />
+                      Selecione o Modo Inicial de Operação:
+                    </label>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Modo Observador */}
+                      <button
+                        type="button"
+                        onClick={() => setImpersonateModal(prev => ({ ...prev, selectedMode: 'observer' }))}
+                        className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between relative ${
+                          (impersonateModal as any).selectedMode !== 'simulation'
+                            ? 'bg-cyan-50/70 border-cyan-400 ring-2 ring-cyan-500/20 shadow-md'
+                            : 'bg-white border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between gap-2 mb-1.5">
+                            <span className="flex items-center gap-1.5 text-xs font-black text-cyan-950 uppercase tracking-wider">
+                              <Eye className="w-4 h-4 text-cyan-600" />
+                              Modo Observador
+                            </span>
+                            {(impersonateModal as any).selectedMode !== 'simulation' && (
+                              <CheckCircle2 className="w-4 h-4 text-cyan-600" />
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
+                            Espelhamento passivo em tempo real. Você visualiza a tela do usuário sem interferir acidentalmente.
+                          </p>
+                        </div>
+                        <span className="mt-3 text-[10px] font-black uppercase text-cyan-700 bg-cyan-100/60 px-2 py-0.5 rounded-md inline-block self-start">
+                          Recomendado para Diagnóstico
+                        </span>
+                      </button>
+
+                      {/* Modo Simulação */}
+                      <button
+                        type="button"
+                        onClick={() => setImpersonateModal(prev => ({ ...prev, selectedMode: 'simulation' }))}
+                        className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between relative ${
+                          (impersonateModal as any).selectedMode === 'simulation'
+                            ? 'bg-indigo-50/70 border-indigo-400 ring-2 ring-indigo-500/20 shadow-md'
+                            : 'bg-white border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between gap-2 mb-1.5">
+                            <span className="flex items-center gap-1.5 text-xs font-black text-indigo-950 uppercase tracking-wider">
+                              <MousePointer className="w-4 h-4 text-indigo-600" />
+                              Modo Simulação
+                            </span>
+                            {(impersonateModal as any).selectedMode === 'simulation' && (
+                              <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
+                            Interação direta utilizando EXCLUSIVAMENTE as permissões do usuário para reproduzir acessos.
+                          </p>
+                        </div>
+                        <span className="mt-3 text-[10px] font-black uppercase text-indigo-700 bg-indigo-100/60 px-2 py-0.5 rounded-md inline-block self-start">
+                          Interativo com Permissões Efetivas
+                        </span>
+                      </button>
                     </div>
                   </div>
 
-                  {/* Termos de Segurança e Auditoria */}
+                  {/* Sincronização e Regras de Segurança */}
                   <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-950 space-y-1.5 text-xs">
                     <div className="flex items-center gap-2 font-bold text-amber-900 uppercase tracking-wider text-[11px]">
                       <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                      Segurança & Regras de Sessão
+                      Regras de Fidelidade & Auditoria Rigorosa
                     </div>
                     <ul className="space-y-1 pl-5 list-disc text-amber-900/90 leading-relaxed font-medium text-[11px]">
                       <li>
-                        O usuário ficará em <strong>modo somente visualização</strong>, impedindo conflitos acidentais.
+                        <strong>Mesma fonte de permissões:</strong> O sistema aplicará rigorosamente as permissões do usuário acompanhado, sem privilégios administrativos complementares.
                       </li>
                       <li>
-                        Todas as ações e páginas acessadas serão auditadas em nome do administrador real (<strong>{currentUser.name}</strong>).
+                        <strong>Sincronização instantânea:</strong> Rotas, abas, modais, formulários, filtros e termos de busca sincronizados em tempo real via Realtime WebSocket.
                       </li>
                       <li>
-                        Você terá controles no topo da tela para <strong>pausar, retomar ou encerrar</strong> a qualquer instante.
+                        <strong>Auditoria completa:</strong> Toda operação realizada será auditada registrando o usuário efetivo, o administrador executor (<strong>{currentUser.name}</strong>), data/hora com segundos e rota.
                       </li>
                     </ul>
                   </div>
@@ -2100,14 +2142,15 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                     type="button"
                     onClick={() => {
                       if (impersonateModal.targetUser && onImpersonateUser) {
-                        onImpersonateUser(impersonateModal.targetUser);
+                        const chosenMode = (impersonateModal as any).selectedMode || 'observer';
+                        onImpersonateUser(impersonateModal.targetUser, chosenMode);
                       }
                       setImpersonateModal({ isOpen: false, targetUser: null });
                     }}
                     className="flex-1 py-3 px-5 bg-gradient-to-r from-indigo-600 via-indigo-700 to-indigo-800 hover:from-indigo-700 hover:to-indigo-900 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg shadow-indigo-600/25 hover:shadow-xl hover:scale-[1.01] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2"
                   >
                     <Radio className="w-4 h-4 text-cyan-300" />
-                    <span>Iniciar Acompanhamento Assistido</span>
+                    <span>Iniciar Simulação & Acompanhamento</span>
                   </button>
                   <button
                     type="button"

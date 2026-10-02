@@ -3,19 +3,45 @@ import { User } from '../types';
 import { auditLogService } from './auditLogService';
 import { ImpersonationSession } from './impersonationService';
 
+export type AssistedOperationMode = 'observer' | 'simulation';
+export type AssistedSyncStatus = 'connected' | 'syncing' | 'reconnecting' | 'paused' | 'disconnected';
+
 export interface AssistedNavPayload {
   path: string;
   currentView: string;
   activeBlock: string | null;
   adminTab: string | null;
   currentSubView?: string | null;
+  activeTab?: string | null;
   timestamp: number;
+  source?: 'admin' | 'user';
+}
+
+export interface AssistedStateSnapshotPayload {
+  path: string;
+  currentView: string;
+  activeBlock: string | null;
+  adminTab: string | null;
+  currentSubView?: string | null;
+  activeTab?: string | null;
+  searchQuery?: string;
+  filterStatus?: string | null;
+  activeModal?: {
+    modalId?: string;
+    action?: string;
+    data?: any;
+  } | null;
+  step?: number | null;
+  scrollY?: number;
+  timestamp: number;
+  source?: 'admin' | 'user';
 }
 
 export interface AssistedMouseMovePayload {
   xPct: number;
   yPct: number;
   timestamp: number;
+  source?: 'admin' | 'user';
 }
 
 export interface AssistedClickPayload {
@@ -25,12 +51,14 @@ export interface AssistedClickPayload {
   text?: string;
   selector?: string;
   timestamp: number;
+  source?: 'admin' | 'user';
 }
 
 export interface AssistedScrollPayload {
   scrollPctY: number;
   scrollY: number;
   timestamp: number;
+  source?: 'admin' | 'user';
 }
 
 export interface AssistedInputPayload {
@@ -40,6 +68,7 @@ export interface AssistedInputPayload {
   value: string;
   checked?: boolean;
   timestamp: number;
+  source?: 'admin' | 'user';
 }
 
 export interface AssistedModalPayload {
@@ -47,10 +76,12 @@ export interface AssistedModalPayload {
   action: 'open' | 'close' | 'change_tab';
   data?: any;
   timestamp: number;
+  source?: 'admin' | 'user';
 }
 
 export interface AssistedControlPayload {
   status: 'active' | 'paused' | 'ended';
+  mode: AssistedOperationMode;
   sessionId: string;
   adminName: string;
   adminId: string;
@@ -58,9 +89,19 @@ export interface AssistedControlPayload {
   timestamp: number;
 }
 
+export interface AssistedSessionState {
+  isPaused: boolean;
+  isTargetUserConnected: boolean;
+  mode: AssistedOperationMode;
+  syncStatus: AssistedSyncStatus;
+  lastSyncTime: number;
+}
+
 export interface AssistedSessionListeners {
   onControl?: (payload: AssistedControlPayload) => void;
   onNavigation?: (payload: AssistedNavPayload) => void;
+  onStateSnapshot?: (payload: AssistedStateSnapshotPayload) => void;
+  onRequestState?: () => void;
   onMouseMove?: (payload: AssistedMouseMovePayload) => void;
   onClick?: (payload: AssistedClickPayload) => void;
   onScroll?: (payload: AssistedScrollPayload) => void;
@@ -68,6 +109,7 @@ export interface AssistedSessionListeners {
   onModalState?: (payload: AssistedModalPayload) => void;
   onPresenceChange?: (hasTargetUserOnline: boolean) => void;
   onSessionEnded?: () => void;
+  onSyncStatusChange?: (status: AssistedSyncStatus) => void;
 }
 
 class AssistedSessionManager {
@@ -75,24 +117,40 @@ class AssistedSessionManager {
   private currentSession: ImpersonationSession | null = null;
   private isPaused: boolean = false;
   private isTargetUserConnected: boolean = false;
-  private stateSubscribers: Array<(state: { isPaused: boolean; isTargetUserConnected: boolean }) => void> = [];
+  private mode: AssistedOperationMode = 'simulation';
+  private syncStatus: AssistedSyncStatus = 'syncing';
+  private lastSyncTime: number = Date.now();
+  private stateSubscribers: Array<(state: AssistedSessionState) => void> = [];
   private lastLoggedPage: string = '';
+  private reconnectAttempts: number = 0;
+  private reconnectTimer: any = null;
 
   /**
    * Assina atualizações de estado local do suporte assistido
    */
-  subscribeState(callback: (state: { isPaused: boolean; isTargetUserConnected: boolean }) => void) {
+  subscribeState(callback: (state: AssistedSessionState) => void) {
     this.stateSubscribers.push(callback);
-    callback({ isPaused: this.isPaused, isTargetUserConnected: this.isTargetUserConnected });
+    callback(this.getStateSnapshot());
     return () => {
       this.stateSubscribers = this.stateSubscribers.filter(cb => cb !== callback);
     };
   }
 
+  private getStateSnapshot(): AssistedSessionState {
+    return {
+      isPaused: this.isPaused,
+      isTargetUserConnected: this.isTargetUserConnected,
+      mode: this.mode,
+      syncStatus: this.syncStatus,
+      lastSyncTime: this.lastSyncTime
+    };
+  }
+
   private notifyState() {
+    const snapshot = this.getStateSnapshot();
     for (const cb of this.stateSubscribers) {
       try {
-        cb({ isPaused: this.isPaused, isTargetUserConnected: this.isTargetUserConnected });
+        cb(snapshot);
       } catch (e) {
         console.error('[AssistedSession] Erro no callback de estado:', e);
       }
@@ -107,21 +165,67 @@ class AssistedSessionManager {
     return this.isTargetUserConnected;
   }
 
+  getMode(): AssistedOperationMode {
+    return this.mode;
+  }
+
+  getSyncStatus(): AssistedSyncStatus {
+    return this.syncStatus;
+  }
+
   getCurrentSession(): ImpersonationSession | null {
     return this.currentSession;
   }
 
   /**
+   * Altera o modo entre Acompanhamento (Observador) e Simulação Interativa
+   */
+  async setMode(newMode: AssistedOperationMode): Promise<void> {
+    if (this.mode === newMode) return;
+    this.mode = newMode;
+    this.notifyState();
+
+    if (this.currentSession) {
+      await this.broadcastControl(this.isPaused ? 'paused' : 'active');
+      
+      // Se alternou para o modo observador, solicita snapshot atual da tela do usuário
+      if (newMode === 'observer') {
+        this.syncStatus = 'syncing';
+        this.notifyState();
+        this.requestFullState();
+      }
+
+      await auditLogService.logAction({
+        action_type: 'ASSISTED_MODE_CHANGED',
+        module: 'Segurança / Suporte Assistido',
+        description: `Administrador "${this.currentSession.realAdmin.name}" alternou o modo de operação para "${newMode === 'observer' ? 'Acompanhamento Assistido (Observador)' : 'Simulação Interativa'}" na sessão de "${this.currentSession.targetUser.name}".`,
+        details: {
+          sessionId: this.currentSession.sessionId,
+          admin_id: this.currentSession.realAdmin.id,
+          target_user_id: this.currentSession.targetUser.id,
+          new_mode: newMode
+        }
+      });
+    }
+  }
+
+  /**
    * Inicializa a sessão assistida pelo Administrador
    */
-  async initAdminSession(session: ImpersonationSession): Promise<void> {
+  async initAdminSession(session: ImpersonationSession, initialMode: AssistedOperationMode = 'simulation'): Promise<void> {
     this.currentSession = session;
     this.isPaused = false;
     this.isTargetUserConnected = false;
+    this.mode = initialMode;
+    this.syncStatus = 'syncing';
+    this.lastSyncTime = Date.now();
+    this.reconnectAttempts = 0;
     this.notifyState();
 
     if (this.activeChannel) {
-      await supabase.removeChannel(this.activeChannel);
+      try {
+        await supabase.removeChannel(this.activeChannel);
+      } catch (e) {}
       this.activeChannel = null;
     }
 
@@ -147,11 +251,20 @@ class AssistedSessionManager {
         if (foundUser) break;
       }
       this.isTargetUserConnected = foundUser;
+      if (foundUser && this.syncStatus === 'disconnected') {
+        this.syncStatus = this.isPaused ? 'paused' : 'connected';
+      }
       this.notifyState();
     });
 
+    // Subscrição com tratamento de reconexão
     channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
+        this.syncStatus = this.isPaused ? 'paused' : 'connected';
+        this.lastSyncTime = Date.now();
+        this.reconnectAttempts = 0;
+        this.notifyState();
+
         try {
           await channel.track({
             role: 'admin',
@@ -160,32 +273,58 @@ class AssistedSessionManager {
             targetUserId: session.targetUser.id,
             sessionId: session.sessionId,
             online: true,
+            mode: this.mode,
             isPaused: this.isPaused
           });
-          // Dispara broadcast inicial confirmando início
-          this.broadcastControl('active');
+          
+          // Confirma início da sessão e solicita estado do usuário caso esteja conectado
+          this.broadcastControl(this.isPaused ? 'paused' : 'active');
+          if (this.mode === 'observer') {
+            this.requestFullState();
+          }
         } catch (err) {
           console.warn('[AssistedSession] Erro ao registrar presença do admin:', err);
         }
+      } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+        this.syncStatus = 'reconnecting';
+        this.notifyState();
+        this.handleReconnect(session);
       }
     });
 
     this.activeChannel = channel;
 
-    // Log de auditoria
+    // Log de auditoria indelével
     await auditLogService.logAction({
       action_type: 'ASSISTED_SESSION_START',
       module: 'Segurança / Suporte Assistido',
-      description: `Acompanhamento assistido em tempo real iniciado por "${session.realAdmin.name}" para a conta de "${session.targetUser.name}".`,
+      description: `Acompanhamento assistido em tempo real iniciado por "${session.realAdmin.name}" para a conta de "${session.targetUser.name}". Modo inicial: ${initialMode === 'observer' ? 'Observador' : 'Simulação'}.`,
       details: {
         sessionId: session.sessionId,
         admin_id: session.realAdmin.id,
         admin_name: session.realAdmin.name,
         target_user_id: session.targetUser.id,
         target_user_name: session.targetUser.name,
+        initial_mode: initialMode,
         started_at: session.startedAt
       }
     });
+  }
+
+  private handleReconnect(session: ImpersonationSession) {
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectAttempts++;
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
+
+    this.reconnectTimer = setTimeout(async () => {
+      if (!this.currentSession) return;
+      console.info(`[AssistedSession] Tentando reconectar sessão (tentativa ${this.reconnectAttempts})...`);
+      try {
+        await this.initAdminSession(session, this.mode);
+      } catch (err) {
+        console.warn('[AssistedSession] Falha ao reconectar:', err);
+      }
+    }, delay);
   }
 
   /**
@@ -194,6 +333,7 @@ class AssistedSessionManager {
   async pauseTransmission(): Promise<void> {
     if (!this.currentSession || this.isPaused) return;
     this.isPaused = true;
+    this.syncStatus = 'paused';
     this.notifyState();
     await this.broadcastControl('paused');
 
@@ -215,8 +355,15 @@ class AssistedSessionManager {
   async resumeTransmission(): Promise<void> {
     if (!this.currentSession || !this.isPaused) return;
     this.isPaused = false;
+    this.syncStatus = 'connected';
+    this.lastSyncTime = Date.now();
     this.notifyState();
     await this.broadcastControl('active');
+
+    // Ao retomar, sincroniza o estado atual
+    if (this.mode === 'observer') {
+      this.requestFullState();
+    }
 
     await auditLogService.logAction({
       action_type: 'ASSISTED_SESSION_RESUMED',
@@ -235,7 +382,8 @@ class AssistedSessionManager {
    */
   async endSession(): Promise<void> {
     if (!this.currentSession) return;
-    const session = this.currentSession;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+
     await this.broadcastControl('ended');
 
     if (this.activeChannel) {
@@ -251,16 +399,18 @@ class AssistedSessionManager {
     this.currentSession = null;
     this.isPaused = false;
     this.isTargetUserConnected = false;
+    this.syncStatus = 'disconnected';
     this.notifyState();
   }
 
   /**
-   * Envia controle de status da sessão (ativo, pausado, encerrado)
+   * Envia controle de status e modo da sessão
    */
   private async broadcastControl(status: 'active' | 'paused' | 'ended'): Promise<void> {
     if (!this.currentSession) return;
     const payload: AssistedControlPayload = {
       status,
+      mode: this.mode,
       sessionId: this.currentSession.sessionId,
       adminName: this.currentSession.realAdmin.name,
       adminId: this.currentSession.realAdmin.id,
@@ -276,19 +426,51 @@ class AssistedSessionManager {
       });
     }
 
-    // Também emite nos canais globais para alertar o usuário se ele estiver conectando
+    // Emite nos canais globais para alertar o usuário caso ele abra a aba depois
     try {
       const globalCh = supabase.channel('user_impersonation_alerts');
       if (globalCh.state === 'joined') {
         globalCh.send({ type: 'broadcast', event: 'assisted-control', payload });
       }
-    } catch (e) {
-      // Ignora falhas em canais secundários
-    }
+    } catch (e) {}
   }
 
   /**
-   * Transmite navegação de rota e tela (sincronização de URL)
+   * Solicita snapshot de estado completo do outro lado (usuário -> admin ou vice-versa)
+   */
+  requestFullState() {
+    if (!this.activeChannel || this.isPaused) return;
+    this.activeChannel.send({
+      type: 'broadcast',
+      event: 'assisted-request-state',
+      payload: { timestamp: Date.now() }
+    });
+  }
+
+  /**
+   * Transmite snapshot de estado completo
+   */
+  broadcastStateSnapshot(data: Omit<AssistedStateSnapshotPayload, 'timestamp'>) {
+    if (!this.activeChannel || this.isPaused) return;
+
+    const payload: AssistedStateSnapshotPayload = {
+      ...data,
+      timestamp: Date.now()
+    };
+
+    this.lastSyncTime = Date.now();
+    this.syncStatus = 'connected';
+    this.notifyState();
+
+    this.activeChannel.send({
+      type: 'broadcast',
+      event: 'assisted-state-snapshot',
+      payload
+    });
+  }
+
+  /**
+   * Transmite navegação de rota e tela (sincronização de URL e visão)
    */
   broadcastNavigation(data: Omit<AssistedNavPayload, 'timestamp'>) {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
@@ -297,6 +479,8 @@ class AssistedSessionManager {
       ...data,
       timestamp: Date.now()
     };
+
+    this.lastSyncTime = Date.now();
 
     this.activeChannel.send({
       type: 'broadcast',
@@ -326,15 +510,16 @@ class AssistedSessionManager {
   }
 
   /**
-   * Transmite coordenadas do mouse do administrador
+   * Transmite coordenadas do mouse
    */
-  broadcastMouseMove(xPct: number, yPct: number) {
+  broadcastMouseMove(xPct: number, yPct: number, source: 'admin' | 'user' = 'admin') {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
 
     const payload: AssistedMouseMovePayload = {
       xPct,
       yPct,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      source
     };
 
     this.activeChannel.send({
@@ -347,7 +532,12 @@ class AssistedSessionManager {
   /**
    * Transmite clique e interação
    */
-  broadcastClick(xPct: number, yPct: number, targetInfo?: { tag?: string; text?: string; selector?: string }) {
+  broadcastClick(
+    xPct: number, 
+    yPct: number, 
+    targetInfo?: { tag?: string; text?: string; selector?: string },
+    source: 'admin' | 'user' = 'admin'
+  ) {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
 
     const payload: AssistedClickPayload = {
@@ -356,7 +546,8 @@ class AssistedSessionManager {
       tag: targetInfo?.tag,
       text: targetInfo?.text,
       selector: targetInfo?.selector,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      source
     };
 
     this.activeChannel.send({
@@ -369,13 +560,14 @@ class AssistedSessionManager {
   /**
    * Transmite rolagem de tela (scroll)
    */
-  broadcastScroll(scrollPctY: number, scrollY: number) {
+  broadcastScroll(scrollPctY: number, scrollY: number, source: 'admin' | 'user' = 'admin') {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
 
     const payload: AssistedScrollPayload = {
       scrollPctY,
       scrollY,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      source
     };
 
     this.activeChannel.send({
@@ -406,14 +598,15 @@ class AssistedSessionManager {
   /**
    * Transmite abertura, fechamento de modais ou troca de abas
    */
-  broadcastModalState(modalId: string, action: 'open' | 'close' | 'change_tab', data?: any) {
+  broadcastModalState(modalId: string, action: 'open' | 'close' | 'change_tab', data?: any, source: 'admin' | 'user' = 'admin') {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
 
     const payload: AssistedModalPayload = {
       modalId,
       action,
       data,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      source
     };
 
     this.activeChannel.send({
@@ -424,14 +617,33 @@ class AssistedSessionManager {
   }
 
   /**
-   * Conecta o usuário assistido ao canal da sessão para receber a transmissão
+   * Conecta o cliente do usuário assistido ao canal da sessão para receber a transmissão
+   * ou espelhar a tela do usuário para o administrador no Modo Observador
    */
   listenAsTargetUser(
     currentUser: User,
     sessionId: string,
     listeners: AssistedSessionListeners
-  ): () => void {
-    if (!sessionId) return () => {};
+  ): {
+    unsubscribe: () => void;
+    sendUserStateSnapshot: (snapshot: Omit<AssistedStateSnapshotPayload, 'timestamp' | 'source'>) => void;
+    sendUserNav: (nav: Omit<AssistedNavPayload, 'timestamp' | 'source'>) => void;
+    sendUserInput: (input: Omit<AssistedInputPayload, 'timestamp' | 'source'>) => void;
+    sendUserModal: (modalId: string, action: 'open' | 'close' | 'change_tab', data?: any) => void;
+    sendUserScroll: (scrollPctY: number, scrollY: number) => void;
+    sendUserClick: (xPct: number, yPct: number, targetInfo?: { tag?: string; text?: string; selector?: string }) => void;
+  } {
+    if (!sessionId) {
+      return {
+        unsubscribe: () => {},
+        sendUserStateSnapshot: () => {},
+        sendUserNav: () => {},
+        sendUserInput: () => {},
+        sendUserModal: () => {},
+        sendUserScroll: () => {},
+        sendUserClick: () => {}
+      };
+    }
 
     const channelName = `assisted_session_${sessionId}`;
     const channel = supabase.channel(channelName, {
@@ -470,6 +682,17 @@ class AssistedSessionManager {
       }
     });
 
+    channel.on('broadcast', { event: 'assisted-request-state' }, () => {
+      listeners.onRequestState?.();
+    });
+
+    channel.on('broadcast', { event: 'assisted-state-snapshot' }, (event: any) => {
+      const payload: AssistedStateSnapshotPayload = event.payload;
+      if (payload) {
+        listeners.onStateSnapshot?.(payload);
+      }
+    });
+
     channel.on('broadcast', { event: 'assisted-nav' }, (event: any) => {
       const payload: AssistedNavPayload = event.payload;
       if (payload) {
@@ -479,43 +702,198 @@ class AssistedSessionManager {
 
     channel.on('broadcast', { event: 'assisted-mouse' }, (event: any) => {
       const payload: AssistedMouseMovePayload = event.payload;
-      if (payload) {
+      if (payload && payload.source !== 'user') {
         listeners.onMouseMove?.(payload);
       }
     });
 
     channel.on('broadcast', { event: 'assisted-click' }, (event: any) => {
       const payload: AssistedClickPayload = event.payload;
-      if (payload) {
+      if (payload && payload.source !== 'user') {
         listeners.onClick?.(payload);
       }
     });
 
     channel.on('broadcast', { event: 'assisted-scroll' }, (event: any) => {
       const payload: AssistedScrollPayload = event.payload;
-      if (payload) {
+      if (payload && payload.source !== 'user') {
         listeners.onScroll?.(payload);
       }
     });
 
     channel.on('broadcast', { event: 'assisted-input' }, (event: any) => {
       const payload: AssistedInputPayload = event.payload;
-      if (payload) {
+      if (payload && payload.source !== 'user') {
         listeners.onInputChange?.(payload);
       }
     });
 
     channel.on('broadcast', { event: 'assisted-modal' }, (event: any) => {
       const payload: AssistedModalPayload = event.payload;
-      if (payload) {
+      if (payload && payload.source !== 'user') {
         listeners.onModalState?.(payload);
       }
     });
 
-    return () => {
-      channel.untrack().catch(() => {});
-      supabase.removeChannel(channel);
+    const sendUserStateSnapshot = (snapshot: Omit<AssistedStateSnapshotPayload, 'timestamp' | 'source'>) => {
+      channel.send({
+        type: 'broadcast',
+        event: 'assisted-state-snapshot',
+        payload: {
+          ...snapshot,
+          source: 'user',
+          timestamp: Date.now()
+        }
+      });
     };
+
+    const sendUserNav = (nav: Omit<AssistedNavPayload, 'timestamp' | 'source'>) => {
+      channel.send({
+        type: 'broadcast',
+        event: 'assisted-nav',
+        payload: {
+          ...nav,
+          source: 'user',
+          timestamp: Date.now()
+        }
+      });
+    };
+
+    const sendUserInput = (input: Omit<AssistedInputPayload, 'timestamp' | 'source'>) => {
+      channel.send({
+        type: 'broadcast',
+        event: 'assisted-input',
+        payload: {
+          ...input,
+          source: 'user',
+          timestamp: Date.now()
+        }
+      });
+    };
+
+    const sendUserModal = (modalId: string, action: 'open' | 'close' | 'change_tab', data?: any) => {
+      channel.send({
+        type: 'broadcast',
+        event: 'assisted-modal',
+        payload: {
+          modalId,
+          action,
+          data,
+          source: 'user',
+          timestamp: Date.now()
+        }
+      });
+    };
+
+    const sendUserScroll = (scrollPctY: number, scrollY: number) => {
+      channel.send({
+        type: 'broadcast',
+        event: 'assisted-scroll',
+        payload: {
+          scrollPctY,
+          scrollY,
+          source: 'user',
+          timestamp: Date.now()
+        }
+      });
+    };
+
+    const sendUserClick = (xPct: number, yPct: number, targetInfo?: { tag?: string; text?: string; selector?: string }) => {
+      channel.send({
+        type: 'broadcast',
+        event: 'assisted-click',
+        payload: {
+          xPct,
+          yPct,
+          tag: targetInfo?.tag,
+          text: targetInfo?.text,
+          selector: targetInfo?.selector,
+          source: 'user',
+          timestamp: Date.now()
+        }
+      });
+    };
+
+    return {
+      unsubscribe: () => {
+        channel.untrack().catch(() => {});
+        supabase.removeChannel(channel);
+      },
+      sendUserStateSnapshot,
+      sendUserNav,
+      sendUserInput,
+      sendUserModal,
+      sendUserScroll,
+      sendUserClick
+    };
+  }
+
+  /**
+   * Conecta o Administrador como receptor de eventos no Modo Observador
+   */
+  listenAsAdminObserver(
+    listeners: {
+      onStateSnapshot?: (payload: AssistedStateSnapshotPayload) => void;
+      onNavigation?: (payload: AssistedNavPayload) => void;
+      onInputChange?: (payload: AssistedInputPayload) => void;
+      onModalState?: (payload: AssistedModalPayload) => void;
+      onScroll?: (payload: AssistedScrollPayload) => void;
+      onClick?: (payload: AssistedClickPayload) => void;
+    }
+  ): () => void {
+    if (!this.activeChannel) return () => {};
+
+    const ch = this.activeChannel;
+
+    ch.on('broadcast', { event: 'assisted-state-snapshot' }, (event: any) => {
+      const payload: AssistedStateSnapshotPayload = event.payload;
+      if (payload && payload.source === 'user') {
+        this.lastSyncTime = Date.now();
+        this.syncStatus = 'connected';
+        this.notifyState();
+        listeners.onStateSnapshot?.(payload);
+      }
+    });
+
+    ch.on('broadcast', { event: 'assisted-nav' }, (event: any) => {
+      const payload: AssistedNavPayload = event.payload;
+      if (payload && payload.source === 'user') {
+        this.lastSyncTime = Date.now();
+        this.syncStatus = 'connected';
+        this.notifyState();
+        listeners.onNavigation?.(payload);
+      }
+    });
+
+    ch.on('broadcast', { event: 'assisted-input' }, (event: any) => {
+      const payload: AssistedInputPayload = event.payload;
+      if (payload && payload.source === 'user') {
+        listeners.onInputChange?.(payload);
+      }
+    });
+
+    ch.on('broadcast', { event: 'assisted-modal' }, (event: any) => {
+      const payload: AssistedModalPayload = event.payload;
+      if (payload && payload.source === 'user') {
+        listeners.onModalState?.(payload);
+      }
+    });
+
+    ch.on('broadcast', { event: 'assisted-scroll' }, (event: any) => {
+      const payload: AssistedScrollPayload = event.payload;
+      if (payload && payload.source === 'user') {
+        listeners.onScroll?.(payload);
+      }
+    });
+
+    ch.on('broadcast', { event: 'assisted-click' }, (event: any) => {
+      const payload: AssistedClickPayload = event.payload;
+      if (payload && payload.source === 'user') {
+        listeners.onClick?.(payload);
+      }
+    });
+
+    return () => {};
   }
 }
 

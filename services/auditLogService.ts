@@ -36,7 +36,7 @@ export const auditLogService = {
       };
       return cachedUser;
     } catch (e) {
-      console.error('Failed to get user profile for logs:', e);
+      console.error('Falha ao obter perfil do usuário para logs:', e);
       return {
         id: user.id,
         name: user.email || 'Usuário',
@@ -49,11 +49,16 @@ export const auditLogService = {
     cachedUser = null;
   },
 
+  /**
+   * Registra log de auditoria no Supabase.
+   * Se houver sessão de simulação / acompanhamento assistido ativa, preserva indelével:
+   * Usuário Efetivo, Administrador Executor, Modo, Rota URL e Data/Hora com segundos.
+   */
   async logAction(log: { action_type: string, module?: string | null, description: string, details?: any }) {
     try {
       const user = await this.getCurrentUser();
 
-      // Verifica se há impersonação ativa para auditoria indelével
+      // Recupera sessão ativa de simulação do sessionStorage
       let activeImpersonation: any = null;
       if (typeof window !== 'undefined') {
         try {
@@ -65,48 +70,70 @@ export const auditLogService = {
             }
           }
         } catch (e) {
-          // Fallback silencioso caso storage esteja inacessível
+          // Fallback silencioso
         }
       }
 
-      let finalUserName = user?.name || 'Usuário Anônimo';
+      let finalUserId = user?.id || null;
+      let finalUserName = user?.name || 'Usuário';
+      let finalUserEmail = user?.email || '';
       let finalDescription = log.description;
       const finalDetails = { ...(log.details || {}) };
+      const currentRoute = typeof window !== 'undefined' ? window.location.pathname : '';
+      const preciseTimestamp = new Date().toISOString();
 
-      // Se a ação for o próprio início ou término da impersonação, preserva a descrição original
-      const isImpersonationLifecycle = log.action_type === 'IMPERSONATION_START' || log.action_type === 'IMPERSONATION_END';
+      // Se a ação for o próprio início ou término da simulação, trata com clareza
+      const isImpersonationLifecycle = log.action_type === 'IMPERSONATION_START' || log.action_type === 'IMPERSONATION_END' || log.action_type === 'ASSISTED_SESSION_START';
 
       if (activeImpersonation && !isImpersonationLifecycle) {
-        finalUserName = `${activeImpersonation.realAdmin.name} [Visualizando como: ${activeImpersonation.targetUser.name}]`;
-        finalDescription = `[ACESSO ADMINISTRATIVO - Operando como: ${activeImpersonation.targetUser.name}] ${log.description}`;
-        finalDetails.audit_impersonation = {
-          is_impersonating: true,
+        // Usuário efetivo é o usuário simulado, mas a autoria do administrador real é gravada
+        finalUserId = activeImpersonation.targetUser.id;
+        finalUserName = `${activeImpersonation.targetUser.name} (Simulado por Admin: ${activeImpersonation.realAdmin.name})`;
+        finalUserEmail = activeImpersonation.targetUser.email || activeImpersonation.realAdmin.email || '';
+        
+        finalDescription = `[SIMULAÇÃO ASSISTIDA] Usuário efetivo: ${activeImpersonation.targetUser.name} (@${activeImpersonation.targetUser.username}) | Executado por: ${activeImpersonation.realAdmin.name} (@${activeImpersonation.realAdmin.username}) | Rota: ${currentRoute} | ${log.description}`;
+        
+        finalDetails.audit_simulation = {
+          is_assisted_simulation: true,
+          mode: 'Simulação Assistida',
+          effective_user: {
+            id: activeImpersonation.targetUser.id,
+            name: activeImpersonation.targetUser.name,
+            username: activeImpersonation.targetUser.username,
+            email: activeImpersonation.targetUser.email,
+            role: activeImpersonation.targetUser.role,
+            sector: activeImpersonation.targetUser.sector
+          },
+          executed_by_admin: {
+            id: activeImpersonation.realAdmin.id,
+            name: activeImpersonation.realAdmin.name,
+            username: activeImpersonation.realAdmin.username,
+            email: activeImpersonation.realAdmin.email,
+            role: activeImpersonation.realAdmin.role
+          },
           session_id: activeImpersonation.sessionId,
-          real_admin_id: activeImpersonation.realAdmin.id,
-          real_admin_name: activeImpersonation.realAdmin.name,
-          real_admin_username: activeImpersonation.realAdmin.username,
-          real_admin_email: activeImpersonation.realAdmin.email,
-          target_user_id: activeImpersonation.targetUser.id,
-          target_user_name: activeImpersonation.targetUser.name,
-          target_user_username: activeImpersonation.targetUser.username
+          route: currentRoute,
+          operation: log.action_type,
+          timestamp_precise: preciseTimestamp
         };
       }
 
       const { error } = await supabase.from('audit_logs').insert([{
-        user_id: user?.id || null,
+        user_id: finalUserId,
         user_name: finalUserName,
-        user_email: user?.email || '',
+        user_email: finalUserEmail,
         action_type: log.action_type,
         module: log.module || null,
         description: finalDescription,
-        details: finalDetails
+        details: finalDetails,
+        created_at: preciseTimestamp
       }]);
       
       if (error) {
-        console.error('Error inserting log:', error);
+        console.error('Erro ao gravar log de auditoria:', error);
       }
     } catch (err) {
-      console.error('Failed to write audit log:', err);
+      console.error('Falha ao processar log de auditoria:', err);
     }
   },
 
@@ -118,7 +145,6 @@ export const auditLogService = {
         .order('created_at', { ascending: false });
 
       if (filters?.date) {
-        // Parse date boundaries using the local timezone to avoid timezone shift mismatch
         const startLocal = new Date(`${filters.date}T00:00:00`);
         const endLocal = new Date(`${filters.date}T23:59:59.999`);
         
@@ -139,7 +165,7 @@ export const auditLogService = {
       if (error) throw error;
       return (data || []) as AuditLog[];
     } catch (err) {
-      console.error('Failed to fetch logs:', err);
+      console.error('Falha ao buscar logs de auditoria:', err);
       return [];
     }
   }

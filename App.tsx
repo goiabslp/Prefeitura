@@ -28,7 +28,11 @@ import { impersonationService, ImpersonationSession } from './services/impersona
 import { 
   assistedSessionService, 
   AssistedMouseMovePayload, 
-  AssistedClickPayload 
+  AssistedClickPayload,
+  AssistedOperationMode,
+  AssistedSyncStatus,
+  AssistedStateSnapshotPayload,
+  AssistedNavPayload
 } from './services/assistedSessionService';
 import { AssistedSessionControlHUD } from './components/AssistedSessionControlHUD';
 import { AssistedUserViewerOverlay } from './components/AssistedUserViewerOverlay';
@@ -737,9 +741,90 @@ const App: React.FC = () => {
   const [isFinalizedView, setIsFinalizedView] = useState(false);
   const [isOficioNumberingModalOpen, setIsOficioNumberingModalOpen] = useState(false);
 
-  // Transmissão de Navegação / Rotas URL pelo Administrador em tempo real
+  // Estado do Modo de Operação Assistida (Observador vs Simulação)
+  const [assistedAdminMode, setAssistedAdminMode] = useState<AssistedOperationMode>(assistedSessionService.getMode());
+
+  // Monitora alterações de modo do serviço
   useEffect(() => {
-    if (!impersonationSession) return;
+    const unsub = assistedSessionService.subscribeState((state) => {
+      setAssistedAdminMode(state.mode);
+    });
+    return unsub;
+  }, []);
+
+  // 1. SINCRONIZAÇÃO QUANDO ADMINISTRADOR ESTÁ EM MODO OBSERVADOR (Espelha o usuário em tempo real)
+  useEffect(() => {
+    if (!impersonationSession || assistedAdminMode !== 'observer') return;
+
+    const cleanupObserver = assistedSessionService.listenAsAdminObserver({
+      onNavigation: (nav) => {
+        if (nav.path && window.location.pathname !== nav.path) {
+          window.history.pushState(null, '', nav.path);
+        }
+        if (nav.currentView) {
+          setCurrentView(nav.currentView as any);
+        }
+        if (nav.activeBlock !== undefined) {
+          setActiveBlock(nav.activeBlock as any);
+        }
+        if (nav.adminTab !== undefined) {
+          setAdminTab(nav.adminTab as any);
+        }
+        if (nav.currentSubView !== undefined) {
+          setAppState(prev => ({ ...prev, view: nav.currentSubView as any }));
+        }
+      },
+      onStateSnapshot: (snap) => {
+        if (snap.path && window.location.pathname !== snap.path) {
+          window.history.pushState(null, '', snap.path);
+        }
+        if (snap.currentView) {
+          setCurrentView(snap.currentView as any);
+        }
+        if (snap.activeBlock !== undefined) {
+          setActiveBlock(snap.activeBlock as any);
+        }
+        if (snap.adminTab !== undefined) {
+          setAdminTab(snap.adminTab as any);
+        }
+        if (snap.currentSubView !== undefined) {
+          setAppState(prev => ({ ...prev, view: snap.currentSubView as any }));
+        }
+        if (snap.scrollY !== undefined) {
+          window.scrollTo({ top: snap.scrollY, behavior: 'smooth' });
+        }
+      },
+      onInputChange: (input) => {
+        let el: HTMLElement | null = null;
+        if (input.id) el = document.getElementById(input.id);
+        if (!el && input.name) el = document.querySelector(`[name="${input.name}"]`);
+        if (!el && input.selector) {
+          try { el = document.querySelector(input.selector); } catch (e) {}
+        }
+        if (el) {
+          const formEl = el as HTMLInputElement;
+          if (input.checked !== undefined && formEl.type === 'checkbox') {
+            formEl.checked = input.checked;
+          } else {
+            formEl.value = input.value;
+          }
+          formEl.dispatchEvent(new Event('input', { bubbles: true }));
+          formEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      },
+      onScroll: (scroll) => {
+        window.scrollTo({ top: scroll.scrollY, behavior: 'smooth' });
+      }
+    });
+
+    return () => {
+      cleanupObserver();
+    };
+  }, [impersonationSession, assistedAdminMode]);
+
+  // 2. TRANSMISSÃO DE NAVEGAÇÃO DO ADMINISTRADOR QUANDO EM MODO SIMULAÇÃO
+  useEffect(() => {
+    if (!impersonationSession || assistedAdminMode !== 'simulation') return;
     const currentPath = window.location.pathname;
     assistedSessionService.broadcastNavigation({
       path: currentPath,
@@ -748,13 +833,13 @@ const App: React.FC = () => {
       adminTab,
       currentSubView: appState.view
     });
-  }, [impersonationSession, currentView, activeBlock, adminTab, appState.view]);
+  }, [impersonationSession, assistedAdminMode, currentView, activeBlock, adminTab, appState.view]);
 
-  // Captura e transmissão de interações do Administrador (mouse, cliques, rolagem, inputs)
+  // 3. CAPTURA E TRANSMISSÃO DE INTERAÇÕES DO ADMINISTRADOR EM MODO SIMULAÇÃO
   useEffect(() => {
-    if (!impersonationSession) return;
+    if (!impersonationSession || assistedAdminMode !== 'simulation') return;
 
-    // 1. Mouse move com throttle (~60ms) para não sobrecarregar websocket
+    // Mouse move com throttle (~60ms)
     let lastMouseTime = 0;
     const handleMouseMove = (e: MouseEvent) => {
       const now = Date.now();
@@ -765,7 +850,7 @@ const App: React.FC = () => {
       assistedSessionService.broadcastMouseMove(xPct, yPct);
     };
 
-    // 2. Cliques do Administrador com identificação do elemento
+    // Cliques do Administrador
     const handleClick = (e: MouseEvent) => {
       const xPct = Math.round((e.clientX / window.innerWidth) * 10000) / 100;
       const yPct = Math.round((e.clientY / window.innerHeight) * 10000) / 100;
@@ -780,7 +865,7 @@ const App: React.FC = () => {
       assistedSessionService.broadcastClick(xPct, yPct, { tag, text, selector });
     };
 
-    // 3. Scroll suave com throttle (~80ms)
+    // Scroll com throttle (~80ms)
     let lastScrollTime = 0;
     const handleScroll = () => {
       const now = Date.now();
@@ -792,7 +877,7 @@ const App: React.FC = () => {
       assistedSessionService.broadcastScroll(scrollPctY, scrollY);
     };
 
-    // 4. Preenchimento de campos e buscas com debounce (~100ms)
+    // Inputs e buscas com debounce (~100ms)
     let inputTimer: any = null;
     const handleInput = (e: Event) => {
       const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
@@ -824,7 +909,7 @@ const App: React.FC = () => {
       document.removeEventListener('input', handleInput, { capture: true });
       clearTimeout(inputTimer);
     };
-  }, [impersonationSession]);
+  }, [impersonationSession, assistedAdminMode]);
 
   // Transparência e Segurança: Modo Assistido do Usuário Alvo
   const [assistedViewerData, setAssistedViewerData] = useState<{
@@ -834,6 +919,7 @@ const App: React.FC = () => {
     adminEmail?: string;
     startedAt: string;
     isPaused: boolean;
+    mode?: AssistedOperationMode;
   } | null>(null);
 
   const [assistedVirtualCursor, setAssistedVirtualCursor] = useState<AssistedMouseMovePayload | null>(null);
@@ -841,7 +927,6 @@ const App: React.FC = () => {
 
   // Monitora detecção de que um Administrador iniciou suporte na conta deste usuário
   useEffect(() => {
-    // Se for o próprio administrador operando sob simulação, não ativa modo receptor
     if (!rawUser || impersonationSession) {
       setAssistedViewerData(null);
       return;
@@ -891,7 +976,8 @@ const App: React.FC = () => {
             adminName: match.adminName || 'Administrador',
             adminEmail: match.adminEmail,
             startedAt: match.startedAt || new Date().toISOString(),
-            isPaused: !!match.isPaused
+            isPaused: !!match.isPaused,
+            mode: match.mode || 'observer'
           });
         } else {
           setAssistedViewerData(null);
@@ -909,7 +995,8 @@ const App: React.FC = () => {
           adminName: data.adminName || 'Administrador',
           adminEmail: data.adminEmail,
           startedAt: data.startedAt || new Date().toISOString(),
-          isPaused: false
+          isPaused: false,
+          mode: data.mode || 'observer'
         });
         showToast(`Atenção: O Administrador ${data.adminName || ''} iniciou uma sessão de suporte na sua conta.`, "info");
       }
@@ -942,22 +1029,33 @@ const App: React.FC = () => {
     };
   }, [rawUser?.id, rawUser?.username, rawUser?.email, rawUser?.name, impersonationSession]);
 
-  // Conecta o Usuário Assistido ao canal Realtime da sessão para receber comandos e reflexo ao vivo
+  // Conecta o Usuário Assistido ao canal Realtime da sessão para receber comandos e enviar transmissões
   useEffect(() => {
     if (!assistedViewerData?.sessionId || !rawUser || impersonationSession) return;
 
-    const unsubscribe = assistedSessionService.listenAsTargetUser(
+    const userHandlers = assistedSessionService.listenAsTargetUser(
       rawUser,
       assistedViewerData.sessionId,
       {
         onControl: (payload) => {
           setAssistedViewerData(prev => prev ? {
             ...prev,
-            isPaused: payload.status === 'paused'
+            isPaused: payload.status === 'paused',
+            mode: payload.mode || prev.mode
           } : null);
         },
+        onRequestState: () => {
+          // Responde com o snapshot completo do estado atual da tela do usuário
+          userHandlers.sendUserStateSnapshot({
+            path: window.location.pathname,
+            currentView,
+            activeBlock,
+            adminTab,
+            currentSubView: appState.view,
+            scrollY: window.scrollY
+          });
+        },
         onNavigation: (nav) => {
-          // Reflete mudança de página e rota URL
           if (nav.path && window.location.pathname !== nav.path) {
             window.history.pushState(null, '', nav.path);
           }
@@ -985,12 +1083,8 @@ const App: React.FC = () => {
         },
         onInputChange: (input) => {
           let el: HTMLElement | null = null;
-          if (input.id) {
-            el = document.getElementById(input.id);
-          }
-          if (!el && input.name) {
-            el = document.querySelector(`[name="${input.name}"]`);
-          }
+          if (input.id) el = document.getElementById(input.id);
+          if (!el && input.name) el = document.querySelector(`[name="${input.name}"]`);
           if (!el && input.selector) {
             try { el = document.querySelector(input.selector); } catch (e) {}
           }
@@ -1014,10 +1108,60 @@ const App: React.FC = () => {
       }
     );
 
-    return () => {
-      unsubscribe();
+    // Quando o usuário acompanhado navega na estação dele, envia automaticamente a atualização para o canal
+    const sendNavUpdate = () => {
+      userHandlers.sendUserNav({
+        path: window.location.pathname,
+        currentView,
+        activeBlock,
+        adminTab,
+        currentSubView: appState.view
+      });
     };
-  }, [assistedViewerData?.sessionId, rawUser, impersonationSession]);
+    sendNavUpdate();
+
+    // Rastreia inputs do usuário acompanhado para espelhamento em tempo real
+    let userInputTimer: any = null;
+    const handleUserDocumentInput = (e: Event) => {
+      const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
+      if (!target) return;
+      clearTimeout(userInputTimer);
+      userInputTimer = setTimeout(() => {
+        let selector = '';
+        if (target.id) selector = `#${target.id}`;
+        else if (target.name) selector = `[name="${target.name}"]`;
+        userHandlers.sendUserInput({
+          selector,
+          name: target.name,
+          id: target.id,
+          value: target.value,
+          checked: (target as HTMLInputElement).checked
+        });
+      }, 100);
+    };
+
+    // Rastreia scroll do usuário
+    let userScrollTimer: any = null;
+    const handleUserScroll = () => {
+      const now = Date.now();
+      if (now - userScrollTimer < 80) return;
+      userScrollTimer = now;
+      const scrollY = window.scrollY || document.documentElement.scrollTop;
+      const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      const scrollPctY = Math.round((scrollY / maxScroll) * 10000) / 100;
+      userHandlers.sendUserScroll(scrollPctY, scrollY);
+    };
+
+    document.addEventListener('input', handleUserDocumentInput, { capture: true, passive: true });
+    window.addEventListener('scroll', handleUserScroll, { passive: true });
+
+    return () => {
+      document.removeEventListener('input', handleUserDocumentInput, { capture: true });
+      window.removeEventListener('scroll', handleUserScroll);
+      clearTimeout(userInputTimer);
+      userHandlers.unsubscribe();
+    };
+  }, [assistedViewerData?.sessionId, rawUser, impersonationSession, currentView, activeBlock, adminTab, appState.view]);
 
   // --- GLOBAL SETTINGS LOAD & SAVE ---
   const [isLoadingDetails, setIsLoadingDetails] = useState(false); // New state for lazy loading
@@ -3963,16 +4107,22 @@ const App: React.FC = () => {
     setIsFinalizedView(false);
   };
 
-  const handleStartImpersonation = async (targetUser: User) => {
+  const handleStartImpersonation = async (targetUser: User, initialMode: AssistedOperationMode = 'observer') => {
     if (!rawUser) return;
     try {
       const session = await impersonationService.startImpersonation(rawUser, targetUser);
       setImpersonationSession(session);
-      await assistedSessionService.initAdminSession(session);
-      setCurrentView('home');
-      setActiveBlock(null);
-      window.history.pushState(null, '', '/PaginaInicial');
-      showToast(`Acompanhamento Assistido iniciado: operando na conta de "${targetUser.name}".`, "success");
+      await assistedSessionService.initAdminSession(session, initialMode);
+      
+      if (initialMode === 'observer') {
+        assistedSessionService.requestFullState();
+        showToast(`Acompanhamento Assistido iniciado (Modo Observador): espelhando em tempo real a sessão de "${targetUser.name}".`, "info");
+      } else {
+        setCurrentView('home');
+        setActiveBlock(null);
+        window.history.pushState(null, '', '/PaginaInicial');
+        showToast(`Simulação Assistida iniciada: operando com permissões de "${targetUser.name}".`, "success");
+      }
     } catch (err: any) {
       console.error('Erro ao iniciar suporte assistido:', err);
       alert(err.message || 'Erro ao iniciar suporte assistido.');
@@ -4672,6 +4822,7 @@ const App: React.FC = () => {
               adminEmail={assistedViewerData.adminEmail}
               startedAt={assistedViewerData.startedAt}
               isPaused={assistedViewerData.isPaused}
+              mode={assistedViewerData.mode}
               virtualCursor={assistedVirtualCursor}
               lastClick={assistedLastClick}
             />
@@ -4682,6 +4833,7 @@ const App: React.FC = () => {
             <AssistedSessionControlHUD
               session={impersonationSession}
               onStop={handleStopImpersonation}
+              onRefreshState={() => assistedSessionService.requestFullState()}
             />
           )}
 
