@@ -58,6 +58,8 @@ export const AssistedUserViewerOverlay: React.FC<AssistedUserViewerOverlayProps>
     return () => clearTimeout(timer);
   }, [lastClick, isPaused]);
 
+  const displayAdminName = (virtualCursor?.userName || adminName || 'Administrador').split(' ')[0];
+
   return (
     <>
       {/* 1. BANNER FIXO SUPERIOR DISCRETO & ELEGANTE */}
@@ -126,7 +128,7 @@ export const AssistedUserViewerOverlay: React.FC<AssistedUserViewerOverlayProps>
       {/* 2. CURSOR VIRTUAL DO ADMINISTRADOR (QUANDO EM SIMULAÇÃO/DEMONSTRAÇÃO) */}
       {virtualCursor && !isPaused && (
         <div
-          className="fixed z-[9995] pointer-events-none transition-all duration-100 ease-linear"
+          className="fixed z-[9995] pointer-events-none transition-all duration-75 ease-out"
           style={{
             left: `${virtualCursor.xPct}%`,
             top: `${virtualCursor.yPct}%`,
@@ -135,7 +137,7 @@ export const AssistedUserViewerOverlay: React.FC<AssistedUserViewerOverlayProps>
         >
           <div className="relative">
             <svg
-              className="w-6 h-6 text-indigo-500 drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]"
+              className="w-6 h-6 text-indigo-500 drop-shadow-[0_2px_10px_rgba(0,0,0,0.7)]"
               viewBox="0 0 24 24"
               fill="currentColor"
               xmlns="http://www.w3.org/2000/svg"
@@ -143,14 +145,15 @@ export const AssistedUserViewerOverlay: React.FC<AssistedUserViewerOverlayProps>
               <path
                 d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87c.45 0 .67-.54.35-.85L5.85 2.85a.5.5 0 0 0-.35.36z"
                 stroke="white"
-                strokeWidth="1.5"
+                strokeWidth="1.6"
                 strokeLinejoin="round"
               />
             </svg>
 
-            <div className="absolute left-4 top-4 whitespace-nowrap bg-indigo-600/95 backdrop-blur-md text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg border border-indigo-400/40 flex items-center gap-1 animate-fade-in">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>{adminName}</span>
+            {/* Etiqueta com o Nome do Administrador: ➤ [Nome] */}
+            <div className="absolute left-4 top-4 whitespace-nowrap bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-950 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-2xl border border-indigo-400/50 flex items-center gap-1 animate-in fade-in zoom-in-90">
+              <span className="text-indigo-300 font-extrabold text-[11px]">➤</span>
+              <span className="text-indigo-100 font-bold">{displayAdminName}</span>
             </div>
           </div>
         </div>
@@ -167,7 +170,7 @@ export const AssistedUserViewerOverlay: React.FC<AssistedUserViewerOverlayProps>
             transform: 'translate(-50%, -50%)'
           }}
         >
-          <span className="block w-8 h-8 rounded-full border-2 border-indigo-400 bg-indigo-500/30 animate-ping opacity-90" />
+          <span className="block w-10 h-10 rounded-full border-2 border-indigo-400 bg-indigo-500/30 animate-ping opacity-90" />
         </div>
       ))}
     </>

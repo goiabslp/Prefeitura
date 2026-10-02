@@ -5,16 +5,20 @@ interface AssistedVirtualCursorOverlayProps {
   userCursor: AssistedMouseMovePayload | null;
   userLastClick?: AssistedClickPayload | null;
   targetUserName: string;
+  role?: 'user' | 'admin';
 }
 
 export const AssistedVirtualCursorOverlay: React.FC<AssistedVirtualCursorOverlayProps> = ({
   userCursor,
   userLastClick,
-  targetUserName
+  targetUserName,
+  role = 'user'
 }) => {
   const [ripples, setRipples] = useState<Array<{ id: number; x: number; y: number; isTouch?: boolean }>>([]);
   const [isVisible, setIsVisible] = useState(false);
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const isAdmin = role === 'admin' || userCursor?.source === 'admin';
 
   // Monitora movimentos e gerencia auto-hide caso fique inativo
   useEffect(() => {
@@ -59,14 +63,15 @@ export const AssistedVirtualCursorOverlay: React.FC<AssistedVirtualCursorOverlay
     return () => clearTimeout(timer);
   }, [userLastClick?.timestamp, userLastClick?.xPct, userLastClick?.yPct]);
 
-  const displayName = userCursor?.userName || targetUserName.split(' ')[0] || 'Usuário';
+  const rawName = userCursor?.userName || targetUserName || (isAdmin ? 'Administrador' : 'Usuário');
+  const displayName = rawName.split(' ')[0] || rawName;
 
   return (
     <div 
       className="fixed inset-0 pointer-events-none z-[9999] overflow-hidden select-none"
       aria-hidden="true"
     >
-      {/* 1. CURSOR VIRTUAL DO USUÁRIO (APONTADOR VISUAL) */}
+      {/* 1. CURSOR VIRTUAL (APONTADOR VISUAL) */}
       {userCursor && isVisible && (
         <div
           className="fixed pointer-events-none transition-all duration-75 ease-out"
@@ -79,11 +84,11 @@ export const AssistedVirtualCursorOverlay: React.FC<AssistedVirtualCursorOverlay
           {userCursor.isTouch ? (
             /* INDICADOR TOUCH / MOBILE */
             <div className="relative -translate-x-1/2 -translate-y-1/2">
-              <div className="w-8 h-8 rounded-full border-2 border-cyan-400 bg-cyan-500/20 animate-pulse flex items-center justify-center shadow-lg shadow-cyan-500/30">
-                <div className="w-2.5 h-2.5 rounded-full bg-cyan-400" />
+              <div className={`w-8 h-8 rounded-full border-2 ${isAdmin ? 'border-indigo-400 bg-indigo-500/25 shadow-indigo-500/30' : 'border-cyan-400 bg-cyan-500/20 shadow-cyan-500/30'} animate-pulse flex items-center justify-center shadow-lg`}>
+                <div className={`w-2.5 h-2.5 rounded-full ${isAdmin ? 'bg-indigo-400' : 'bg-cyan-400'}`} />
               </div>
-              <div className="absolute left-1/2 top-full mt-1.5 -translate-x-1/2 whitespace-nowrap bg-slate-950/95 backdrop-blur-md text-cyan-200 text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-xl border border-cyan-400/40 flex items-center gap-1">
-                <span className="text-cyan-400">➤</span>
+              <div className={`absolute left-1/2 top-full mt-1.5 -translate-x-1/2 whitespace-nowrap bg-slate-950/95 backdrop-blur-md ${isAdmin ? 'text-indigo-200 border-indigo-400/50' : 'text-cyan-200 border-cyan-400/40'} text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-xl border flex items-center gap-1`}>
+                <span className={isAdmin ? 'text-indigo-400' : 'text-cyan-400'}>➤</span>
                 <span>{displayName}</span>
               </div>
             </div>
@@ -92,7 +97,7 @@ export const AssistedVirtualCursorOverlay: React.FC<AssistedVirtualCursorOverlay
             <div className="relative">
               {/* SVG do ponteiro do mouse */}
               <svg
-                className="w-6 h-6 text-cyan-500 drop-shadow-[0_2px_10px_rgba(0,0,0,0.7)]"
+                className={`w-6 h-6 ${isAdmin ? 'text-indigo-500' : 'text-cyan-500'} drop-shadow-[0_2px_10px_rgba(0,0,0,0.7)]`}
                 viewBox="0 0 24 24"
                 fill="currentColor"
                 xmlns="http://www.w3.org/2000/svg"
@@ -105,17 +110,17 @@ export const AssistedVirtualCursorOverlay: React.FC<AssistedVirtualCursorOverlay
                 />
               </svg>
 
-              {/* Etiqueta com o Nome do Usuário: ➤ [Nome] */}
-              <div className="absolute left-4 top-4 whitespace-nowrap bg-gradient-to-r from-slate-950 via-cyan-950 to-slate-950 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-2xl border border-cyan-400/50 flex items-center gap-1 animate-in fade-in zoom-in-90">
-                <span className="text-cyan-300 font-extrabold text-[11px]">➤</span>
-                <span className="text-cyan-100 font-bold">{displayName}</span>
+              {/* Etiqueta com o Nome: ➤ [Nome] */}
+              <div className={`absolute left-4 top-4 whitespace-nowrap bg-gradient-to-r ${isAdmin ? 'from-slate-950 via-indigo-950 to-slate-950 border-indigo-400/50' : 'from-slate-950 via-cyan-950 to-slate-950 border-cyan-400/50'} text-white text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-2xl border flex items-center gap-1 animate-in fade-in zoom-in-90`}>
+                <span className={`${isAdmin ? 'text-indigo-300' : 'text-cyan-300'} font-extrabold text-[11px]`}>➤</span>
+                <span className={`${isAdmin ? 'text-indigo-100' : 'text-cyan-100'} font-bold`}>{displayName}</span>
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* 2. RIPPLES DE APONTAMENTO / PULSO QUANDO O USUÁRIO INDICA UM ELEMENTO */}
+      {/* 2. RIPPLES DE APONTAMENTO / PULSO QUANDO INDICA UM ELEMENTO */}
       {ripples.map((ripple) => (
         <div
           key={ripple.id}
@@ -126,8 +131,8 @@ export const AssistedVirtualCursorOverlay: React.FC<AssistedVirtualCursorOverlay
             transform: 'translate(-50%, -50%)'
           }}
         >
-          <span className="block w-12 h-12 rounded-full border-2 border-cyan-400 bg-cyan-500/25 animate-ping opacity-90" />
-          <span className="absolute inset-0 block w-6 h-6 m-auto rounded-full border border-cyan-300 bg-cyan-400/40 animate-pulse" />
+          <span className={`block w-12 h-12 rounded-full border-2 ${isAdmin ? 'border-indigo-400 bg-indigo-500/25' : 'border-cyan-400 bg-cyan-500/25'} animate-ping opacity-90`} />
+          <span className={`absolute inset-0 block w-6 h-6 m-auto rounded-full border ${isAdmin ? 'border-indigo-300 bg-indigo-400/40' : 'border-cyan-300 bg-cyan-400/40'} animate-pulse`} />
         </div>
       ))}
     </div>

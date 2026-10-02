@@ -7,17 +7,22 @@ export type AssistedOperationMode = 'observer' | 'simulation';
 export type AssistedSyncStatus = 'connected' | 'syncing' | 'reconnecting' | 'paused' | 'disconnected';
 
 export interface AssistedNavPayload {
+  eventId?: string;
   path: string;
   currentView: string;
   activeBlock: string | null;
   adminTab: string | null;
   currentSubView?: string | null;
   activeTab?: string | null;
+  searchQuery?: string;
+  filterStatus?: string | null;
   timestamp: number;
   source?: 'admin' | 'user';
+  senderId?: string;
 }
 
 export interface AssistedStateSnapshotPayload {
+  eventId?: string;
   path: string;
   currentView: string;
   activeBlock: string | null;
@@ -35,55 +40,82 @@ export interface AssistedStateSnapshotPayload {
   scrollY?: number;
   timestamp: number;
   source?: 'admin' | 'user';
+  senderId?: string;
 }
 
 export interface AssistedMouseMovePayload {
+  eventId?: string;
   xPct: number;
   yPct: number;
   isTouch?: boolean;
   userName?: string;
   timestamp: number;
   source?: 'admin' | 'user';
+  senderId?: string;
 }
 
 export interface AssistedClickPayload {
+  eventId?: string;
   xPct: number;
   yPct: number;
   tag?: string;
   text?: string;
   selector?: string;
+  dataAssistId?: string;
   isTouch?: boolean;
   userName?: string;
   timestamp: number;
   source?: 'admin' | 'user';
+  senderId?: string;
 }
 
 export interface AssistedScrollPayload {
+  eventId?: string;
   scrollPctY: number;
   scrollY: number;
   timestamp: number;
   source?: 'admin' | 'user';
+  senderId?: string;
 }
 
 export interface AssistedInputPayload {
+  eventId?: string;
   selector?: string;
+  dataAssistId?: string;
   name?: string;
   id?: string;
   value: string;
   checked?: boolean;
+  tagName?: string;
+  isSearch?: boolean;
   timestamp: number;
   source?: 'admin' | 'user';
+  senderId?: string;
 }
 
 export interface AssistedModalPayload {
+  eventId?: string;
   modalId?: string;
-  action: 'open' | 'close' | 'change_tab';
+  action: 'open' | 'close' | 'change_tab' | 'step_change';
   data?: any;
+  step?: number | null;
   timestamp: number;
   source?: 'admin' | 'user';
+  senderId?: string;
+}
+
+export interface AssistedTabPayload {
+  eventId?: string;
+  tabId: string;
+  section?: string;
+  filterValue?: string | null;
+  timestamp: number;
+  source?: 'admin' | 'user';
+  senderId?: string;
 }
 
 export interface AssistedControlPayload {
+  eventId?: string;
   status: 'active' | 'paused' | 'ended';
   mode: AssistedOperationMode;
   sessionId: string;
@@ -111,6 +143,7 @@ export interface AssistedSessionListeners {
   onScroll?: (payload: AssistedScrollPayload) => void;
   onInputChange?: (payload: AssistedInputPayload) => void;
   onModalState?: (payload: AssistedModalPayload) => void;
+  onTabChange?: (payload: AssistedTabPayload) => void;
   onPresenceChange?: (hasTargetUserOnline: boolean) => void;
   onSessionEnded?: () => void;
   onSyncStatusChange?: (status: AssistedSyncStatus) => void;
@@ -121,6 +154,7 @@ export interface AdminSessionObserverListeners {
   onNavigation?: (payload: AssistedNavPayload) => void;
   onInputChange?: (payload: AssistedInputPayload) => void;
   onModalState?: (payload: AssistedModalPayload) => void;
+  onTabChange?: (payload: AssistedTabPayload) => void;
   onScroll?: (payload: AssistedScrollPayload) => void;
   onClick?: (payload: AssistedClickPayload) => void;
   onUserMouseMove?: (payload: AssistedMouseMovePayload) => void;
@@ -424,6 +458,7 @@ class AssistedSessionManager {
   private async broadcastControl(status: 'active' | 'paused' | 'ended'): Promise<void> {
     if (!this.currentSession) return;
     const payload: AssistedControlPayload = {
+      eventId: `ctrl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       status,
       mode: this.mode,
       sessionId: this.currentSession.sessionId,
@@ -470,6 +505,9 @@ class AssistedSessionManager {
 
     const payload: AssistedStateSnapshotPayload = {
       ...data,
+      eventId: `snap_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      senderId: this.currentSession ? `admin_${this.currentSession.realAdmin.id}` : 'admin',
+      source: 'admin',
       timestamp: Date.now()
     };
 
@@ -487,11 +525,14 @@ class AssistedSessionManager {
   /**
    * Transmite navegação de rota e tela (sincronização de URL e visão)
    */
-  broadcastNavigation(data: Omit<AssistedNavPayload, 'timestamp'>) {
+  broadcastNavigation(data: Omit<AssistedNavPayload, 'timestamp' | 'source' | 'senderId'>) {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
 
     const payload: AssistedNavPayload = {
       ...data,
+      eventId: `nav_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      senderId: `admin_${this.currentSession.realAdmin.id}`,
+      source: 'admin',
       timestamp: Date.now()
     };
 
@@ -509,7 +550,7 @@ class AssistedSessionManager {
       auditLogService.logAction({
         action_type: 'ASSISTED_PAGE_VISITED',
         module: 'Suporte Assistido / Navegação',
-        description: `Administrador navegou para a página "${data.path}" (Visualização: ${data.currentView || 'padrão'}) durante o suporte assistido.`,
+        description: `Administrador "${this.currentSession.realAdmin.name}" navegou para "${data.path}" (Visualização: ${data.currentView || 'padrão'}) na sessão de "${this.currentSession.targetUser.name}".`,
         details: {
           sessionId: this.currentSession.sessionId,
           admin_id: this.currentSession.realAdmin.id,
@@ -531,10 +572,12 @@ class AssistedSessionManager {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
 
     const payload: AssistedMouseMovePayload = {
+      eventId: `m_${Date.now()}`,
       xPct,
       yPct,
       isTouch,
-      userName,
+      userName: userName || this.currentSession.realAdmin.name,
+      senderId: `admin_${this.currentSession.realAdmin.id}`,
       timestamp: Date.now(),
       source
     };
@@ -552,19 +595,22 @@ class AssistedSessionManager {
   broadcastClick(
     xPct: number, 
     yPct: number, 
-    targetInfo?: { tag?: string; text?: string; selector?: string; isTouch?: boolean; userName?: string },
+    targetInfo?: { tag?: string; text?: string; selector?: string; dataAssistId?: string; isTouch?: boolean; userName?: string },
     source: 'admin' | 'user' = 'admin'
   ) {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
 
     const payload: AssistedClickPayload = {
+      eventId: `clk_${Date.now()}`,
       xPct,
       yPct,
       tag: targetInfo?.tag,
       text: targetInfo?.text,
       selector: targetInfo?.selector,
+      dataAssistId: targetInfo?.dataAssistId,
       isTouch: targetInfo?.isTouch,
-      userName: targetInfo?.userName,
+      userName: targetInfo?.userName || this.currentSession.realAdmin.name,
+      senderId: `admin_${this.currentSession.realAdmin.id}`,
       timestamp: Date.now(),
       source
     };
@@ -583,8 +629,10 @@ class AssistedSessionManager {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
 
     const payload: AssistedScrollPayload = {
+      eventId: `sc_${Date.now()}`,
       scrollPctY,
       scrollY,
+      senderId: `admin_${this.currentSession.realAdmin.id}`,
       timestamp: Date.now(),
       source
     };
@@ -599,11 +647,14 @@ class AssistedSessionManager {
   /**
    * Transmite preenchimento de campos de formulário, buscas e filtros
    */
-  broadcastInputChange(data: Omit<AssistedInputPayload, 'timestamp'>) {
+  broadcastInputChange(data: Omit<AssistedInputPayload, 'timestamp' | 'source' | 'senderId'>) {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
 
     const payload: AssistedInputPayload = {
       ...data,
+      eventId: `inp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      senderId: `admin_${this.currentSession.realAdmin.id}`,
+      source: 'admin',
       timestamp: Date.now()
     };
 
@@ -617,13 +668,16 @@ class AssistedSessionManager {
   /**
    * Transmite abertura, fechamento de modais ou troca de abas
    */
-  broadcastModalState(modalId: string, action: 'open' | 'close' | 'change_tab', data?: any, source: 'admin' | 'user' = 'admin') {
+  broadcastModalState(modalId: string, action: 'open' | 'close' | 'change_tab' | 'step_change', data?: any, step?: number | null, source: 'admin' | 'user' = 'admin') {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
 
     const payload: AssistedModalPayload = {
+      eventId: `mod_${Date.now()}`,
       modalId,
       action,
       data,
+      step,
+      senderId: `admin_${this.currentSession.realAdmin.id}`,
       timestamp: Date.now(),
       source
     };
@@ -631,6 +685,29 @@ class AssistedSessionManager {
     this.activeChannel.send({
       type: 'broadcast',
       event: 'assisted-modal',
+      payload
+    });
+  }
+
+  /**
+   * Transmite alteração de abas de tela ou filtros
+   */
+  broadcastTabChange(tabId: string, section?: string, filterValue?: string | null, source: 'admin' | 'user' = 'admin') {
+    if (!this.currentSession || this.isPaused || !this.activeChannel) return;
+
+    const payload: AssistedTabPayload = {
+      eventId: `tab_${Date.now()}`,
+      tabId,
+      section,
+      filterValue,
+      senderId: `admin_${this.currentSession.realAdmin.id}`,
+      timestamp: Date.now(),
+      source
+    };
+
+    this.activeChannel.send({
+      type: 'broadcast',
+      event: 'assisted-tab',
       payload
     });
   }
@@ -644,12 +721,13 @@ class AssistedSessionManager {
     listeners: AssistedSessionListeners
   ): {
     unsubscribe: () => void;
-    sendUserStateSnapshot: (snapshot: Omit<AssistedStateSnapshotPayload, 'timestamp' | 'source'>) => void;
-    sendUserNav: (nav: Omit<AssistedNavPayload, 'timestamp' | 'source'>) => void;
-    sendUserInput: (input: Omit<AssistedInputPayload, 'timestamp' | 'source'>) => void;
-    sendUserModal: (modalId: string, action: 'open' | 'close' | 'change_tab', data?: any) => void;
+    sendUserStateSnapshot: (snapshot: Omit<AssistedStateSnapshotPayload, 'timestamp' | 'source' | 'senderId'>) => void;
+    sendUserNav: (nav: Omit<AssistedNavPayload, 'timestamp' | 'source' | 'senderId'>) => void;
+    sendUserInput: (input: Omit<AssistedInputPayload, 'timestamp' | 'source' | 'senderId'>) => void;
+    sendUserModal: (modalId: string, action: 'open' | 'close' | 'change_tab' | 'step_change', data?: any, step?: number | null) => void;
+    sendUserTab: (tabId: string, section?: string, filterValue?: string | null) => void;
     sendUserScroll: (scrollPctY: number, scrollY: number) => void;
-    sendUserClick: (xPct: number, yPct: number, targetInfo?: { tag?: string; text?: string; selector?: string; isTouch?: boolean; userName?: string }) => void;
+    sendUserClick: (xPct: number, yPct: number, targetInfo?: { tag?: string; text?: string; selector?: string; dataAssistId?: string; isTouch?: boolean; userName?: string }) => void;
     sendUserMouseMove: (xPct: number, yPct: number, isTouch?: boolean) => void;
     sendUserTapPulse: (xPct: number, yPct: number, isTouch?: boolean) => void;
   } {
@@ -660,6 +738,7 @@ class AssistedSessionManager {
         sendUserNav: () => {},
         sendUserInput: () => {},
         sendUserModal: () => {},
+        sendUserTab: () => {},
         sendUserScroll: () => {},
         sendUserClick: () => {},
         sendUserMouseMove: () => {},
@@ -710,14 +789,14 @@ class AssistedSessionManager {
 
     channel.on('broadcast', { event: 'assisted-state-snapshot' }, (event: any) => {
       const payload: AssistedStateSnapshotPayload = event.payload;
-      if (payload) {
+      if (payload && payload.source !== 'user') {
         listeners.onStateSnapshot?.(payload);
       }
     });
 
     channel.on('broadcast', { event: 'assisted-nav' }, (event: any) => {
       const payload: AssistedNavPayload = event.payload;
-      if (payload) {
+      if (payload && payload.source !== 'user') {
         listeners.onNavigation?.(payload);
       }
     });
@@ -757,43 +836,56 @@ class AssistedSessionManager {
       }
     });
 
-    const sendUserStateSnapshot = (snapshot: Omit<AssistedStateSnapshotPayload, 'timestamp' | 'source'>) => {
+    channel.on('broadcast', { event: 'assisted-tab' }, (event: any) => {
+      const payload: AssistedTabPayload = event.payload;
+      if (payload && payload.source !== 'user') {
+        listeners.onTabChange?.(payload);
+      }
+    });
+
+    const sendUserStateSnapshot = (snapshot: Omit<AssistedStateSnapshotPayload, 'timestamp' | 'source' | 'senderId'>) => {
       channel.send({
         type: 'broadcast',
         event: 'assisted-state-snapshot',
         payload: {
           ...snapshot,
+          eventId: `snap_u_${Date.now()}`,
+          senderId: `target_${currentUser.id}`,
           source: 'user',
           timestamp: Date.now()
         }
       });
     };
 
-    const sendUserNav = (nav: Omit<AssistedNavPayload, 'timestamp' | 'source'>) => {
+    const sendUserNav = (nav: Omit<AssistedNavPayload, 'timestamp' | 'source' | 'senderId'>) => {
       channel.send({
         type: 'broadcast',
         event: 'assisted-nav',
         payload: {
           ...nav,
+          eventId: `nav_u_${Date.now()}`,
+          senderId: `target_${currentUser.id}`,
           source: 'user',
           timestamp: Date.now()
         }
       });
     };
 
-    const sendUserInput = (input: Omit<AssistedInputPayload, 'timestamp' | 'source'>) => {
+    const sendUserInput = (input: Omit<AssistedInputPayload, 'timestamp' | 'source' | 'senderId'>) => {
       channel.send({
         type: 'broadcast',
         event: 'assisted-input',
         payload: {
           ...input,
+          eventId: `inp_u_${Date.now()}`,
+          senderId: `target_${currentUser.id}`,
           source: 'user',
           timestamp: Date.now()
         }
       });
     };
 
-    const sendUserModal = (modalId: string, action: 'open' | 'close' | 'change_tab', data?: any) => {
+    const sendUserModal = (modalId: string, action: 'open' | 'close' | 'change_tab' | 'step_change', data?: any, step?: number | null) => {
       channel.send({
         type: 'broadcast',
         event: 'assisted-modal',
@@ -801,6 +893,25 @@ class AssistedSessionManager {
           modalId,
           action,
           data,
+          step,
+          eventId: `mod_u_${Date.now()}`,
+          senderId: `target_${currentUser.id}`,
+          source: 'user',
+          timestamp: Date.now()
+        }
+      });
+    };
+
+    const sendUserTab = (tabId: string, section?: string, filterValue?: string | null) => {
+      channel.send({
+        type: 'broadcast',
+        event: 'assisted-tab',
+        payload: {
+          tabId,
+          section,
+          filterValue,
+          eventId: `tab_u_${Date.now()}`,
+          senderId: `target_${currentUser.id}`,
           source: 'user',
           timestamp: Date.now()
         }
@@ -814,13 +925,15 @@ class AssistedSessionManager {
         payload: {
           scrollPctY,
           scrollY,
+          eventId: `sc_u_${Date.now()}`,
+          senderId: `target_${currentUser.id}`,
           source: 'user',
           timestamp: Date.now()
         }
       });
     };
 
-    const sendUserClick = (xPct: number, yPct: number, targetInfo?: { tag?: string; text?: string; selector?: string; isTouch?: boolean; userName?: string }) => {
+    const sendUserClick = (xPct: number, yPct: number, targetInfo?: { tag?: string; text?: string; selector?: string; dataAssistId?: string; isTouch?: boolean; userName?: string }) => {
       channel.send({
         type: 'broadcast',
         event: 'assisted-click',
@@ -830,8 +943,11 @@ class AssistedSessionManager {
           tag: targetInfo?.tag,
           text: targetInfo?.text,
           selector: targetInfo?.selector,
+          dataAssistId: targetInfo?.dataAssistId,
           isTouch: targetInfo?.isTouch,
           userName: targetInfo?.userName || currentUser.name,
+          eventId: `clk_u_${Date.now()}`,
+          senderId: `target_${currentUser.id}`,
           source: 'user',
           timestamp: Date.now()
         }
@@ -847,6 +963,8 @@ class AssistedSessionManager {
           yPct,
           isTouch,
           userName: currentUser.name,
+          eventId: `m_u_${Date.now()}`,
+          senderId: `target_${currentUser.id}`,
           source: 'user',
           timestamp: Date.now()
         }
@@ -862,6 +980,8 @@ class AssistedSessionManager {
           yPct,
           isTouch,
           userName: currentUser.name,
+          eventId: `clk_u_${Date.now()}`,
+          senderId: `target_${currentUser.id}`,
           source: 'user',
           timestamp: Date.now()
         }
@@ -877,6 +997,7 @@ class AssistedSessionManager {
       sendUserNav,
       sendUserInput,
       sendUserModal,
+      sendUserTab,
       sendUserScroll,
       sendUserClick,
       sendUserMouseMove,
@@ -925,6 +1046,13 @@ class AssistedSessionManager {
       const payload: AssistedModalPayload = event.payload;
       if (payload && payload.source === 'user') {
         listeners.onModalState?.(payload);
+      }
+    });
+
+    ch.on('broadcast', { event: 'assisted-tab' }, (event: any) => {
+      const payload: AssistedTabPayload = event.payload;
+      if (payload && payload.source === 'user') {
+        listeners.onTabChange?.(payload);
       }
     });
 

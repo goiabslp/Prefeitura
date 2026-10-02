@@ -32,7 +32,11 @@ import {
   AssistedOperationMode,
   AssistedSyncStatus,
   AssistedStateSnapshotPayload,
-  AssistedNavPayload
+  AssistedNavPayload,
+  AssistedInputPayload,
+  AssistedModalPayload,
+  AssistedTabPayload,
+  AssistedScrollPayload
 } from './services/assistedSessionService';
 import { AssistedSessionControlHUD } from './components/AssistedSessionControlHUD';
 import { AssistedUserViewerOverlay } from './components/AssistedUserViewerOverlay';
@@ -753,9 +757,38 @@ const App: React.FC = () => {
     return unsub;
   }, []);
 
+  // Flag para impedir loops de retransmissão de eventos recebidos remotamente
+  const isApplyingRemoteSyncRef = useRef(false);
+
   // Estados do Cursor Assistido do Usuário Acompanhado (Apontador Virtual na tela do Admin)
   const [assistedUserCursor, setAssistedUserCursor] = useState<AssistedMouseMovePayload | null>(null);
   const [assistedUserLastTap, setAssistedUserLastTap] = useState<AssistedClickPayload | null>(null);
+
+  // Função auxiliar para aplicar alterações de input recebidas remotamente sem disparar loop
+  const applyRemoteInput = useCallback((input: AssistedInputPayload) => {
+    if (!input) return;
+    let el: HTMLElement | null = null;
+    if (input.dataAssistId) el = document.querySelector(`[data-assist-id="${input.dataAssistId}"]`);
+    if (!el && input.id) el = document.getElementById(input.id);
+    if (!el && input.name) el = document.querySelector(`[name="${input.name}"]`);
+    if (!el && input.selector) {
+      try { el = document.querySelector(input.selector); } catch (e) {}
+    }
+    if (el) {
+      const formEl = el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+      isApplyingRemoteSyncRef.current = true;
+      if (input.checked !== undefined && 'checked' in formEl && (formEl as HTMLInputElement).type === 'checkbox') {
+        (formEl as HTMLInputElement).checked = input.checked;
+      } else if ('value' in formEl) {
+        formEl.value = input.value;
+      }
+      formEl.dispatchEvent(new Event('input', { bubbles: true }));
+      formEl.dispatchEvent(new Event('change', { bubbles: true }));
+      setTimeout(() => {
+        isApplyingRemoteSyncRef.current = false;
+      }, 50);
+    }
+  }, []);
 
   // 1. SINCRONIZAÇÃO E ESCUTA DO ADMINISTRADOR (Espelhamento e Cursor Assistido em tempo real)
   useEffect(() => {
@@ -774,7 +807,8 @@ const App: React.FC = () => {
       },
       onNavigation: (nav) => {
         if (assistedAdminMode === 'observer') {
-          if (nav.path && window.location.pathname !== nav.path) {
+          isApplyingRemoteSyncRef.current = true;
+          if (nav.path && (window.location.pathname + window.location.search) !== nav.path) {
             window.history.pushState(null, '', nav.path);
           }
           if (nav.currentView) {
@@ -789,11 +823,15 @@ const App: React.FC = () => {
           if (nav.currentSubView !== undefined) {
             setAppState(prev => ({ ...prev, view: nav.currentSubView as any }));
           }
+          setTimeout(() => {
+            isApplyingRemoteSyncRef.current = false;
+          }, 50);
         }
       },
       onStateSnapshot: (snap) => {
         if (assistedAdminMode === 'observer') {
-          if (snap.path && window.location.pathname !== snap.path) {
+          isApplyingRemoteSyncRef.current = true;
+          if (snap.path && (window.location.pathname + window.location.search) !== snap.path) {
             window.history.pushState(null, '', snap.path);
           }
           if (snap.currentView) {
@@ -811,31 +849,29 @@ const App: React.FC = () => {
           if (snap.scrollY !== undefined) {
             window.scrollTo({ top: snap.scrollY, behavior: 'smooth' });
           }
+          setTimeout(() => {
+            isApplyingRemoteSyncRef.current = false;
+          }, 50);
         }
       },
       onInputChange: (input) => {
         if (assistedAdminMode === 'observer') {
-          let el: HTMLElement | null = null;
-          if (input.id) el = document.getElementById(input.id);
-          if (!el && input.name) el = document.querySelector(`[name="${input.name}"]`);
-          if (!el && input.selector) {
-            try { el = document.querySelector(input.selector); } catch (e) {}
-          }
-          if (el) {
-            const formEl = el as HTMLInputElement;
-            if (input.checked !== undefined && formEl.type === 'checkbox') {
-              formEl.checked = input.checked;
-            } else {
-              formEl.value = input.value;
-            }
-            formEl.dispatchEvent(new Event('input', { bubbles: true }));
-            formEl.dispatchEvent(new Event('change', { bubbles: true }));
-          }
+          applyRemoteInput(input);
         }
       },
       onScroll: (scroll) => {
         if (assistedAdminMode === 'observer') {
           window.scrollTo({ top: scroll.scrollY, behavior: 'smooth' });
+        }
+      },
+      onModalState: (modal) => {
+        if (assistedAdminMode === 'observer' && modal.modalId) {
+          // Trata modais comuns do sistema
+          if (modal.modalId === '2fa') {
+            setIs2FAModalOpen(modal.action === 'open');
+          } else if (modal.modalId === 'oficio_numbering') {
+            setIsOficioNumberingModalOpen(modal.action === 'open');
+          }
         }
       }
     });
@@ -843,12 +879,12 @@ const App: React.FC = () => {
     return () => {
       cleanupObserver();
     };
-  }, [impersonationSession, assistedAdminMode]);
+  }, [impersonationSession, assistedAdminMode, applyRemoteInput]);
 
   // 2. TRANSMISSÃO DE NAVEGAÇÃO DO ADMINISTRADOR QUANDO EM MODO SIMULAÇÃO
   useEffect(() => {
-    if (!impersonationSession || assistedAdminMode !== 'simulation') return;
-    const currentPath = window.location.pathname;
+    if (!impersonationSession || assistedAdminMode !== 'simulation' || isApplyingRemoteSyncRef.current) return;
+    const currentPath = window.location.pathname + window.location.search;
     assistedSessionService.broadcastNavigation({
       path: currentPath,
       currentView,
@@ -862,15 +898,15 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!impersonationSession || assistedAdminMode !== 'simulation') return;
 
-    // Mouse move com throttle (~60ms)
+    // Mouse move com throttle (~40ms para movimento fluido de 25fps)
     let lastMouseTime = 0;
     const handleMouseMove = (e: MouseEvent) => {
       const now = Date.now();
-      if (now - lastMouseTime < 60) return;
+      if (now - lastMouseTime < 40) return;
       lastMouseTime = now;
       const xPct = Math.round((e.clientX / window.innerWidth) * 10000) / 100;
       const yPct = Math.round((e.clientY / window.innerHeight) * 10000) / 100;
-      assistedSessionService.broadcastMouseMove(xPct, yPct);
+      assistedSessionService.broadcastMouseMove(xPct, yPct, false, impersonationSession.realAdmin.name, 'admin');
     };
 
     // Cliques do Administrador
@@ -879,58 +915,97 @@ const App: React.FC = () => {
       const yPct = Math.round((e.clientY / window.innerHeight) * 10000) / 100;
       const target = e.target as HTMLElement | null;
       let selector = '';
+      let dataAssistId = '';
       if (target) {
-        if (target.id) selector = `#${target.id}`;
+        dataAssistId = target.getAttribute('data-assist-id') || '';
+        if (dataAssistId) selector = `[data-assist-id="${dataAssistId}"]`;
+        else if (target.id) selector = `#${target.id}`;
         else if (target.getAttribute('name')) selector = `[name="${target.getAttribute('name')}"]`;
       }
       const text = target?.innerText?.slice(0, 30);
       const tag = target?.tagName?.toLowerCase();
-      assistedSessionService.broadcastClick(xPct, yPct, { tag, text, selector });
+      assistedSessionService.broadcastClick(xPct, yPct, { tag, text, selector, dataAssistId, userName: impersonationSession.realAdmin.name }, 'admin');
     };
 
-    // Scroll com throttle (~80ms)
+    // Scroll com throttle (~50ms)
     let lastScrollTime = 0;
     const handleScroll = () => {
       const now = Date.now();
-      if (now - lastScrollTime < 80) return;
+      if (now - lastScrollTime < 50) return;
       lastScrollTime = now;
       const scrollY = window.scrollY || document.documentElement.scrollTop;
       const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
       const scrollPctY = Math.round((scrollY / maxScroll) * 10000) / 100;
-      assistedSessionService.broadcastScroll(scrollPctY, scrollY);
+      assistedSessionService.broadcastScroll(scrollPctY, scrollY, 'admin');
     };
 
-    // Inputs e buscas com debounce (~100ms)
-    let inputTimer: any = null;
+    // Digitação e buscas com throttle ultra rápido (~35ms para digitação em tempo real caractere a caractere)
+    let lastInputTime = 0;
+    let inputTimeout: any = null;
     const handleInput = (e: Event) => {
+      if (isApplyingRemoteSyncRef.current) return;
       const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
       if (!target) return;
-      clearTimeout(inputTimer);
-      inputTimer = setTimeout(() => {
-        let selector = '';
-        if (target.id) selector = `#${target.id}`;
-        else if (target.name) selector = `[name="${target.name}"]`;
+
+      const dataAssistId = target.getAttribute('data-assist-id') || undefined;
+      const id = target.id || undefined;
+      const name = target.getAttribute('name') || undefined;
+      let selector = '';
+
+      if (dataAssistId) selector = `[data-assist-id="${dataAssistId}"]`;
+      else if (id) selector = `#${id}`;
+      else if (name) selector = `[name="${name}"]`;
+      else {
+        const placeholder = (target as HTMLInputElement).placeholder;
+        if (placeholder) {
+          selector = `${target.tagName.toLowerCase()}[placeholder="${placeholder}"]`;
+        }
+      }
+
+      const rawType = (target as HTMLInputElement).type || '';
+      const isSearch = rawType === 'search' || 
+        (target.id && /search|busca|filtro|pesquis/i.test(target.id)) || 
+        (name && /search|busca|filtro|pesquis/i.test(name));
+
+      const sendValue = () => {
         assistedSessionService.broadcastInputChange({
           selector,
+          dataAssistId,
           name: target.name,
           id: target.id,
           value: target.value,
-          checked: (target as HTMLInputElement).checked
+          checked: (target as HTMLInputElement).checked,
+          tagName: target.tagName.toLowerCase(),
+          isSearch
         });
-      }, 100);
+      };
+
+      const now = Date.now();
+      if (now - lastInputTime > 35) {
+        lastInputTime = now;
+        sendValue();
+      } else {
+        clearTimeout(inputTimeout);
+        inputTimeout = setTimeout(() => {
+          lastInputTime = Date.now();
+          sendValue();
+        }, 35);
+      }
     };
 
     window.addEventListener('mousemove', handleMouseMove, { passive: true });
     window.addEventListener('click', handleClick, { capture: true, passive: true });
     window.addEventListener('scroll', handleScroll, { passive: true });
     document.addEventListener('input', handleInput, { capture: true, passive: true });
+    document.addEventListener('change', handleInput, { capture: true, passive: true });
 
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('click', handleClick, { capture: true });
       window.removeEventListener('scroll', handleScroll);
       document.removeEventListener('input', handleInput, { capture: true });
-      clearTimeout(inputTimer);
+      document.removeEventListener('change', handleInput, { capture: true });
+      clearTimeout(inputTimeout);
     };
   }, [impersonationSession, assistedAdminMode]);
 
@@ -1070,7 +1145,7 @@ const App: React.FC = () => {
         onRequestState: () => {
           // Responde com o snapshot completo do estado atual da tela do usuário
           userHandlers.sendUserStateSnapshot({
-            path: window.location.pathname,
+            path: window.location.pathname + window.location.search,
             currentView,
             activeBlock,
             adminTab,
@@ -1079,7 +1154,8 @@ const App: React.FC = () => {
           });
         },
         onNavigation: (nav) => {
-          if (nav.path && window.location.pathname !== nav.path) {
+          isApplyingRemoteSyncRef.current = true;
+          if (nav.path && (window.location.pathname + window.location.search) !== nav.path) {
             window.history.pushState(null, '', nav.path);
           }
           if (nav.currentView) {
@@ -1094,6 +1170,9 @@ const App: React.FC = () => {
           if (nav.currentSubView !== undefined) {
             setAppState(prev => ({ ...prev, view: nav.currentSubView as any }));
           }
+          setTimeout(() => {
+            isApplyingRemoteSyncRef.current = false;
+          }, 50);
         },
         onMouseMove: (mouse) => {
           setAssistedVirtualCursor(mouse);
@@ -1105,21 +1184,13 @@ const App: React.FC = () => {
           window.scrollTo({ top: scroll.scrollY, behavior: 'smooth' });
         },
         onInputChange: (input) => {
-          let el: HTMLElement | null = null;
-          if (input.id) el = document.getElementById(input.id);
-          if (!el && input.name) el = document.querySelector(`[name="${input.name}"]`);
-          if (!el && input.selector) {
-            try { el = document.querySelector(input.selector); } catch (e) {}
-          }
-          if (el) {
-            const formEl = el as HTMLInputElement;
-            if (input.checked !== undefined && formEl.type === 'checkbox') {
-              formEl.checked = input.checked;
-            } else {
-              formEl.value = input.value;
-            }
-            formEl.dispatchEvent(new Event('input', { bubbles: true }));
-            formEl.dispatchEvent(new Event('change', { bubbles: true }));
+          applyRemoteInput(input);
+        },
+        onModalState: (modal) => {
+          if (modal.modalId === '2fa') {
+            setIs2FAModalOpen(modal.action === 'open');
+          } else if (modal.modalId === 'oficio_numbering') {
+            setIsOficioNumberingModalOpen(modal.action === 'open');
           }
         },
         onSessionEnded: () => {
@@ -1132,42 +1203,75 @@ const App: React.FC = () => {
     );
 
     // Quando o usuário acompanhado navega na estação dele, envia automaticamente a atualização para o canal
-    const sendNavUpdate = () => {
+    if (!isApplyingRemoteSyncRef.current) {
       userHandlers.sendUserNav({
-        path: window.location.pathname,
+        path: window.location.pathname + window.location.search,
         currentView,
         activeBlock,
         adminTab,
         currentSubView: appState.view
       });
-    };
-    sendNavUpdate();
+    }
 
     // Rastreia inputs do usuário acompanhado para espelhamento em tempo real
-    let userInputTimer: any = null;
+    let lastUserInputTime = 0;
+    let userInputTimeout: any = null;
     const handleUserDocumentInput = (e: Event) => {
+      if (isApplyingRemoteSyncRef.current) return;
       const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
       if (!target) return;
-      clearTimeout(userInputTimer);
-      userInputTimer = setTimeout(() => {
-        let selector = '';
-        if (target.id) selector = `#${target.id}`;
-        else if (target.name) selector = `[name="${target.name}"]`;
+
+      const dataAssistId = target.getAttribute('data-assist-id') || undefined;
+      const id = target.id || undefined;
+      const name = target.getAttribute('name') || undefined;
+      let selector = '';
+
+      if (dataAssistId) selector = `[data-assist-id="${dataAssistId}"]`;
+      else if (id) selector = `#${id}`;
+      else if (name) selector = `[name="${name}"]`;
+      else {
+        const placeholder = (target as HTMLInputElement).placeholder;
+        if (placeholder) {
+          selector = `${target.tagName.toLowerCase()}[placeholder="${placeholder}"]`;
+        }
+      }
+
+      const rawType = (target as HTMLInputElement).type || '';
+      const isSearch = rawType === 'search' || 
+        (target.id && /search|busca|filtro|pesquis/i.test(target.id)) || 
+        (name && /search|busca|filtro|pesquis/i.test(name));
+
+      const sendUserInputValue = () => {
         userHandlers.sendUserInput({
           selector,
+          dataAssistId,
           name: target.name,
           id: target.id,
           value: target.value,
-          checked: (target as HTMLInputElement).checked
+          checked: (target as HTMLInputElement).checked,
+          tagName: target.tagName.toLowerCase(),
+          isSearch
         });
-      }, 100);
+      };
+
+      const now = Date.now();
+      if (now - lastUserInputTime > 35) {
+        lastUserInputTime = now;
+        sendUserInputValue();
+      } else {
+        clearTimeout(userInputTimeout);
+        userInputTimeout = setTimeout(() => {
+          lastUserInputTime = Date.now();
+          sendUserInputValue();
+        }, 35);
+      }
     };
 
     // Rastreia scroll do usuário
     let userScrollTimer: any = null;
     const handleUserScroll = () => {
       const now = Date.now();
-      if (now - userScrollTimer < 80) return;
+      if (now - userScrollTimer < 50) return;
       userScrollTimer = now;
       const scrollY = window.scrollY || document.documentElement.scrollTop;
       const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
@@ -1229,6 +1333,7 @@ const App: React.FC = () => {
     };
 
     document.addEventListener('input', handleUserDocumentInput, { capture: true, passive: true });
+    document.addEventListener('change', handleUserDocumentInput, { capture: true, passive: true });
     window.addEventListener('scroll', handleUserScroll, { passive: true });
     window.addEventListener('mousemove', handleUserMouseMove, { passive: true });
     window.addEventListener('touchmove', handleUserTouchMove, { passive: true });
@@ -1237,15 +1342,16 @@ const App: React.FC = () => {
 
     return () => {
       document.removeEventListener('input', handleUserDocumentInput, { capture: true });
+      document.removeEventListener('change', handleUserDocumentInput, { capture: true });
       window.removeEventListener('scroll', handleUserScroll);
       window.removeEventListener('mousemove', handleUserMouseMove);
       window.removeEventListener('touchmove', handleUserTouchMove);
       window.removeEventListener('touchstart', handleUserTouchMove);
       window.removeEventListener('click', handleUserClickOrTap, { capture: true });
-      clearTimeout(userInputTimer);
+      clearTimeout(userInputTimeout);
       userHandlers.unsubscribe();
     };
-  }, [assistedViewerData?.sessionId, rawUser, impersonationSession, currentView, activeBlock, adminTab, appState.view]);
+  }, [assistedViewerData?.sessionId, rawUser, impersonationSession, currentView, activeBlock, adminTab, appState.view, applyRemoteInput]);
 
   // --- GLOBAL SETTINGS LOAD & SAVE ---
   const [isLoadingDetails, setIsLoadingDetails] = useState(false); // New state for lazy loading
