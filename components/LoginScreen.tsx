@@ -151,37 +151,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
 
         setIsUpdatingSystem(true);
 
-        try {
-          const WINDOW_KEY = 'sys_refresh_window_v1';
-          const FORCED_WINDOW_KEY = 'sys_forced_refresh_target_v1';
-          const now = Date.now();
-          const d = new Date(now);
-          const hour = d.getHours();
-          let logicalDate = d;
-          let block = "18";
-          if (hour >= 7 && hour < 12) block = "07";
-          else if (hour >= 12 && hour < 18) block = "12";
-          else if (hour < 7) logicalDate = new Date(now - 7 * 60 * 60 * 1000);
-
-          const currentWindow = `${logicalDate.getFullYear()}-${logicalDate.getMonth()}-${logicalDate.getDate()}-${block}`;
-
-          if ('caches' in window) {
-            const keys = await caches.keys();
-            await Promise.all(keys.map(k => caches.delete(k)));
-          }
-          localStorage.setItem(WINDOW_KEY, currentWindow);
-
-          const { data: orgData } = await supabase.from('organization_settings').select('system_update_target').eq('id', 'global_config').single();
-          if (orgData?.system_update_target) {
-            localStorage.setItem(FORCED_WINDOW_KEY, orgData.system_update_target.toString());
-            localStorage.setItem('system_applied_version', orgData.system_update_target.toString());
-            localStorage.setItem('last_forced_update_target', orgData.system_update_target.toString());
-          }
-        } catch (e) {
-          console.error("Silent cache clear failed", e);
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 2500));
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         if (onLoginSuccess) {
           onLoginSuccess();

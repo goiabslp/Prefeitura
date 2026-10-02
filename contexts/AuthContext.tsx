@@ -9,7 +9,7 @@ interface AuthContextType {
     session: Session | null;
     loading: boolean;
     signIn: (email: string, password: string) => Promise<{ error: any }>;
-    signOut: () => Promise<void>;
+    signOut: (reason?: string) => Promise<void>;
     refreshUser: () => Promise<void>;
 }
 
@@ -18,13 +18,20 @@ const AuthContext = createContext<AuthContextType>({
     session: null,
     loading: true,
     signIn: async () => ({ error: 'Not implemented' }),
-    signOut: async () => { },
+    signOut: async (_reason?: string) => { },
     refreshUser: async () => { },
 });
 
 const hasStoredSession = (): boolean => {
     if (typeof window === 'undefined') return false;
     try {
+        for (let i = 0; i < window.localStorage.length; i++) {
+            const key = window.localStorage.key(i);
+            if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                const val = window.localStorage.getItem(key);
+                if (val && val !== 'null' && val !== '{}') return true;
+            }
+        }
         for (let i = 0; i < window.sessionStorage.length; i++) {
             const key = window.sessionStorage.key(i);
             if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
@@ -75,6 +82,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     const currentSession = await supabase.auth.getSession();
                     if (currentSession.data.session?.user?.id === payload.payload.userId) {
                         alert('Seu usuário foi bloqueado por um administrador. Você foi desconectado.');
+                        console.warn(`[AUTH-DIAGNOSTIC] Origem do logout:
+função: onBroadcast(user-blocked)
+arquivo: contexts/AuthContext.tsx
+motivo: Usuário bloqueado via broadcast em tempo real
+updateId: N/A
+userId: ${payload.payload.userId}
+authEvent: user-blocked
+timestamp: ${new Date().toISOString()}`);
                         await supabase.auth.signOut();
                         setUser(null);
                         setSession(null);
@@ -131,6 +146,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 };
 
                 if (appUser.status === 'blocked') {
+                    console.warn(`[AUTH-DIAGNOSTIC] Origem do logout:
+função: fetchProfile
+arquivo: contexts/AuthContext.tsx
+motivo: Status da conta é blocked no profiles
+updateId: N/A
+userId: ${appUser.id}
+authEvent: fetchProfile_blocked
+timestamp: ${new Date().toISOString()}`);
                     alert('Sua conta está bloqueada pelo administrador.');
                     await supabase.auth.signOut();
                     setUser(null);
@@ -174,7 +197,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { data, error };
     };
 
-    const signOut = async () => {
+    const signOut = async (reason = 'Ação manual do usuário / Logout') => {
+        console.warn(`[AUTH-DIAGNOSTIC] Origem do logout:
+função: signOut
+arquivo: contexts/AuthContext.tsx
+motivo: ${reason}
+updateId: N/A
+userId: ${user?.id || 'N/A'}
+authEvent: explicit_signOut
+timestamp: ${new Date().toISOString()}`);
         await supabase.auth.signOut();
         setUser(null);
         setSession(null);

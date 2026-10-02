@@ -4,8 +4,44 @@ import { User } from '../types';
 
 declare const __LATEST_COMMIT__: string | undefined;
 
+export const LAST_PROCESSED_UPDATE_ID_KEY = 'last_processed_update_id';
 export const APPLIED_SYSTEM_VERSION_KEY = 'system_applied_version';
 export const LAST_FORCED_UPDATE_KEY = 'last_forced_update_target';
+
+/**
+ * Verifica se um updateId já foi executado e processado no navegador do usuário
+ */
+export const isUpdateAlreadyProcessed = (updateId: number | string | null | undefined): boolean => {
+  if (!updateId) return true;
+  try {
+    const parsedId = Number(updateId);
+    if (isNaN(parsedId) || parsedId <= 0) return true;
+
+    const lastProcessed = localStorage.getItem(LAST_PROCESSED_UPDATE_ID_KEY) || 
+                          localStorage.getItem(LAST_FORCED_UPDATE_KEY) ||
+                          localStorage.getItem(APPLIED_SYSTEM_VERSION_KEY);
+    if (!lastProcessed) return false;
+
+    const lastProcessedNum = Number(lastProcessed);
+    return !isNaN(lastProcessedNum) && lastProcessedNum >= parsedId;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Registra a conclusão e processamento permanente de um updateId para nunca mais ser reprocessado
+ */
+export const markUpdateAsProcessed = (updateId: number | string): void => {
+  try {
+    const val = String(updateId);
+    localStorage.setItem(LAST_PROCESSED_UPDATE_ID_KEY, val);
+    localStorage.setItem(LAST_FORCED_UPDATE_KEY, val);
+    localStorage.setItem(APPLIED_SYSTEM_VERSION_KEY, val);
+  } catch (e) {
+    console.warn('[SystemUpdate] Erro ao gravar updateId processado:', e);
+  }
+};
 
 export interface SystemUpdateInfo {
   target: number;
@@ -204,17 +240,13 @@ export const sendRealtimeBroadcast = async (channelName: string, event: string, 
  * Executa a limpeza restrita de dados locais e caches controlados da aplicação:
  * - Cache Storage da aplicação
  * - Service Worker registrations
- * - sessionStorage da aplicação
- * - Chaves de cache da aplicação no localStorage
- * - Grava a versão aplicada para evitar loops infinitos
+ * - Chaves de cache de dados da aplicação no localStorage (PRESERVANDO AUTENTICAÇÃO)
+ * - NUNCA utiliza localStorage.clear() ou sessionStorage.clear()
+ * - Grava a versão/updateId como processado para nunca repetir
  */
 export const performClientCleanup = async (newVersion?: number | string): Promise<void> => {
   try {
     const versionToSave = String(newVersion || Date.now());
-
-    // Preservar credenciais salvas se o usuário marcou "lembrar de mim"
-    const savedUser = localStorage.getItem('remember_user');
-    const savedPass = localStorage.getItem('remember_pass');
 
     // 1. Limpeza do Cache Storage da aplicação
     if (typeof window !== 'undefined' && 'caches' in window) {
@@ -226,7 +258,7 @@ export const performClientCleanup = async (newVersion?: number | string): Promis
       }
     }
 
-    // 2. Desregistrar e atualizar Service Workers
+    // 2. Desregistrar e atualizar Service Workers sem interferir na sessão
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
       try {
         const registrations = await navigator.serviceWorker.getRegistrations();
@@ -238,14 +270,7 @@ export const performClientCleanup = async (newVersion?: number | string): Promis
       }
     }
 
-    // 3. Limpar Session Storage
-    try {
-      sessionStorage.clear();
-    } catch (err) {
-      console.warn('[SystemUpdate] Erro ao limpar sessionStorage:', err);
-    }
-
-    // 4. Limpeza controlada do Local Storage (dados temporários da aplicação)
+    // 3. Limpeza controlada e seletiva de chaves de dados temporários no localStorage (PRESERVANDO AUTENTICAÇÃO)
     try {
       const appCacheKeys = [
         'cachedPersons',
@@ -262,25 +287,26 @@ export const performClientCleanup = async (newVersion?: number | string): Promis
 
       appCacheKeys.forEach(k => localStorage.removeItem(k));
 
-      // Limpa todas as chaves dinâmicas de rascunhos e caches de requisições
+      // Limpa chaves dinâmicas que começam explicitamente com prefixos de cache de dados
+      const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key && (key.startsWith('cache_') || key.startsWith('draft_') || key.startsWith('temp_'))) {
-          localStorage.removeItem(key);
+          // Proteção absoluta: NUNCA remover chaves de autenticação
+          if (!key.startsWith('sb-') && !key.includes('auth') && !key.includes('remember_')) {
+            keysToRemove.push(key);
+          }
         }
       }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
 
-      // 5. Registra versão aplicada para evitar loops
-      localStorage.setItem(APPLIED_SYSTEM_VERSION_KEY, versionToSave);
-      localStorage.setItem(LAST_FORCED_UPDATE_KEY, versionToSave);
-
-      if (savedUser) localStorage.setItem('remember_user', savedUser);
-      if (savedPass) localStorage.setItem('remember_pass', savedPass);
+      // 4. Registra updateId como processado para evitar loops ou re-execução
+      markUpdateAsProcessed(versionToSave);
     } catch (err) {
-      console.warn('[SystemUpdate] Erro ao limpar localStorage:', err);
+      console.warn('[SystemUpdate] Erro ao limpar chaves temporárias:', err);
     }
 
-    // 6. Limpar cache de logs de auditoria
+    // 5. Limpar cache de logs de auditoria
     try {
       auditLogService.clearCache();
     } catch (err) {
@@ -655,26 +681,21 @@ export const checkAndApplyUserOfflineUpdate = async (
   return false;
 };
 
-/**
- * Verifica se a versão atual do sistema exige atualização offline/boot global
- */
 export const checkAndApplyOfflineUpdate = async (
   serverTarget: number | null,
   signOutFn?: () => Promise<void>
 ): Promise<boolean> => {
   if (!serverTarget) return false;
 
-  const appliedVersion = localStorage.getItem(APPLIED_SYSTEM_VERSION_KEY) || localStorage.getItem(LAST_FORCED_UPDATE_KEY);
-  const now = Date.now();
+  if (isUpdateAlreadyProcessed(serverTarget)) {
+    return false;
+  }
 
-  // Se o servidor exige uma versão e localmente ainda não foi registrada
-  if (!appliedVersion || parseInt(appliedVersion, 10) < serverTarget) {
-    // Se o alvo já passou, apenas marca como aplicada localmente sem deslogar o usuário
-    if (now >= serverTarget) {
-      localStorage.setItem(APPLIED_SYSTEM_VERSION_KEY, String(serverTarget));
-      localStorage.setItem(LAST_FORCED_UPDATE_KEY, String(serverTarget));
-      return false;
-    }
+  const now = Date.now();
+  // Se o alvo já passou, apenas marca como processada localmente sem deslogar o usuário
+  if (now >= serverTarget) {
+    markUpdateAsProcessed(serverTarget);
+    return false;
   }
 
   return false;

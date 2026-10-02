@@ -140,7 +140,7 @@ import { UnauthorizedAccessModal } from './components/common/UnauthorizedAccessM
 import { canUserAccessRoute, cleanPermissionsArray } from './services/permissionService';
 import { SystemAIAssistantScreen } from './components/ai/SystemAIAssistantScreen';
 import { EgressMonitorModal } from './components/admin/EgressMonitorModal';
-import { performClientCleanup, checkAndApplyOfflineUpdate, checkAndApplyUserOfflineUpdate, markUserUpdateCompleted, acknowledgeUserUpdate } from './services/systemUpdateService';
+import { performClientCleanup, checkAndApplyOfflineUpdate, checkAndApplyUserOfflineUpdate, markUserUpdateCompleted, acknowledgeUserUpdate, isUpdateAlreadyProcessed, markUpdateAsProcessed } from './services/systemUpdateService';
 
 const VIEW_TO_PATH: Record<string, string> = {
   'login': '/Login',
@@ -1594,6 +1594,23 @@ const App: React.FC = () => {
     }
   };
 
+  // --- CONSUMO E REMOÇÃO IMEDIATA DA FLAG ?update=1 DA URL ---
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      if (searchParams.has('update')) {
+        searchParams.delete('update');
+        const newSearch = searchParams.toString();
+        const cleanPath = window.location.pathname + (newSearch ? `?${newSearch}` : '') + window.location.hash;
+        window.history.replaceState(null, '', cleanPath);
+        console.log('[SystemUpdate] Flag update=1 consumida e removida da URL com sucesso.');
+      }
+    } catch (e) {
+      console.warn('[SystemUpdate] Erro ao consumir flag update da URL:', e);
+    }
+  }, [currentUser]);
+
   useEffect(() => {
     const loadSettings = async () => {
       const settings = await settingsService.getGlobalSettings();
@@ -1612,10 +1629,11 @@ const App: React.FC = () => {
           return newState;
         });
 
-        // Verifica se há atualização global ativa no futuro (sem deslogar quem está entrando)
+        // Verifica se há atualização global ativa no futuro (sem deslogar quem está entrando e ignorando se já foi processada)
         const { data } = await supabase.from('organization_settings').select('system_update_target').eq('id', 'global_config').single();
-        if (data?.system_update_target && Number(data.system_update_target) > Date.now()) {
-          setSystemUpdateTarget(Number(data.system_update_target));
+        const serverTarget = data?.system_update_target ? Number(data.system_update_target) : null;
+        if (serverTarget && serverTarget > Date.now() && !isUpdateAlreadyProcessed(serverTarget)) {
+          setSystemUpdateTarget(serverTarget);
           setIsUpdateModalDismissed(false);
         } else {
           setSystemUpdateTarget(null);
@@ -1924,7 +1942,7 @@ const App: React.FC = () => {
           const now = Date.now();
           if (payload.new && 'system_update_target' in payload.new) {
             const target = Number(payload.new.system_update_target);
-            if (target && target > now) {
+            if (target && target > now && !isUpdateAlreadyProcessed(target)) {
               setSystemUpdateTarget(target);
               setSystemUpdateDetails({
                 isIndividual: false,
@@ -1945,8 +1963,9 @@ const App: React.FC = () => {
               ) as any;
 
             if (myReq && (myReq.status === 'pending' || myReq.status === 'notified' || myReq.status === 'in_progress') && myReq.target) {
-              if (Number(myReq.target) > now) {
-                setSystemUpdateTarget(Number(myReq.target));
+              const reqTarget = Number(myReq.target);
+              if (reqTarget > now && !isUpdateAlreadyProcessed(reqTarget)) {
+                setSystemUpdateTarget(reqTarget);
                 setSystemUpdateDetails({
                   isIndividual: true,
                   triggeredBy: myReq.triggeredBy,
@@ -1957,7 +1976,7 @@ const App: React.FC = () => {
                   acknowledgeUserUpdate(activeUserId, myReq.version || myReq.target, 'notified');
                 }
               } else if (activeUserId) {
-                // Atualização anterior já expirada: marca silenciosamente como concluída
+                // Atualização anterior já expirada ou já processada: marca silenciosamente como concluída
                 markUserUpdateCompleted(activeUserId, myReq.version || myReq.target);
               }
             }
@@ -1970,7 +1989,8 @@ const App: React.FC = () => {
         async (payload) => {
           const p = payload.payload;
           const now = Date.now();
-          if (p?.target && Number(p.target) > now) {
+          const targetNum = p?.target ? Number(p.target) : 0;
+          if (targetNum > now && !isUpdateAlreadyProcessed(targetNum)) {
             const activeUserId = currentUserRef.current?.id;
             const activeUsername = currentUserRef.current?.username;
             const isForMe = p.targetUserId
@@ -1981,7 +2001,7 @@ const App: React.FC = () => {
             if (p.targetUserId) {
               if (isForMe && activeUserId) {
                 console.log('[SystemUpdate] Evento de atualização individual recebido no canal global:', p);
-                setSystemUpdateTarget(Number(p.target));
+                setSystemUpdateTarget(targetNum);
                 setSystemUpdateDetails({
                   isIndividual: true,
                   triggeredBy: p.triggeredBy || 'Administrador',
@@ -1991,7 +2011,7 @@ const App: React.FC = () => {
                 await acknowledgeUserUpdate(activeUserId, p.version || p.target, 'notified');
               }
             } else {
-              setSystemUpdateTarget(Number(p.target));
+              setSystemUpdateTarget(targetNum);
               setSystemUpdateDetails({
                 isIndividual: false,
                 triggeredBy: p.triggeredBy || 'Administrador',
@@ -2024,9 +2044,10 @@ const App: React.FC = () => {
         async (payload) => {
           const p = payload.payload;
           const now = Date.now();
-          if (p?.target && Number(p.target) > now) {
+          const targetNum = p?.target ? Number(p.target) : 0;
+          if (targetNum > now && !isUpdateAlreadyProcessed(targetNum)) {
             console.log('[SystemUpdate] Evento de atualização recebido no canal dedicado do usuário:', p);
-            setSystemUpdateTarget(Number(p.target));
+            setSystemUpdateTarget(targetNum);
             setSystemUpdateDetails({
               isIndividual: true,
               triggeredBy: p.triggeredBy || 'Administrador',
@@ -2184,6 +2205,16 @@ const App: React.FC = () => {
         setCurrentView('login');
         if (path !== '/' && path !== '/login') {
           window.history.replaceState({}, '', '/Login');
+        }
+        return;
+      }
+
+      // Se há usuário autenticado e a rota na URL for a raiz ou tela de login, direciona imediatamente para Página Inicial
+      if (path === '/' || path === '/login') {
+        setCurrentView('home');
+        setActiveBlock(null);
+        if (window.location.pathname.toLowerCase() !== '/paginainicial') {
+          window.history.replaceState({}, '', '/PaginaInicial');
         }
         return;
       }
@@ -2604,9 +2635,16 @@ const App: React.FC = () => {
       return;
     }
 
+    if (isUpdateAlreadyProcessed(systemUpdateTarget)) {
+      setSystemUpdateCountdown(null);
+      setSystemUpdateTarget(null);
+      return;
+    }
+
     const now = Date.now();
     // Se o target já expirou antes do início da contagem, limpa o estado e não exibe contagem
     if (now >= systemUpdateTarget) {
+      markUpdateAsProcessed(systemUpdateTarget);
       setSystemUpdateCountdown(null);
       setSystemUpdateTarget(null);
       return;
@@ -2622,6 +2660,7 @@ const App: React.FC = () => {
         // Janela no momento exato do término
         setSystemUpdateCountdown(0);
       } else {
+        markUpdateAsProcessed(systemUpdateTarget);
         setSystemUpdateCountdown(null);
         setSystemUpdateTarget(null);
       }
@@ -2657,14 +2696,25 @@ const App: React.FC = () => {
   const handleImmediateSystemUpdateLogout = useCallback(async () => {
     try {
       const target = systemUpdateTarget || Date.now();
+      markUpdateAsProcessed(target);
       await performClientCleanup(target);
       if (currentUser?.id) {
         await markUserUpdateCompleted(currentUser.id, target);
       }
-      await signOut();
+      console.warn(`[AUTH-DIAGNOSTIC] Origem do logout:
+função: handleImmediateSystemUpdateLogout
+arquivo: App.tsx
+motivo: Conclusão do ciclo de atualização do sistema
+updateId: ${target}
+userId: ${currentUser?.id || 'N/A'}
+authEvent: system_update_logout
+timestamp: ${new Date().toISOString()}`);
+      await signOut('Atualização do Sistema Concluída');
     } catch (e) {
       console.error('Erro na limpeza de cache/logout imediato:', e);
     } finally {
+      setSystemUpdateCountdown(null);
+      setSystemUpdateTarget(null);
       window.location.href = '/Login?update=1';
     }
   }, [systemUpdateTarget, currentUser?.id, signOut]);
@@ -2672,11 +2722,9 @@ const App: React.FC = () => {
   // Timeout de segurança para caso o modal não seja concluído por qualquer exceção externa
   useEffect(() => {
     if (systemUpdateCountdown === 0 && currentUser && systemUpdateTarget) {
-      const FORCED_KEY = 'last_forced_update_target';
-      const alreadyPurged = localStorage.getItem(FORCED_KEY);
-
-      if (alreadyPurged && parseInt(alreadyPurged) >= systemUpdateTarget) {
+      if (isUpdateAlreadyProcessed(systemUpdateTarget)) {
         setSystemUpdateCountdown(null);
+        setSystemUpdateTarget(null);
         return;
       }
 
@@ -2712,9 +2760,12 @@ const App: React.FC = () => {
     if (currentUser && currentView === 'login') {
       // Prevent auto-redirect if we are explicitly showing the login transition modal
       if (!isLoginTransitioning) {
-        const path = window.location.pathname;
-        if (path === '/' || path === '/Login') {
+        const path = window.location.pathname.toLowerCase();
+        if (path === '/' || path === '/login') {
           setCurrentView('home');
+          if (window.location.pathname.toLowerCase() !== '/paginainicial') {
+            window.history.replaceState({}, '', '/PaginaInicial');
+          }
         }
       }
     } else if (!currentUser && currentView !== 'login' && !isPublicView) {
