@@ -2275,7 +2275,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                     Atualizar sistema deste usuário?
                   </h3>
                   <p className="text-sm text-slate-600 font-medium leading-relaxed px-2">
-                    O usuário <b className="font-bold text-slate-800">{userUpdateModal.targetUser.name}</b> terá sua sessão atualizada e os arquivos temporários da aplicação serão renovados na próxima oportunidade segura.
+                    O usuário <b className="font-bold text-slate-800">{userUpdateModal.targetUser.name}</b> receberá um aviso imediato com <b className="text-orange-600 font-bold">contador regressivo de 10 segundos</b>, sendo desconectado para aplicação de toda a limpeza de cache e renovação dos arquivos temporários.
                   </p>
                 </div>
 

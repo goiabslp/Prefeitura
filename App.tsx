@@ -60,7 +60,7 @@ import * as vehicleSchedulingService from './services/vehicleSchedulingService';
 import { AbastecimentoService } from './services/abastecimentoService';
 import { marketingSyncService } from './services/marketingSyncService';
 import { saveRhHorasExtras, updateRhHorasExtras } from './services/rhService';
-import { Send, CheckCircle2, X, Download, Save, FilePlus, Package, History, FileText, Settings, LogOut, ChevronRight, ChevronDown, Search, Filter, Upload, Trash2, Printer, Edit, ArrowLeft, Loader2, ShieldAlert, MousePointer, Tv, Power, ShieldCheck, Clock } from 'lucide-react';
+import { Send, CheckCircle2, X, Download, Save, FilePlus, Package, History, FileText, Settings, LogOut, ChevronRight, ChevronDown, Search, Filter, Upload, Trash2, Printer, Edit, ArrowLeft, Loader2, ShieldAlert, MousePointer, Tv, Power, ShieldCheck, Clock, RefreshCw } from 'lucide-react';
 
 // Components
 import { LoginScreen } from './components/LoginScreen';
@@ -1359,6 +1359,7 @@ const App: React.FC = () => {
   const [lastRefresh, setLastRefresh] = useState(0);
   const [systemUpdateTarget, setSystemUpdateTarget] = useState<number | null>(null);
   const [systemUpdateCountdown, setSystemUpdateCountdown] = useState<number | null>(null);
+  const [systemUpdateDetails, setSystemUpdateDetails] = useState<{ isIndividual?: boolean; triggeredBy?: string; triggeredAt?: string } | null>(null);
   const [translatedCommitMsg, setTranslatedCommitMsg] = useState<string>('Carregando atualizações...');
   const [isUpdateModalDismissed, setIsUpdateModalDismissed] = useState(false);
 
@@ -1769,6 +1770,11 @@ const App: React.FC = () => {
         (payload) => {
           if (payload.new && 'system_update_target' in payload.new) {
             setSystemUpdateTarget(payload.new.system_update_target as number);
+            setSystemUpdateDetails({
+              isIndividual: false,
+              triggeredBy: payload.new.system_update_by_name || 'Administrador',
+              triggeredAt: payload.new.system_update_at
+            });
             setIsUpdateModalDismissed(false);
           }
           const userRequests = (payload.new?.ui_config as any)?.user_update_requests;
@@ -1777,6 +1783,11 @@ const App: React.FC = () => {
             const myReq = userRequests[activeUserId];
             if (myReq.status === 'pending' && myReq.target) {
               setSystemUpdateTarget(myReq.target);
+              setSystemUpdateDetails({
+                isIndividual: true,
+                triggeredBy: myReq.triggeredBy,
+                triggeredAt: myReq.triggeredAt
+              });
               setIsUpdateModalDismissed(false);
             }
           }
@@ -1792,10 +1803,20 @@ const App: React.FC = () => {
             if (p.targetUserId) {
               if (activeUserId === p.targetUserId) {
                 setSystemUpdateTarget(p.target);
+                setSystemUpdateDetails({
+                  isIndividual: true,
+                  triggeredBy: p.triggeredBy,
+                  triggeredAt: p.triggeredAt
+                });
                 setIsUpdateModalDismissed(false);
               }
             } else {
               setSystemUpdateTarget(p.target);
+              setSystemUpdateDetails({
+                isIndividual: false,
+                triggeredBy: p.triggeredBy,
+                triggeredAt: p.triggeredAt
+              });
               setIsUpdateModalDismissed(false);
             }
           }
@@ -2410,6 +2431,22 @@ const App: React.FC = () => {
     verifyPendingUserUpdate();
   }, [currentUser?.id, authLoading, signOut]);
 
+  // Desconexão e Limpeza Completa de Cache ao término do countdown ou por ação imediata
+  const handleImmediateSystemUpdateLogout = useCallback(async () => {
+    try {
+      const target = systemUpdateTarget || Date.now();
+      await performClientCleanup(target);
+      if (currentUser?.id) {
+        await markUserUpdateCompleted(currentUser.id, target);
+      }
+      await signOut();
+    } catch (e) {
+      console.error('Erro na limpeza de cache/logout imediato:', e);
+    } finally {
+      window.location.href = '/Login?update=1';
+    }
+  }, [systemUpdateTarget, currentUser?.id, signOut]);
+
   // Forçar Desconexão e Limpeza de Cache APENAS para usuários autenticados no momento do término do countdown
   useEffect(() => {
     if (systemUpdateCountdown === 0 && currentUser && systemUpdateTarget) {
@@ -2421,23 +2458,9 @@ const App: React.FC = () => {
         return;
       }
 
-      const performGlobalLogoutAndCachePurge = async () => {
-        try {
-          await performClientCleanup(systemUpdateTarget);
-          if (currentUser?.id) {
-            await markUserUpdateCompleted(currentUser.id, systemUpdateTarget);
-          }
-          await signOut();
-        } catch (e) {
-          console.error('Erro na limpeza de cache/logout:', e);
-        } finally {
-          window.location.href = '/Login?update=1';
-        }
-      };
-
-      performGlobalLogoutAndCachePurge();
+      handleImmediateSystemUpdateLogout();
     }
-  }, [systemUpdateCountdown, currentUser, systemUpdateTarget, signOut]);
+  }, [systemUpdateCountdown, currentUser, systemUpdateTarget, handleImmediateSystemUpdateLogout]);
 
   // Fetch Licitacao Global Protocol Counter
   useEffect(() => {
@@ -6608,57 +6631,79 @@ const App: React.FC = () => {
 
       {/* GLOBAL SYSTEM UPDATE NOTIFICATION (TRIGERRED BY ADMIN) */}
       {systemUpdateCountdown !== null && systemUpdateCountdown > 0 && !isUpdateModalDismissed && createPortal(
-        <div className="fixed inset-0 z-[1000] bg-slate-900/10 backdrop-blur-[2px] flex items-center justify-center p-6 animate-fade-in pointer-events-none">
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 p-10 text-center transform scale-in-center overflow-hidden relative pointer-events-auto shadow-amber-500/10 active:scale-95 transition-all">
-            {/* Background Accent */}
-            <div className="absolute top-0 left-0 right-0 h-3 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-600"></div>
+        <div className="fixed inset-0 z-[9999] bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-fade-in pointer-events-auto">
+          <div className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 p-6 sm:p-8 text-center transform scale-in-center overflow-hidden relative space-y-6">
+            {/* Faixa superior com gradiente */}
+            <div className="absolute top-0 left-0 right-0 h-2.5 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-600"></div>
 
-            <button
-              onClick={() => setIsUpdateModalDismissed(true)}
-              className="absolute top-4 right-4 p-2 text-slate-300 hover:text-slate-500 hover:bg-slate-50 rounded-full transition-all"
-              title="Fechar Aviso"
-            >
-              <X className="w-6 h-6" />
-            </button>
-
-            <div className="w-20 h-20 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-8 text-amber-500 ring-8 ring-amber-500/5">
-              <Settings className="w-10 h-10 animate-spin-slow" />
+            <div className="relative w-24 h-24 mx-auto flex items-center justify-center">
+              {/* Anel de progresso circular animado */}
+              <div className="absolute inset-0 rounded-full bg-orange-50 ring-8 ring-orange-100/50 animate-pulse"></div>
+              <div className="relative flex flex-col items-center justify-center text-orange-600">
+                <span className="text-3xl font-black tracking-tighter tabular-nums leading-none">
+                  {systemUpdateCountdown}
+                </span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-orange-500 mt-0.5">
+                  segundos
+                </span>
+              </div>
             </div>
 
-            <h2 className="text-2xl font-black text-slate-900 mb-4 tracking-tighter uppercase leading-tight">
-              ⚠️ O sistema será atualizado em {systemUpdateCountdown}s
-            </h2>
-
-            <p className="text-sm text-slate-500 font-medium leading-relaxed mb-6 px-4">
-              Um administrador iniciou uma atualização crítica. Você pode fechar este aviso para terminar o que está fazendo, mas salve seu trabalho.
-            </p>
-
-            {/* Commit Message Box */}
-            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 mb-6 text-left mx-4 relative overflow-hidden group shadow-sm transition-all hover:shadow-md">
-              <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-gradient-to-b from-amber-400 to-amber-600 rounded-l-2xl"></div>
-              <h4 className="text-xs font-black text-slate-800 mb-1.5 flex items-center gap-2 uppercase tracking-widest pl-2">
-                ✨ O que há de novo:
-              </h4>
-              <p className="text-sm text-slate-600 font-medium leading-relaxed italic pl-2">
-                {translatedCommitMsg}
+            <div className="space-y-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-100/80 text-orange-700 text-[10px] font-black uppercase tracking-wider">
+                <span className="w-2 h-2 rounded-full bg-orange-500 animate-ping"></span>
+                {systemUpdateDetails?.isIndividual ? 'Atualização Individual do Usuário' : 'Atualização Geral do Sistema'}
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-tight">
+                {systemUpdateDetails?.isIndividual
+                  ? 'Sua sessão está sendo renovada'
+                  : 'O sistema será reiniciado'}
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed px-2">
+                {systemUpdateDetails?.isIndividual
+                  ? 'O administrador solicitou a renovação e limpeza completa de arquivos temporários do seu usuário. A aplicação será reiniciada em instantes.'
+                  : 'Uma atualização crítica do sistema está em andamento. Todos os arquivos e dados de cache serão atualizados.'}
               </p>
             </div>
 
-            <div className="mt-8 pt-8 border-t border-slate-50 flex items-center justify-center">
-              <div className="flex items-center gap-3 text-xs font-black text-amber-600 bg-amber-50 py-4 rounded-2xl px-8 uppercase tracking-widest shadow-inner">
-                <span className="w-2.5 h-2.5 bg-amber-500 rounded-full animate-ping"></span>
-                Confira o tempo no topo da tela
+            {/* Barra de Progresso Regressiva */}
+            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-amber-500 to-orange-500 h-full rounded-full transition-all duration-1000 ease-linear"
+                style={{
+                  width: `${Math.min(100, Math.max(0, (systemUpdateCountdown / (systemUpdateDetails?.isIndividual ? 10 : 60)) * 100))}%`
+                }}
+              ></div>
+            </div>
+
+            {/* Commit message se for atualização global com mensagem */}
+            {!systemUpdateDetails?.isIndividual && translatedCommitMsg && (
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-left relative overflow-hidden">
+                <div className="absolute top-0 left-0 bottom-0 w-1 bg-amber-500"></div>
+                <h4 className="text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1">
+                  O que há de novo:
+                </h4>
+                <p className="text-xs text-slate-600 font-medium italic">
+                  {translatedCommitMsg}
+                </p>
               </div>
+            )}
+
+            {/* Botão de Ação Imediata */}
+            <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={handleImmediateSystemUpdateLogout}
+                className="w-full py-4 px-6 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 active:scale-95 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-orange-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <RefreshCw className="w-4 h-4 animate-spin-slow" />
+                <span>Sair e Renovar Agora ({systemUpdateCountdown}s)</span>
+              </button>
+              <p className="text-[11px] text-slate-400 font-medium">
+                Desconexão e limpeza automática ao zerar o contador
+              </p>
             </div>
           </div>
-
-          <style dangerouslySetInnerHTML={{
-            __html: `
-            @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-            @keyframes scale-in-center { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-            .animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
-            .scale-in-center { animation: scale-in-center 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
-          `}} />
         </div>,
         document.body
       )}

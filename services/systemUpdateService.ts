@@ -210,7 +210,8 @@ export const triggerUserSystemUpdate = async (
     return { success: false, target: 0, error: 'Acesso negado: Somente administradores podem atualizar usuários.' };
   }
 
-  const targetEpoch = Date.now() + 60000; // 60 segundos para oportunidade segura
+  // Contagem regressiva imediata de 10 segundos
+  const targetEpoch = Date.now() + 10000; // 10 segundos imediatos
   const adminName = adminUser.name || 'Administrador';
   const adminId = adminUser.id || 'admin';
   const nowIso = new Date().toISOString();
@@ -229,6 +230,8 @@ export const triggerUserSystemUpdate = async (
             payload: {
               target: targetEpoch,
               version: targetEpoch,
+              countdownSeconds: 10,
+              isIndividualUserUpdate: true,
               targetUserId: targetUser.id,
               targetUserName: targetUser.name,
               targetUserUsername: targetUser.username,
