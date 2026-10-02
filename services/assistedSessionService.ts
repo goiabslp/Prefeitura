@@ -40,6 +40,8 @@ export interface AssistedStateSnapshotPayload {
 export interface AssistedMouseMovePayload {
   xPct: number;
   yPct: number;
+  isTouch?: boolean;
+  userName?: string;
   timestamp: number;
   source?: 'admin' | 'user';
 }
@@ -50,6 +52,8 @@ export interface AssistedClickPayload {
   tag?: string;
   text?: string;
   selector?: string;
+  isTouch?: boolean;
+  userName?: string;
   timestamp: number;
   source?: 'admin' | 'user';
 }
@@ -110,6 +114,17 @@ export interface AssistedSessionListeners {
   onPresenceChange?: (hasTargetUserOnline: boolean) => void;
   onSessionEnded?: () => void;
   onSyncStatusChange?: (status: AssistedSyncStatus) => void;
+}
+
+export interface AdminSessionObserverListeners {
+  onStateSnapshot?: (payload: AssistedStateSnapshotPayload) => void;
+  onNavigation?: (payload: AssistedNavPayload) => void;
+  onInputChange?: (payload: AssistedInputPayload) => void;
+  onModalState?: (payload: AssistedModalPayload) => void;
+  onScroll?: (payload: AssistedScrollPayload) => void;
+  onClick?: (payload: AssistedClickPayload) => void;
+  onUserMouseMove?: (payload: AssistedMouseMovePayload) => void;
+  onUserTapPulse?: (payload: AssistedClickPayload) => void;
 }
 
 class AssistedSessionManager {
@@ -512,12 +527,14 @@ class AssistedSessionManager {
   /**
    * Transmite coordenadas do mouse
    */
-  broadcastMouseMove(xPct: number, yPct: number, source: 'admin' | 'user' = 'admin') {
+  broadcastMouseMove(xPct: number, yPct: number, isTouch: boolean = false, userName?: string, source: 'admin' | 'user' = 'admin') {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
 
     const payload: AssistedMouseMovePayload = {
       xPct,
       yPct,
+      isTouch,
+      userName,
       timestamp: Date.now(),
       source
     };
@@ -530,12 +547,12 @@ class AssistedSessionManager {
   }
 
   /**
-   * Transmite clique e interação
+   * Transmite clique/toque de indicação
    */
   broadcastClick(
     xPct: number, 
     yPct: number, 
-    targetInfo?: { tag?: string; text?: string; selector?: string },
+    targetInfo?: { tag?: string; text?: string; selector?: string; isTouch?: boolean; userName?: string },
     source: 'admin' | 'user' = 'admin'
   ) {
     if (!this.currentSession || this.isPaused || !this.activeChannel) return;
@@ -546,6 +563,8 @@ class AssistedSessionManager {
       tag: targetInfo?.tag,
       text: targetInfo?.text,
       selector: targetInfo?.selector,
+      isTouch: targetInfo?.isTouch,
+      userName: targetInfo?.userName,
       timestamp: Date.now(),
       source
     };
@@ -617,8 +636,7 @@ class AssistedSessionManager {
   }
 
   /**
-   * Conecta o cliente do usuário assistido ao canal da sessão para receber a transmissão
-   * ou espelhar a tela do usuário para o administrador no Modo Observador
+   * Conecta o cliente do usuário assistido ao canal da sessão para receber comandos e enviar transmissões
    */
   listenAsTargetUser(
     currentUser: User,
@@ -631,7 +649,9 @@ class AssistedSessionManager {
     sendUserInput: (input: Omit<AssistedInputPayload, 'timestamp' | 'source'>) => void;
     sendUserModal: (modalId: string, action: 'open' | 'close' | 'change_tab', data?: any) => void;
     sendUserScroll: (scrollPctY: number, scrollY: number) => void;
-    sendUserClick: (xPct: number, yPct: number, targetInfo?: { tag?: string; text?: string; selector?: string }) => void;
+    sendUserClick: (xPct: number, yPct: number, targetInfo?: { tag?: string; text?: string; selector?: string; isTouch?: boolean; userName?: string }) => void;
+    sendUserMouseMove: (xPct: number, yPct: number, isTouch?: boolean) => void;
+    sendUserTapPulse: (xPct: number, yPct: number, isTouch?: boolean) => void;
   } {
     if (!sessionId) {
       return {
@@ -641,7 +661,9 @@ class AssistedSessionManager {
         sendUserInput: () => {},
         sendUserModal: () => {},
         sendUserScroll: () => {},
-        sendUserClick: () => {}
+        sendUserClick: () => {},
+        sendUserMouseMove: () => {},
+        sendUserTapPulse: () => {}
       };
     }
 
@@ -798,7 +820,7 @@ class AssistedSessionManager {
       });
     };
 
-    const sendUserClick = (xPct: number, yPct: number, targetInfo?: { tag?: string; text?: string; selector?: string }) => {
+    const sendUserClick = (xPct: number, yPct: number, targetInfo?: { tag?: string; text?: string; selector?: string; isTouch?: boolean; userName?: string }) => {
       channel.send({
         type: 'broadcast',
         event: 'assisted-click',
@@ -808,6 +830,38 @@ class AssistedSessionManager {
           tag: targetInfo?.tag,
           text: targetInfo?.text,
           selector: targetInfo?.selector,
+          isTouch: targetInfo?.isTouch,
+          userName: targetInfo?.userName || currentUser.name,
+          source: 'user',
+          timestamp: Date.now()
+        }
+      });
+    };
+
+    const sendUserMouseMove = (xPct: number, yPct: number, isTouch: boolean = false) => {
+      channel.send({
+        type: 'broadcast',
+        event: 'assisted-mouse',
+        payload: {
+          xPct,
+          yPct,
+          isTouch,
+          userName: currentUser.name,
+          source: 'user',
+          timestamp: Date.now()
+        }
+      });
+    };
+
+    const sendUserTapPulse = (xPct: number, yPct: number, isTouch: boolean = false) => {
+      channel.send({
+        type: 'broadcast',
+        event: 'assisted-click',
+        payload: {
+          xPct,
+          yPct,
+          isTouch,
+          userName: currentUser.name,
           source: 'user',
           timestamp: Date.now()
         }
@@ -824,22 +878,17 @@ class AssistedSessionManager {
       sendUserInput,
       sendUserModal,
       sendUserScroll,
-      sendUserClick
+      sendUserClick,
+      sendUserMouseMove,
+      sendUserTapPulse
     };
   }
 
   /**
-   * Conecta o Administrador como receptor de eventos no Modo Observador
+   * Conecta o Administrador como receptor de eventos no Acompanhamento Assistido
    */
   listenAsAdminObserver(
-    listeners: {
-      onStateSnapshot?: (payload: AssistedStateSnapshotPayload) => void;
-      onNavigation?: (payload: AssistedNavPayload) => void;
-      onInputChange?: (payload: AssistedInputPayload) => void;
-      onModalState?: (payload: AssistedModalPayload) => void;
-      onScroll?: (payload: AssistedScrollPayload) => void;
-      onClick?: (payload: AssistedClickPayload) => void;
-    }
+    listeners: AdminSessionObserverListeners
   ): () => void {
     if (!this.activeChannel) return () => {};
 
@@ -886,9 +935,18 @@ class AssistedSessionManager {
       }
     });
 
+    ch.on('broadcast', { event: 'assisted-mouse' }, (event: any) => {
+      const payload: AssistedMouseMovePayload = event.payload;
+      if (payload && payload.source === 'user') {
+        listeners.onUserMouseMove?.(payload);
+      }
+    });
+
     ch.on('broadcast', { event: 'assisted-click' }, (event: any) => {
       const payload: AssistedClickPayload = event.payload;
       if (payload && payload.source === 'user') {
+        // Evento 100% visual de apontamento (ripple/pulso)
+        listeners.onUserTapPulse?.(payload);
         listeners.onClick?.(payload);
       }
     });

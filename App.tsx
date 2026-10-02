@@ -36,6 +36,7 @@ import {
 } from './services/assistedSessionService';
 import { AssistedSessionControlHUD } from './components/AssistedSessionControlHUD';
 import { AssistedUserViewerOverlay } from './components/AssistedUserViewerOverlay';
+import { AssistedVirtualCursorOverlay } from './components/AssistedVirtualCursorOverlay';
 import {
   INITIAL_STATE,
   DEFAULT_USERS,
@@ -752,68 +753,90 @@ const App: React.FC = () => {
     return unsub;
   }, []);
 
-  // 1. SINCRONIZAÇÃO QUANDO ADMINISTRADOR ESTÁ EM MODO OBSERVADOR (Espelha o usuário em tempo real)
+  // Estados do Cursor Assistido do Usuário Acompanhado (Apontador Virtual na tela do Admin)
+  const [assistedUserCursor, setAssistedUserCursor] = useState<AssistedMouseMovePayload | null>(null);
+  const [assistedUserLastTap, setAssistedUserLastTap] = useState<AssistedClickPayload | null>(null);
+
+  // 1. SINCRONIZAÇÃO E ESCUTA DO ADMINISTRADOR (Espelhamento e Cursor Assistido em tempo real)
   useEffect(() => {
-    if (!impersonationSession || assistedAdminMode !== 'observer') return;
+    if (!impersonationSession) {
+      setAssistedUserCursor(null);
+      setAssistedUserLastTap(null);
+      return;
+    }
 
     const cleanupObserver = assistedSessionService.listenAsAdminObserver({
+      onUserMouseMove: (mouse) => {
+        setAssistedUserCursor(mouse);
+      },
+      onUserTapPulse: (click) => {
+        setAssistedUserLastTap(click);
+      },
       onNavigation: (nav) => {
-        if (nav.path && window.location.pathname !== nav.path) {
-          window.history.pushState(null, '', nav.path);
-        }
-        if (nav.currentView) {
-          setCurrentView(nav.currentView as any);
-        }
-        if (nav.activeBlock !== undefined) {
-          setActiveBlock(nav.activeBlock as any);
-        }
-        if (nav.adminTab !== undefined) {
-          setAdminTab(nav.adminTab as any);
-        }
-        if (nav.currentSubView !== undefined) {
-          setAppState(prev => ({ ...prev, view: nav.currentSubView as any }));
+        if (assistedAdminMode === 'observer') {
+          if (nav.path && window.location.pathname !== nav.path) {
+            window.history.pushState(null, '', nav.path);
+          }
+          if (nav.currentView) {
+            setCurrentView(nav.currentView as any);
+          }
+          if (nav.activeBlock !== undefined) {
+            setActiveBlock(nav.activeBlock as any);
+          }
+          if (nav.adminTab !== undefined) {
+            setAdminTab(nav.adminTab as any);
+          }
+          if (nav.currentSubView !== undefined) {
+            setAppState(prev => ({ ...prev, view: nav.currentSubView as any }));
+          }
         }
       },
       onStateSnapshot: (snap) => {
-        if (snap.path && window.location.pathname !== snap.path) {
-          window.history.pushState(null, '', snap.path);
-        }
-        if (snap.currentView) {
-          setCurrentView(snap.currentView as any);
-        }
-        if (snap.activeBlock !== undefined) {
-          setActiveBlock(snap.activeBlock as any);
-        }
-        if (snap.adminTab !== undefined) {
-          setAdminTab(snap.adminTab as any);
-        }
-        if (snap.currentSubView !== undefined) {
-          setAppState(prev => ({ ...prev, view: snap.currentSubView as any }));
-        }
-        if (snap.scrollY !== undefined) {
-          window.scrollTo({ top: snap.scrollY, behavior: 'smooth' });
+        if (assistedAdminMode === 'observer') {
+          if (snap.path && window.location.pathname !== snap.path) {
+            window.history.pushState(null, '', snap.path);
+          }
+          if (snap.currentView) {
+            setCurrentView(snap.currentView as any);
+          }
+          if (snap.activeBlock !== undefined) {
+            setActiveBlock(snap.activeBlock as any);
+          }
+          if (snap.adminTab !== undefined) {
+            setAdminTab(snap.adminTab as any);
+          }
+          if (snap.currentSubView !== undefined) {
+            setAppState(prev => ({ ...prev, view: snap.currentSubView as any }));
+          }
+          if (snap.scrollY !== undefined) {
+            window.scrollTo({ top: snap.scrollY, behavior: 'smooth' });
+          }
         }
       },
       onInputChange: (input) => {
-        let el: HTMLElement | null = null;
-        if (input.id) el = document.getElementById(input.id);
-        if (!el && input.name) el = document.querySelector(`[name="${input.name}"]`);
-        if (!el && input.selector) {
-          try { el = document.querySelector(input.selector); } catch (e) {}
-        }
-        if (el) {
-          const formEl = el as HTMLInputElement;
-          if (input.checked !== undefined && formEl.type === 'checkbox') {
-            formEl.checked = input.checked;
-          } else {
-            formEl.value = input.value;
+        if (assistedAdminMode === 'observer') {
+          let el: HTMLElement | null = null;
+          if (input.id) el = document.getElementById(input.id);
+          if (!el && input.name) el = document.querySelector(`[name="${input.name}"]`);
+          if (!el && input.selector) {
+            try { el = document.querySelector(input.selector); } catch (e) {}
           }
-          formEl.dispatchEvent(new Event('input', { bubbles: true }));
-          formEl.dispatchEvent(new Event('change', { bubbles: true }));
+          if (el) {
+            const formEl = el as HTMLInputElement;
+            if (input.checked !== undefined && formEl.type === 'checkbox') {
+              formEl.checked = input.checked;
+            } else {
+              formEl.value = input.value;
+            }
+            formEl.dispatchEvent(new Event('input', { bubbles: true }));
+            formEl.dispatchEvent(new Event('change', { bubbles: true }));
+          }
         }
       },
       onScroll: (scroll) => {
-        window.scrollTo({ top: scroll.scrollY, behavior: 'smooth' });
+        if (assistedAdminMode === 'observer') {
+          window.scrollTo({ top: scroll.scrollY, behavior: 'smooth' });
+        }
       }
     });
 
@@ -1152,12 +1175,73 @@ const App: React.FC = () => {
       userHandlers.sendUserScroll(scrollPctY, scrollY);
     };
 
+    // Rastreia movimentação do mouse do usuário para o Cursor Assistido (Apontador Visual)
+    let userMouseTimer: any = null;
+    const handleUserMouseMove = (e: MouseEvent) => {
+      const now = Date.now();
+      if (now - userMouseTimer < 40) return; // Throttle ~40ms (25fps para transmissão fluida e ultra leve)
+      userMouseTimer = now;
+
+      const xPct = Math.round((e.clientX / window.innerWidth) * 10000) / 100;
+      const yPct = Math.round((e.clientY / window.innerHeight) * 10000) / 100;
+
+      userHandlers.sendUserMouseMove(xPct, yPct, false);
+    };
+
+    // Rastreia toques em dispositivos móveis / touch para Apontamento Visual Mobile
+    let userTouchTimer: any = null;
+    const handleUserTouchMove = (e: TouchEvent) => {
+      if (!e.touches || e.touches.length === 0) return;
+      const now = Date.now();
+      if (now - userTouchTimer < 40) return; // Throttle ~40ms
+      userTouchTimer = now;
+
+      const touch = e.touches[0];
+      const xPct = Math.round((touch.clientX / window.innerWidth) * 10000) / 100;
+      const yPct = Math.round((touch.clientY / window.innerHeight) * 10000) / 100;
+
+      userHandlers.sendUserMouseMove(xPct, yPct, true);
+    };
+
+    // Rastreia clique ou toque para enviar efeito visual de radar/pulso (apontador virtual)
+    const handleUserClickOrTap = (e: MouseEvent | TouchEvent) => {
+      let clientX = 0;
+      let clientY = 0;
+      let isTouch = false;
+
+      if ('touches' in e && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+        isTouch = true;
+      } else if ('changedTouches' in e && e.changedTouches.length > 0) {
+        clientX = e.changedTouches[0].clientX;
+        clientY = e.changedTouches[0].clientY;
+        isTouch = true;
+      } else if ('clientX' in e) {
+        clientX = (e as MouseEvent).clientX;
+        clientY = (e as MouseEvent).clientY;
+      }
+
+      const xPct = Math.round((clientX / window.innerWidth) * 10000) / 100;
+      const yPct = Math.round((clientY / window.innerHeight) * 10000) / 100;
+
+      userHandlers.sendUserTapPulse(xPct, yPct, isTouch);
+    };
+
     document.addEventListener('input', handleUserDocumentInput, { capture: true, passive: true });
     window.addEventListener('scroll', handleUserScroll, { passive: true });
+    window.addEventListener('mousemove', handleUserMouseMove, { passive: true });
+    window.addEventListener('touchmove', handleUserTouchMove, { passive: true });
+    window.addEventListener('touchstart', handleUserTouchMove, { passive: true });
+    window.addEventListener('click', handleUserClickOrTap, { capture: true, passive: true });
 
     return () => {
       document.removeEventListener('input', handleUserDocumentInput, { capture: true });
       window.removeEventListener('scroll', handleUserScroll);
+      window.removeEventListener('mousemove', handleUserMouseMove);
+      window.removeEventListener('touchmove', handleUserTouchMove);
+      window.removeEventListener('touchstart', handleUserTouchMove);
+      window.removeEventListener('click', handleUserClickOrTap, { capture: true });
       clearTimeout(userInputTimer);
       userHandlers.unsubscribe();
     };
@@ -6579,6 +6663,28 @@ const App: React.FC = () => {
           }
         }}
       />
+
+      {/* Cursor Assistido (Apontador Virtual 100% Visual com identificação e sem poder de clique) no monitor do Administrador */}
+      {impersonationSession && (
+        <AssistedVirtualCursorOverlay
+          userCursor={assistedUserCursor}
+          userLastClick={assistedUserLastTap}
+          targetUserName={impersonationSession.targetUser.name}
+        />
+      )}
+
+      {/* Banner Informativo & Cursor Virtual de Suporte na tela do Usuário Acompanhado */}
+      {assistedViewerData && (
+        <AssistedUserViewerOverlay
+          adminName={assistedViewerData.adminName}
+          adminEmail={assistedViewerData.adminEmail}
+          startedAt={assistedViewerData.startedAt}
+          isPaused={assistedViewerData.isPaused}
+          mode={assistedViewerData.mode}
+          virtualCursor={assistedVirtualCursor}
+          lastClick={assistedLastClick}
+        />
+      )}
     </NotificationProvider >
   );
 };
