@@ -1612,16 +1612,13 @@ const App: React.FC = () => {
           return newState;
         });
 
-        // Also check if there's a forced update target active on load
+        // Verifica se há atualização global ativa no futuro (sem deslogar quem está entrando)
         const { data } = await supabase.from('organization_settings').select('system_update_target').eq('id', 'global_config').single();
-        if (data?.system_update_target) {
-          const appliedOffline = await checkAndApplyOfflineUpdate(data.system_update_target, signOut);
-          if (appliedOffline) {
-            window.location.href = '/Login?update=1';
-            return;
-          }
-          setSystemUpdateTarget(data.system_update_target);
+        if (data?.system_update_target && Number(data.system_update_target) > Date.now()) {
+          setSystemUpdateTarget(Number(data.system_update_target));
           setIsUpdateModalDismissed(false);
+        } else {
+          setSystemUpdateTarget(null);
         }
       }
     };
@@ -1924,14 +1921,18 @@ const App: React.FC = () => {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'organization_settings', filter: 'id=eq.global_config' },
         (payload) => {
+          const now = Date.now();
           if (payload.new && 'system_update_target' in payload.new) {
-            setSystemUpdateTarget(payload.new.system_update_target as number);
-            setSystemUpdateDetails({
-              isIndividual: false,
-              triggeredBy: payload.new.system_update_by_name || 'Administrador',
-              triggeredAt: payload.new.system_update_at
-            });
-            setIsUpdateModalDismissed(false);
+            const target = Number(payload.new.system_update_target);
+            if (target && target > now) {
+              setSystemUpdateTarget(target);
+              setSystemUpdateDetails({
+                isIndividual: false,
+                triggeredBy: payload.new.system_update_by_name || 'Administrador',
+                triggeredAt: payload.new.system_update_at
+              });
+              setIsUpdateModalDismissed(false);
+            }
           }
           const userRequests = (payload.new?.ui_config as any)?.user_update_requests;
           const activeUserId = currentUserRef.current?.id;
@@ -1944,15 +1945,20 @@ const App: React.FC = () => {
               ) as any;
 
             if (myReq && (myReq.status === 'pending' || myReq.status === 'notified' || myReq.status === 'in_progress') && myReq.target) {
-              setSystemUpdateTarget(myReq.target);
-              setSystemUpdateDetails({
-                isIndividual: true,
-                triggeredBy: myReq.triggeredBy,
-                triggeredAt: myReq.triggeredAt
-              });
-              setIsUpdateModalDismissed(false);
-              if (activeUserId && myReq.status === 'pending') {
-                acknowledgeUserUpdate(activeUserId, myReq.version || myReq.target, 'notified');
+              if (Number(myReq.target) > now) {
+                setSystemUpdateTarget(Number(myReq.target));
+                setSystemUpdateDetails({
+                  isIndividual: true,
+                  triggeredBy: myReq.triggeredBy,
+                  triggeredAt: myReq.triggeredAt
+                });
+                setIsUpdateModalDismissed(false);
+                if (activeUserId && myReq.status === 'pending') {
+                  acknowledgeUserUpdate(activeUserId, myReq.version || myReq.target, 'notified');
+                }
+              } else if (activeUserId) {
+                // Atualização anterior já expirada: marca silenciosamente como concluída
+                markUserUpdateCompleted(activeUserId, myReq.version || myReq.target);
               }
             }
           }
@@ -1963,7 +1969,8 @@ const App: React.FC = () => {
         { event: 'system_update' },
         async (payload) => {
           const p = payload.payload;
-          if (p?.target) {
+          const now = Date.now();
+          if (p?.target && Number(p.target) > now) {
             const activeUserId = currentUserRef.current?.id;
             const activeUsername = currentUserRef.current?.username;
             const isForMe = p.targetUserId
@@ -1974,7 +1981,7 @@ const App: React.FC = () => {
             if (p.targetUserId) {
               if (isForMe && activeUserId) {
                 console.log('[SystemUpdate] Evento de atualização individual recebido no canal global:', p);
-                setSystemUpdateTarget(p.target);
+                setSystemUpdateTarget(Number(p.target));
                 setSystemUpdateDetails({
                   isIndividual: true,
                   triggeredBy: p.triggeredBy || 'Administrador',
@@ -1984,7 +1991,7 @@ const App: React.FC = () => {
                 await acknowledgeUserUpdate(activeUserId, p.version || p.target, 'notified');
               }
             } else {
-              setSystemUpdateTarget(p.target);
+              setSystemUpdateTarget(Number(p.target));
               setSystemUpdateDetails({
                 isIndividual: false,
                 triggeredBy: p.triggeredBy || 'Administrador',
@@ -2016,9 +2023,10 @@ const App: React.FC = () => {
         { event: 'system_update' },
         async (payload) => {
           const p = payload.payload;
-          if (p?.target) {
+          const now = Date.now();
+          if (p?.target && Number(p.target) > now) {
             console.log('[SystemUpdate] Evento de atualização recebido no canal dedicado do usuário:', p);
-            setSystemUpdateTarget(p.target);
+            setSystemUpdateTarget(Number(p.target));
             setSystemUpdateDetails({
               isIndividual: true,
               triggeredBy: p.triggeredBy || 'Administrador',
@@ -2597,9 +2605,10 @@ const App: React.FC = () => {
     }
 
     const now = Date.now();
-    // Se o target já expirou há mais de 2 minutos, considera a atualização concluída e limpa o estado
-    if (now > systemUpdateTarget + 120000) {
+    // Se o target já expirou antes do início da contagem, limpa o estado e não exibe contagem
+    if (now >= systemUpdateTarget) {
       setSystemUpdateCountdown(null);
+      setSystemUpdateTarget(null);
       return;
     }
 
@@ -2614,6 +2623,7 @@ const App: React.FC = () => {
         setSystemUpdateCountdown(0);
       } else {
         setSystemUpdateCountdown(null);
+        setSystemUpdateTarget(null);
       }
     };
 
@@ -2628,23 +2638,20 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [systemUpdateTarget, currentUser?.id, systemUpdateDetails?.isIndividual]);
 
-  // Verificação de Atualização Offline Individual Pendente ao carregar o usuário autenticado
+  // Sincronização Silenciosa de Atualização Individual Pendente ao carregar o usuário autenticado
   useEffect(() => {
     if (!currentUser?.id || authLoading) return;
 
     const verifyPendingUserUpdate = async () => {
       try {
-        const applied = await checkAndApplyUserOfflineUpdate(currentUser.id, signOut);
-        if (applied) {
-          window.location.href = '/Login?update=1';
-        }
+        await checkAndApplyUserOfflineUpdate(currentUser.id);
       } catch (err) {
-        console.warn('[SystemUpdate] Erro ao verificar atualização offline do usuário:', err);
+        console.warn('[SystemUpdate] Erro ao verificar atualização pendente do usuário:', err);
       }
     };
 
     verifyPendingUserUpdate();
-  }, [currentUser?.id, authLoading, signOut]);
+  }, [currentUser?.id, authLoading]);
 
   // Desconexão e Limpeza Completa de Cache ao término do countdown ou por ação imediata
   const handleImmediateSystemUpdateLogout = useCallback(async () => {

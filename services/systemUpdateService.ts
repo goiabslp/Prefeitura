@@ -641,17 +641,11 @@ export const checkAndApplyUserOfflineUpdate = async (
 
     if (userReq && (userReq.status === 'pending' || userReq.status === 'notified' || userReq.status === 'in_progress')) {
       const now = Date.now();
-      // Se o prazo da atualização já passou enquanto o usuário estava offline
+      // Se o prazo da atualização já passou enquanto o usuário estava offline, apenas marca como concluída sem derrubar a sessão
       if (now >= userReq.target) {
-        console.log(`[SystemUpdate] Atualização individual pendente expirada detectada para o usuário ${userId}. Executando renovação de cache e logout...`);
-        await performClientCleanup(userReq.version);
+        console.log(`[SystemUpdate] Atualização individual anterior finalizada para o usuário ${userId}. Sincronizando estado silenciosamente...`);
         await markUserUpdateCompleted(userId, userReq.version);
-        if (signOutFn) {
-          try {
-            await signOutFn();
-          } catch (e) {}
-        }
-        return true;
+        return false;
       }
     }
   } catch (err) {
@@ -673,18 +667,13 @@ export const checkAndApplyOfflineUpdate = async (
   const appliedVersion = localStorage.getItem(APPLIED_SYSTEM_VERSION_KEY) || localStorage.getItem(LAST_FORCED_UPDATE_KEY);
   const now = Date.now();
 
-  // Se o servidor exige uma versão e localmente ainda não foi aplicada
+  // Se o servidor exige uma versão e localmente ainda não foi registrada
   if (!appliedVersion || parseInt(appliedVersion, 10) < serverTarget) {
-    // Se o alvo já passou (atualização que ocorreu quando o usuário estava offline/fechado)
+    // Se o alvo já passou, apenas marca como aplicada localmente sem deslogar o usuário
     if (now >= serverTarget) {
-      console.log('[SystemUpdate] Versão local desatualizada em relação ao servidor. Executando atualização de ambiente...');
-      await performClientCleanup(serverTarget);
-      if (signOutFn) {
-        try {
-          await signOutFn();
-        } catch (e) { }
-      }
-      return true;
+      localStorage.setItem(APPLIED_SYSTEM_VERSION_KEY, String(serverTarget));
+      localStorage.setItem(LAST_FORCED_UPDATE_KEY, String(serverTarget));
+      return false;
     }
   }
 
