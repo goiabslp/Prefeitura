@@ -12,6 +12,77 @@ export interface SystemUpdateInfo {
   version: string | number;
 }
 
+export interface UserUpdateRequest {
+  target: number; // execute_at (timestamp epoch em ms)
+  version: string | number; // system_version
+  targetUserId: string; // target_user_id
+  targetUserName: string;
+  targetUserUsername?: string;
+  triggeredBy: string; // requested_by (nome do administrador)
+  triggeredById?: string; // requested_by id
+  triggeredAt: string; // requested_at (ISO string)
+  notifiedAt?: string; // momento em que o navegador do usuário acusou recebimento
+  startedAt?: string; // momento em que o contador começou a rodar
+  status: 'pending' | 'notified' | 'in_progress' | 'completed';
+  completedAt?: string;
+}
+
+/**
+ * Função utilitária resiliente para envio de mensagens via Supabase Realtime Broadcast
+ */
+export const sendRealtimeBroadcast = async (channelName: string, event: string, payload: any): Promise<boolean> => {
+  return new Promise((resolve) => {
+    try {
+      const channel = supabase.channel(channelName, {
+        config: { broadcast: { self: true } }
+      });
+
+      let resolved = false;
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          resolve(false);
+        }
+      }, 3500);
+
+      const doSend = async () => {
+        try {
+          await channel.send({
+            type: 'broadcast',
+            event,
+            payload
+          });
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeout);
+            resolve(true);
+          }
+        } catch (e) {
+          console.warn(`[SystemUpdate] Falha ao enviar broadcast em ${channelName}:`, e);
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeout);
+            resolve(false);
+          }
+        }
+      };
+
+      if ((channel as any).state === 'joined' || (channel as any).status === 'SUBSCRIBED') {
+        doSend();
+      } else {
+        channel.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            doSend();
+          }
+        });
+      }
+    } catch (err) {
+      console.warn(`[SystemUpdate] Erro ao criar canal para broadcast (${channelName}):`, err);
+      resolve(false);
+    }
+  });
+};
+
 /**
  * Executa a limpeza restrita de dados locais e caches controlados da aplicação:
  * - Cache Storage da aplicação
@@ -59,7 +130,6 @@ export const performClientCleanup = async (newVersion?: number | string): Promis
 
     // 4. Limpeza controlada do Local Storage (dados temporários da aplicação)
     try {
-      // Lista de chaves a serem limpas
       const appCacheKeys = [
         'cachedPersons',
         'cachedVehicles',
@@ -104,19 +174,6 @@ export const performClientCleanup = async (newVersion?: number | string): Promis
   }
 };
 
-export interface UserUpdateRequest {
-  target: number;
-  version: string | number;
-  targetUserId: string;
-  targetUserName: string;
-  targetUserUsername?: string;
-  triggeredBy: string;
-  triggeredById?: string;
-  triggeredAt: string;
-  status: 'pending' | 'completed';
-  completedAt?: string;
-}
-
 /**
  * Dispara a Atualização Global do Sistema (Exclusivo para Administrador)
  */
@@ -131,31 +188,15 @@ export const triggerGlobalSystemUpdate = async (adminUser: { id?: string; name?:
   const nowIso = new Date().toISOString();
 
   try {
-    // 1. Broadcast instantâneo via Realtime (com self: true para sincronizar todas as abas e o próprio emissor)
-    const channel = supabase.channel('global-updates', {
-      config: { broadcast: { self: true } }
-    });
-    await channel.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        try {
-          await channel.send({
-            type: 'broadcast',
-            event: 'system_update',
-            payload: {
-              target: targetEpoch,
-              version: targetEpoch,
-              triggeredBy: adminName,
-              triggeredAt: nowIso
-            }
-          });
-        } catch (bErr) {
-          console.warn('[SystemUpdate] Falha no envio do broadcast:', bErr);
-        }
-      }
+    // 1. Broadcast instantâneo via Realtime
+    await sendRealtimeBroadcast('global-updates', 'system_update', {
+      target: targetEpoch,
+      version: targetEpoch,
+      triggeredBy: adminName,
+      triggeredAt: nowIso
     });
 
     // 2. Persistência no Backend (organization_settings)
-    // Busca ui_config existente para mesclar com metadata de atualização
     const { data: existingSettings } = await supabase
       .from('organization_settings')
       .select('ui_config')
@@ -211,40 +252,30 @@ export const triggerUserSystemUpdate = async (
   }
 
   // Contagem regressiva imediata de 10 segundos
-  const targetEpoch = Date.now() + 10000; // 10 segundos imediatos
+  const targetEpoch = Date.now() + 10000; // 10 segundos
   const adminName = adminUser.name || 'Administrador';
   const adminId = adminUser.id || 'admin';
   const nowIso = new Date().toISOString();
 
   try {
-    // 1. Broadcast instantâneo via Realtime direcionado ao user_id
-    const channel = supabase.channel('global-updates', {
-      config: { broadcast: { self: true } }
-    });
-    await channel.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        try {
-          await channel.send({
-            type: 'broadcast',
-            event: 'system_update',
-            payload: {
-              target: targetEpoch,
-              version: targetEpoch,
-              countdownSeconds: 10,
-              isIndividualUserUpdate: true,
-              targetUserId: targetUser.id,
-              targetUserName: targetUser.name,
-              targetUserUsername: targetUser.username,
-              triggeredBy: adminName,
-              triggeredById: adminId,
-              triggeredAt: nowIso
-            }
-          });
-        } catch (bErr) {
-          console.warn('[SystemUpdate] Falha no broadcast de atualização de usuário:', bErr);
-        }
-      }
-    });
+    const payload = {
+      target: targetEpoch,
+      version: targetEpoch,
+      countdownSeconds: 10,
+      isIndividualUserUpdate: true,
+      targetUserId: targetUser.id,
+      targetUserName: targetUser.name,
+      targetUserUsername: targetUser.username,
+      triggeredBy: adminName,
+      triggeredById: adminId,
+      triggeredAt: nowIso
+    };
+
+    // 1. Broadcast instantâneo via Realtime no canal dedicado do usuário E no canal global
+    await Promise.all([
+      sendRealtimeBroadcast(`user-channel-${targetUser.id}`, 'system_update', payload),
+      sendRealtimeBroadcast('global-updates', 'system_update', payload)
+    ]);
 
     // 2. Persistência no Backend (organization_settings -> ui_config.user_update_requests)
     const { data: existingSettings } = await supabase
@@ -333,6 +364,69 @@ export const getUserUpdateRequests = async (): Promise<Record<string, UserUpdate
 };
 
 /**
+ * Confirma recebimento ou início de contagem do usuário e sincroniza com o Admin em tempo real
+ */
+export const acknowledgeUserUpdate = async (
+  userId: string,
+  version: number | string,
+  status: 'notified' | 'in_progress'
+): Promise<boolean> => {
+  if (!userId) return false;
+  const nowIso = new Date().toISOString();
+
+  try {
+    // 1. Broadcast instantâneo de status para atualizar o Admin sem esperar banco
+    await Promise.all([
+      sendRealtimeBroadcast('global-updates', 'user_update_status', {
+        targetUserId: userId,
+        status,
+        timestamp: nowIso
+      }),
+      sendRealtimeBroadcast(`user-channel-${userId}`, 'user_update_status', {
+        targetUserId: userId,
+        status,
+        timestamp: nowIso
+      })
+    ]);
+
+    // 2. Persiste status no banco de dados
+    const { data: existingSettings } = await supabase
+      .from('organization_settings')
+      .select('ui_config')
+      .eq('id', 'global_config')
+      .single();
+
+    const existingUiConfig = existingSettings?.ui_config || {};
+    const existingRequests: Record<string, UserUpdateRequest> = existingUiConfig.user_update_requests || {};
+
+    if (existingRequests[userId]) {
+      existingRequests[userId] = {
+        ...existingRequests[userId],
+        status,
+        ...(status === 'notified' ? { notifiedAt: nowIso } : {}),
+        ...(status === 'in_progress' ? { startedAt: nowIso } : {})
+      };
+
+      await supabase
+        .from('organization_settings')
+        .update({
+          ui_config: {
+            ...existingUiConfig,
+            user_update_requests: existingRequests
+          },
+          updated_at: nowIso
+        })
+        .eq('id', 'global_config');
+    }
+
+    return true;
+  } catch (e) {
+    console.warn('[SystemUpdate] Erro ao registrar confirmação de atualização do usuário:', e);
+    return false;
+  }
+};
+
+/**
  * Marca uma atualização individual de usuário como concluída
  */
 export const markUserUpdateCompleted = async (userId: string, version?: number | string): Promise<boolean> => {
@@ -340,6 +434,21 @@ export const markUserUpdateCompleted = async (userId: string, version?: number |
   const nowIso = new Date().toISOString();
 
   try {
+    // 1. Notifica o Admin em tempo real
+    await Promise.all([
+      sendRealtimeBroadcast('global-updates', 'user_update_status', {
+        targetUserId: userId,
+        status: 'completed',
+        timestamp: nowIso
+      }),
+      sendRealtimeBroadcast(`user-channel-${userId}`, 'user_update_status', {
+        targetUserId: userId,
+        status: 'completed',
+        timestamp: nowIso
+      })
+    ]);
+
+    // 2. Grava no banco de dados
     const { data: existingSettings } = await supabase
       .from('organization_settings')
       .select('ui_config')
@@ -413,16 +522,20 @@ export const checkAndApplyUserOfflineUpdate = async (
     const requests = await getUserUpdateRequests();
     const userReq = requests[userId];
 
-    if (userReq && userReq.status === 'pending') {
-      console.log(`[SystemUpdate] Atualização individual pendente detectada para o usuário ${userId}. Executando renovação de cache e ambiente...`);
-      await performClientCleanup(userReq.version);
-      await markUserUpdateCompleted(userId, userReq.version);
-      if (signOutFn) {
-        try {
-          await signOutFn();
-        } catch (e) {}
+    if (userReq && (userReq.status === 'pending' || userReq.status === 'notified' || userReq.status === 'in_progress')) {
+      const now = Date.now();
+      // Se o prazo da atualização já passou enquanto o usuário estava offline
+      if (now >= userReq.target) {
+        console.log(`[SystemUpdate] Atualização individual pendente expirada detectada para o usuário ${userId}. Executando renovação de cache e logout...`);
+        await performClientCleanup(userReq.version);
+        await markUserUpdateCompleted(userId, userReq.version);
+        if (signOutFn) {
+          try {
+            await signOutFn();
+          } catch (e) {}
+        }
+        return true;
       }
-      return true;
     }
   } catch (err) {
     console.warn('[SystemUpdate] Erro ao verificar atualização offline individual:', err);

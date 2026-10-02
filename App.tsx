@@ -136,7 +136,7 @@ import { PoliticaPrivacidadeAppScreen } from './components/PoliticaPrivacidadeAp
 import { canUserAccessRoute, cleanPermissionsArray } from './services/permissionService';
 import { SystemAIAssistantScreen } from './components/ai/SystemAIAssistantScreen';
 import { EgressMonitorModal } from './components/admin/EgressMonitorModal';
-import { performClientCleanup, checkAndApplyOfflineUpdate, checkAndApplyUserOfflineUpdate, markUserUpdateCompleted } from './services/systemUpdateService';
+import { performClientCleanup, checkAndApplyOfflineUpdate, checkAndApplyUserOfflineUpdate, markUserUpdateCompleted, acknowledgeUserUpdate } from './services/systemUpdateService';
 
 const VIEW_TO_PATH: Record<string, string> = {
   'login': '/Login',
@@ -1779,9 +1779,15 @@ const App: React.FC = () => {
           }
           const userRequests = (payload.new?.ui_config as any)?.user_update_requests;
           const activeUserId = currentUserRef.current?.id;
-          if (userRequests && activeUserId && userRequests[activeUserId]) {
-            const myReq = userRequests[activeUserId];
-            if (myReq.status === 'pending' && myReq.target) {
+          const activeUsername = currentUserRef.current?.username;
+          if (userRequests && (activeUserId || activeUsername)) {
+            const myReq = (activeUserId && userRequests[activeUserId]) ||
+              Object.values(userRequests).find((r: any) =>
+                (activeUserId && String(r.targetUserId || '').trim().toLowerCase() === String(activeUserId).trim().toLowerCase()) ||
+                (activeUsername && String(r.targetUserUsername || '').trim().toLowerCase() === String(activeUsername).trim().toLowerCase())
+              ) as any;
+
+            if (myReq && (myReq.status === 'pending' || myReq.status === 'notified' || myReq.status === 'in_progress') && myReq.target) {
               setSystemUpdateTarget(myReq.target);
               setSystemUpdateDetails({
                 isIndividual: true,
@@ -1789,6 +1795,9 @@ const App: React.FC = () => {
                 triggeredAt: myReq.triggeredAt
               });
               setIsUpdateModalDismissed(false);
+              if (activeUserId && myReq.status === 'pending') {
+                acknowledgeUserUpdate(activeUserId, myReq.version || myReq.target, 'notified');
+              }
             }
           }
         }
@@ -1796,25 +1805,33 @@ const App: React.FC = () => {
       .on(
         'broadcast',
         { event: 'system_update' },
-        (payload) => {
+        async (payload) => {
           const p = payload.payload;
           if (p?.target) {
             const activeUserId = currentUserRef.current?.id;
+            const activeUsername = currentUserRef.current?.username;
+            const isForMe = p.targetUserId
+              ? (activeUserId && String(activeUserId).trim().toLowerCase() === String(p.targetUserId).trim().toLowerCase()) ||
+                (activeUsername && String(activeUsername).trim().toLowerCase() === String(p.targetUserUsername || '').trim().toLowerCase())
+              : true;
+
             if (p.targetUserId) {
-              if (activeUserId === p.targetUserId) {
+              if (isForMe && activeUserId) {
+                console.log('[SystemUpdate] Evento de atualização individual recebido no canal global:', p);
                 setSystemUpdateTarget(p.target);
                 setSystemUpdateDetails({
                   isIndividual: true,
-                  triggeredBy: p.triggeredBy,
+                  triggeredBy: p.triggeredBy || 'Administrador',
                   triggeredAt: p.triggeredAt
                 });
                 setIsUpdateModalDismissed(false);
+                await acknowledgeUserUpdate(activeUserId, p.version || p.target, 'notified');
               }
             } else {
               setSystemUpdateTarget(p.target);
               setSystemUpdateDetails({
                 isIndividual: false,
-                triggeredBy: p.triggeredBy,
+                triggeredBy: p.triggeredBy || 'Administrador',
                 triggeredAt: p.triggeredAt
               });
               setIsUpdateModalDismissed(false);
@@ -1829,6 +1846,39 @@ const App: React.FC = () => {
       supabase.removeChannel(settingsChannel);
     };
   }, []);
+
+  // Canal Realtime Dedicado ao Usuário Autenticado
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const userId = currentUser.id;
+
+    const userDedicatedChannel = supabase.channel(`user-channel-${userId}`, {
+      config: { broadcast: { self: true } }
+    })
+      .on(
+        'broadcast',
+        { event: 'system_update' },
+        async (payload) => {
+          const p = payload.payload;
+          if (p?.target) {
+            console.log('[SystemUpdate] Evento de atualização recebido no canal dedicado do usuário:', p);
+            setSystemUpdateTarget(p.target);
+            setSystemUpdateDetails({
+              isIndividual: true,
+              triggeredBy: p.triggeredBy || 'Administrador',
+              triggeredAt: p.triggeredAt
+            });
+            setIsUpdateModalDismissed(false);
+            await acknowledgeUserUpdate(userId, p.version || p.target, 'notified');
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(userDedicatedChannel);
+    };
+  }, [currentUser?.id]);
 
   // 2. Canais Contextuais por Módulo (Ativos somente quando a tela específica está em uso)
   useEffect(() => {
@@ -2379,7 +2429,7 @@ const App: React.FC = () => {
     };
   }, [currentView, activeBlock, adminTab, appState.view]);
 
-  // System Update Countdown Logic
+  // System Update Countdown Logic com cálculo preciso de expires_at
   useEffect(() => {
     if (!systemUpdateTarget) {
       setSystemUpdateCountdown(null);
@@ -2400,7 +2450,7 @@ const App: React.FC = () => {
       if (diff > 0) {
         setSystemUpdateCountdown(diff);
       } else if (diff >= -5) {
-        // Janela de 5s no momento exato do término
+        // Janela no momento exato do término
         setSystemUpdateCountdown(0);
       } else {
         setSystemUpdateCountdown(null);
@@ -2408,10 +2458,15 @@ const App: React.FC = () => {
     };
 
     updateCountdown(); // Executa no mesmo instante!
-    const interval = setInterval(updateCountdown, 1000);
+    const interval = setInterval(updateCountdown, 500); // Intervalo de 500ms para maior precisão
+
+    // Se tiver usuário logado e estiver na contagem, avisa status 'in_progress'
+    if (currentUser?.id && systemUpdateDetails?.isIndividual) {
+      acknowledgeUserUpdate(currentUser.id, systemUpdateTarget, 'in_progress');
+    }
 
     return () => clearInterval(interval);
-  }, [systemUpdateTarget]);
+  }, [systemUpdateTarget, currentUser?.id, systemUpdateDetails?.isIndividual]);
 
   // Verificação de Atualização Offline Individual Pendente ao carregar o usuário autenticado
   useEffect(() => {
@@ -6629,79 +6684,64 @@ const App: React.FC = () => {
         customLabels={actionProcessing.customLabels}
       />
 
-      {/* GLOBAL SYSTEM UPDATE NOTIFICATION (TRIGERRED BY ADMIN) */}
-      {systemUpdateCountdown !== null && systemUpdateCountdown > 0 && !isUpdateModalDismissed && createPortal(
-        <div className="fixed inset-0 z-[9999] bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-fade-in pointer-events-auto">
-          <div className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 p-6 sm:p-8 text-center transform scale-in-center overflow-hidden relative space-y-6">
+      {/* GLOBAL / INDIVIDUAL SYSTEM UPDATE NOTIFICATION (TRIGERRED BY ADMIN) */}
+      {systemUpdateCountdown !== null && systemUpdateCountdown >= 0 && createPortal(
+        <div className="fixed inset-0 z-[99999] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-fade-in pointer-events-auto select-none">
+          <div className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 p-8 sm:p-10 text-center transform scale-in-center overflow-hidden relative space-y-6">
             {/* Faixa superior com gradiente */}
             <div className="absolute top-0 left-0 right-0 h-2.5 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-600"></div>
 
-            <div className="relative w-24 h-24 mx-auto flex items-center justify-center">
-              {/* Anel de progresso circular animado */}
-              <div className="absolute inset-0 rounded-full bg-orange-50 ring-8 ring-orange-100/50 animate-pulse"></div>
-              <div className="relative flex flex-col items-center justify-center text-orange-600">
-                <span className="text-3xl font-black tracking-tighter tabular-nums leading-none">
-                  {systemUpdateCountdown}
-                </span>
-                <span className="text-[10px] font-black uppercase tracking-widest text-orange-500 mt-0.5">
-                  segundos
-                </span>
-              </div>
+            {/* Contador / Spinner em Destaque */}
+            <div className="relative w-28 h-28 mx-auto flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full bg-orange-50 ring-8 ring-orange-100/60 animate-pulse"></div>
+              {systemUpdateCountdown > 0 ? (
+                <div className="relative flex flex-col items-center justify-center text-orange-600">
+                  <span className="text-5xl font-black tracking-tighter tabular-nums leading-none">
+                    {systemUpdateCountdown}
+                  </span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-orange-500 mt-1">
+                    segundos
+                  </span>
+                </div>
+              ) : (
+                <div className="relative flex flex-col items-center justify-center text-orange-600">
+                  <RefreshCw className="w-12 h-12 animate-spin text-orange-500 mb-1" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-orange-600 animate-pulse">
+                    Atualizando...
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-100/80 text-orange-700 text-[10px] font-black uppercase tracking-wider">
-                <span className="w-2 h-2 rounded-full bg-orange-500 animate-ping"></span>
-                {systemUpdateDetails?.isIndividual ? 'Atualização Individual do Usuário' : 'Atualização Geral do Sistema'}
-              </span>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-tight">
-                {systemUpdateDetails?.isIndividual
-                  ? 'Sua sessão está sendo renovada'
-                  : 'O sistema será reiniciado'}
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
+                Atualização do sistema
               </h2>
-              <p className="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed px-2">
-                {systemUpdateDetails?.isIndividual
-                  ? 'O administrador solicitou a renovação e limpeza completa de arquivos temporários do seu usuário. A aplicação será reiniciada em instantes.'
-                  : 'Uma atualização crítica do sistema está em andamento. Todos os arquivos e dados de cache serão atualizados.'}
+              <p className="text-sm text-slate-600 font-medium leading-relaxed px-2">
+                Uma atualização foi iniciada pelo administrador. O sistema será atualizado em:
               </p>
             </div>
 
             {/* Barra de Progresso Regressiva */}
-            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+            <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
               <div
-                className="bg-gradient-to-r from-amber-500 to-orange-500 h-full rounded-full transition-all duration-1000 ease-linear"
+                className="bg-gradient-to-r from-amber-500 to-orange-500 h-full rounded-full transition-all duration-500 ease-linear"
                 style={{
                   width: `${Math.min(100, Math.max(0, (systemUpdateCountdown / (systemUpdateDetails?.isIndividual ? 10 : 60)) * 100))}%`
                 }}
               ></div>
             </div>
 
-            {/* Commit message se for atualização global com mensagem */}
-            {!systemUpdateDetails?.isIndividual && translatedCommitMsg && (
-              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-left relative overflow-hidden">
-                <div className="absolute top-0 left-0 bottom-0 w-1 bg-amber-500"></div>
-                <h4 className="text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1">
-                  O que há de novo:
-                </h4>
-                <p className="text-xs text-slate-600 font-medium italic">
-                  {translatedCommitMsg}
-                </p>
+            {/* Informação e Status */}
+            <div className="pt-2">
+              <div className="inline-flex items-center justify-center gap-2 py-3 px-5 bg-orange-50 rounded-2xl border border-orange-100 text-orange-700 text-xs font-bold w-full">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin-slow text-orange-600 shrink-0" />
+                <span>
+                  {systemUpdateCountdown > 0
+                    ? `Encerrando sessão e limpando cache em ${systemUpdateCountdown}s`
+                    : 'Aplicando limpeza de cache e recarregando...'}
+                </span>
               </div>
-            )}
-
-            {/* Botão de Ação Imediata */}
-            <div className="space-y-2 pt-2">
-              <button
-                type="button"
-                onClick={handleImmediateSystemUpdateLogout}
-                className="w-full py-4 px-6 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 active:scale-95 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-orange-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <RefreshCw className="w-4 h-4 animate-spin-slow" />
-                <span>Sair e Renovar Agora ({systemUpdateCountdown}s)</span>
-              </button>
-              <p className="text-[11px] text-slate-400 font-medium">
-                Desconexão e limpeza automática ao zerar o contador
-              </p>
             </div>
           </div>
         </div>,

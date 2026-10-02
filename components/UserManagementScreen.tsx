@@ -6,7 +6,7 @@ import {
   Plus, Search, Edit2, Trash2, ShieldCheck, Users, Save, X, Key,
   PenTool, LayoutGrid, User as UserIcon, CheckCircle2, Gavel, ShoppingCart, Briefcase, Network,
   Eye, EyeOff, RotateCcw, AlertTriangle, Clock, Lock, Copy, Check, Info, Trash, ToggleRight, ArrowLeft, RefreshCw, Megaphone, FlaskConical, Calendar,
-  ChevronDown, ChevronUp, CheckSquare, Square, Filter, UserCheck, ShieldAlert, Radio, Sparkles, Calculator, MousePointer
+  ChevronDown, ChevronUp, CheckSquare, Square, Filter, UserCheck, ShieldAlert, Radio, Sparkles, Calculator, MousePointer, Bell
 } from 'lucide-react';
 import { googleCalendarService } from '../services/googleCalendarService';
 import { ModuleAccessControlTree } from './admin/ModuleAccessControlTree';
@@ -183,6 +183,29 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                 status: 'pending'
               }
             }));
+          }
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'user_update_status' },
+        (payload) => {
+          const p = payload.payload;
+          if (p?.targetUserId && isMounted) {
+            setUserUpdateRequests(prev => {
+              const existing = prev[p.targetUserId];
+              if (!existing) return prev;
+              return {
+                ...prev,
+                [p.targetUserId]: {
+                  ...existing,
+                  status: p.status,
+                  ...(p.status === 'notified' ? { notifiedAt: p.timestamp || p.notifiedAt } : {}),
+                  ...(p.status === 'in_progress' ? { startedAt: p.timestamp || p.startedAt } : {}),
+                  ...(p.status === 'completed' ? { completedAt: p.timestamp || p.completedAt } : {})
+                }
+              };
+            });
           }
         }
       )
@@ -877,38 +900,87 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                             </span>
                           )}
 
-                          {/* Status Discreto de Atualização do Usuário */}
+                          {/* Status em Tempo Real de Atualização do Usuário */}
                           {(() => {
                             const req = userUpdateRequests[user.id];
-                            if (req?.status === 'pending') {
+                            if (!req) {
                               return (
                                 <span 
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200 shadow-xs"
-                                  title={`Solicitação registrada em: ${new Date(req.triggeredAt).toLocaleString('pt-BR')}`}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium text-slate-400 bg-slate-50 border border-slate-150"
+                                  title="Sistema atualizado e sincronizado"
                                 >
-                                  <Clock className="w-2.5 h-2.5 text-amber-500 animate-spin-slow" />
-                                  <span>Atualização pendente</span>
+                                  <Check className="w-2.5 h-2.5 text-slate-400" />
+                                  <span>Atualizado</span>
                                 </span>
                               );
                             }
-                            if (req?.status === 'completed' || req?.completedAt) {
+
+                            if (req.status === 'pending') {
                               return (
                                 <span 
-                                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[10px] font-medium text-slate-500 bg-slate-100/90 border border-slate-200/80"
-                                  title="Sistema atualizado"
+                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-300 shadow-xs animate-pulse"
+                                  title={`Solicitado por ${req.triggeredBy} em: ${new Date(req.triggeredAt).toLocaleString('pt-BR')}`}
                                 >
-                                  <span className="flex items-center gap-1 font-bold text-slate-600">
-                                    <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" />
-                                    Atualizado
+                                  <Clock className="w-3 h-3 text-amber-600 animate-spin-slow" />
+                                  <span>Atualização enviada — aguardando usuário</span>
+                                  <span className="text-[9px] text-amber-700 font-normal">
+                                    • {new Date(req.triggeredAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                                   </span>
-                                  {req.completedAt && (
-                                    <span className="text-[9px] text-slate-400 font-normal">
-                                      • Última atualização: {new Date(req.completedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              );
+                            }
+
+                            if (req.status === 'notified') {
+                              return (
+                                <span 
+                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-800 border border-blue-300 shadow-xs animate-pulse"
+                                  title={`Navegador do usuário notificado em: ${req.notifiedAt ? new Date(req.notifiedAt).toLocaleString('pt-BR') : ''}`}
+                                >
+                                  <Bell className="w-3 h-3 text-blue-600" />
+                                  <span>Usuário notificado</span>
+                                  {req.notifiedAt && (
+                                    <span className="text-[9px] text-blue-700 font-normal">
+                                      • {new Date(req.notifiedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                                     </span>
                                   )}
                                 </span>
                               );
                             }
+
+                            if (req.status === 'in_progress') {
+                              return (
+                                <span 
+                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider bg-orange-50 text-orange-800 border border-orange-300 shadow-xs animate-pulse"
+                                  title={`Contagem e rotina iniciadas em: ${req.startedAt ? new Date(req.startedAt).toLocaleString('pt-BR') : ''}`}
+                                >
+                                  <RefreshCw className="w-3 h-3 text-orange-600 animate-spin" />
+                                  <span>Atualização em andamento</span>
+                                  {req.startedAt && (
+                                    <span className="text-[9px] text-orange-700 font-normal">
+                                      • {new Date(req.startedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                    </span>
+                                  )}
+                                </span>
+                              );
+                            }
+
+                            if (req.status === 'completed') {
+                              return (
+                                <span 
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-[10px] font-medium text-emerald-800 bg-emerald-50 border border-emerald-300 shadow-xs"
+                                  title={`Atualização concluída com sucesso em: ${req.completedAt ? new Date(req.completedAt).toLocaleString('pt-BR') : ''}`}
+                                >
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                  <span className="font-bold">Atualização concluída</span>
+                                  {req.completedAt && (
+                                    <span className="text-[9px] text-emerald-700 font-normal">
+                                      • {new Date(req.completedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                    </span>
+                                  )}
+                                </span>
+                              );
+                            }
+
                             return (
                               <span 
                                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium text-slate-400 bg-slate-50 border border-slate-150"
