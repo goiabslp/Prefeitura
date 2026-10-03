@@ -8,6 +8,158 @@ export const LAST_PROCESSED_UPDATE_ID_KEY = 'last_processed_update_id';
 export const APPLIED_SYSTEM_VERSION_KEY = 'system_applied_version';
 export const LAST_FORCED_UPDATE_KEY = 'last_forced_update_target';
 
+export type UpdateCycleStatus = 'idle' | 'em_atualizacao' | 'concluida';
+
+export interface ActiveSessionUpdateState {
+  systemUpdateInProgress: boolean;
+  activeUpdateId: number | string | null;
+  status: UpdateCycleStatus;
+  startedAt: number | null;
+  initiatedInCurrentSession: boolean;
+}
+
+// Estado em memória exclusivo da sessão ativa no navegador
+let sessionUpdateState: ActiveSessionUpdateState = {
+  systemUpdateInProgress: false,
+  activeUpdateId: null,
+  status: 'idle',
+  startedAt: null,
+  initiatedInCurrentSession: false,
+};
+
+export const getActiveSessionUpdateState = (): Readonly<ActiveSessionUpdateState> => ({ ...sessionUpdateState });
+
+export const isSystemUpdateInProgress = (): boolean => sessionUpdateState.systemUpdateInProgress;
+
+/**
+ * Inicia formalmente um ciclo REAL de atualização na sessão atual.
+ * NUNCA aceita timestamps no passado ou valores inválidos.
+ */
+export const startSessionUpdateCycle = (updateId: number | string): boolean => {
+  const parsedId = Number(updateId);
+  const now = Date.now();
+  if (!parsedId || isNaN(parsedId) || parsedId <= now) {
+    console.warn('[SystemUpdate] Rejeitado início de ciclo com updateId inválido ou expirado:', updateId);
+    return false;
+  }
+
+  sessionUpdateState = {
+    systemUpdateInProgress: true,
+    activeUpdateId: parsedId,
+    status: 'em_atualizacao',
+    startedAt: now,
+    initiatedInCurrentSession: true,
+  };
+  console.log(`[SystemUpdate] Ciclo REAL de atualização iniciado na sessão ativa. updateId: ${parsedId}`);
+  return true;
+};
+
+/**
+ * Registra a transição de status para 'concluida' após a execução real das etapas da atualização.
+ */
+export const completeSessionUpdateCycle = (updateId: number | string): boolean => {
+  const parsedId = Number(updateId);
+  if (!sessionUpdateState.systemUpdateInProgress) {
+    console.warn('[SystemUpdate] Tentativa de concluir ciclo sem atualização em progresso.');
+    return false;
+  }
+  if (sessionUpdateState.activeUpdateId !== parsedId) {
+    console.warn(`[SystemUpdate] ID de conclusão (${parsedId}) não coincide com o ID ativo (${sessionUpdateState.activeUpdateId}).`);
+    return false;
+  }
+  sessionUpdateState.status = 'concluida';
+  console.log(`[SystemUpdate] Status do ciclo de atualização alterado para 'concluida'. updateId: ${parsedId}`);
+  return true;
+};
+
+/**
+ * Reseta completamente o estado de atualização da sessão em memória
+ */
+export const resetSessionUpdateCycle = (): void => {
+  sessionUpdateState = {
+    systemUpdateInProgress: false,
+    activeUpdateId: null,
+    status: 'idle',
+    startedAt: null,
+    initiatedInCurrentSession: false,
+  };
+};
+
+/**
+ * Limpa flags residuais e reseta qualquer estado antigo de atualização ao efetuar login ou iniciar sessão.
+ */
+export const clearOldUpdateFlags = (): void => {
+  resetSessionUpdateCycle();
+  try {
+    sessionStorage.removeItem('system_update_pending');
+    sessionStorage.removeItem('active_update_id');
+    sessionStorage.removeItem('update_in_progress');
+    // Remove query param ?update=1 da barra de endereço sem recarregar a tela
+    if (typeof window !== 'undefined' && window.location) {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('update')) {
+        url.searchParams.delete('update');
+        window.history.replaceState(null, '', url.pathname + (url.search ? url.search : '') + url.hash);
+      }
+    }
+  } catch (e) {
+    console.warn('[SystemUpdate] Erro ao limpar flags antigas de atualização:', e);
+  }
+};
+
+/**
+ * Validação rigorosa e obrigatória antes de qualquer execução de logout por atualização.
+ */
+export const canExecuteSystemUpdateLogout = (
+  providedUpdateId?: number | string | null
+): { allowed: boolean; reason: string } => {
+  // 1. Obrigatório: systemUpdateInProgress
+  if (!sessionUpdateState.systemUpdateInProgress) {
+    return {
+      allowed: false,
+      reason: 'Nenhuma atualização em andamento (systemUpdateInProgress é false).'
+    };
+  }
+
+  // 2. Existir updateId ativo
+  const currentId = sessionUpdateState.activeUpdateId;
+  if (!currentId) {
+    return {
+      allowed: false,
+      reason: 'Ausência de updateId no ciclo ativo.'
+    };
+  }
+
+  // 3. Se fornecido updateId, deve coincidir exatamente com o da sessão ativa
+  if (providedUpdateId && Number(providedUpdateId) !== Number(currentId)) {
+    return {
+      allowed: false,
+      reason: `updateId informado (${providedUpdateId}) não coincide com o da sessão ativa (${currentId}).`
+    };
+  }
+
+  // 4. O ciclo deve ter sido iniciado comprovadamente na sessão atual
+  if (!sessionUpdateState.initiatedInCurrentSession) {
+    return {
+      allowed: false,
+      reason: 'O ciclo de atualização não foi iniciado na sessão atual do usuário.'
+    };
+  }
+
+  // 5. O status deve ter mudado efetivamente de 'em_atualizacao' para 'concluida'
+  if (sessionUpdateState.status !== 'concluida') {
+    return {
+      allowed: false,
+      reason: `Status atual do ciclo é "${sessionUpdateState.status}", esperado "concluida".`
+    };
+  }
+
+  return {
+    allowed: true,
+    reason: 'Validação de logout por atualização concluída com sucesso.'
+  };
+};
+
 /**
  * Verifica se um updateId já foi executado e processado no navegador do usuário
  * Retorna TRUE para qualquer ID inexistente, no passado (<= agora) ou já registrado

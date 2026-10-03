@@ -13,10 +13,12 @@ import {
   ArrowRight,
   Cpu
 } from 'lucide-react';
-import { fetchAndTranslateChangelog } from '../services/systemUpdateService';
+import { fetchAndTranslateChangelog, completeSessionUpdateCycle, isSystemUpdateInProgress } from '../services/systemUpdateService';
 
 export interface SystemDynamicUpdateModalProps {
   isOpen: boolean;
+  updateId?: number | null;
+  systemUpdateInProgress?: boolean;
   countdown: number; // Segundos restantes
   totalDuration?: number; // 10 ou 60 segundos
   isIndividual?: boolean;
@@ -72,6 +74,8 @@ const PROCESSING_STEPS: ProcessingStep[] = [
 
 export const SystemDynamicUpdateModal: React.FC<SystemDynamicUpdateModalProps> = ({
   isOpen,
+  updateId,
+  systemUpdateInProgress,
   countdown,
   totalDuration = 10,
   isIndividual = false,
@@ -85,15 +89,18 @@ export const SystemDynamicUpdateModal: React.FC<SystemDynamicUpdateModalProps> =
   const [activeStepIdx, setActiveStepIdx] = useState(0);
   const hasFinishedRef = useRef(false);
 
+  // Verificação estrita se há atualização ativa no momento
+  const isActuallyActive = isOpen && (systemUpdateInProgress || isSystemUpdateInProgress());
+
   // Bloqueio de rolagem do body enquanto o modal estiver aberto
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isActuallyActive) return;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = prevOverflow;
     };
-  }, [isOpen]);
+  }, [isActuallyActive]);
 
   // Carrega as novidades do commit/deploy de forma assíncrona
   useEffect(() => {
@@ -116,17 +123,23 @@ export const SystemDynamicUpdateModal: React.FC<SystemDynamicUpdateModalProps> =
       }
     };
 
-    if (isOpen) {
+    if (isActuallyActive) {
       loadChangelog();
     }
 
     return () => {
       isMounted = false;
     };
-  }, [isOpen]);
+  }, [isActuallyActive]);
 
   // Transição automática quando o contador chega a 0
   useEffect(() => {
+    if (!isActuallyActive) {
+      setPhase('countdown');
+      hasFinishedRef.current = false;
+      return;
+    }
+
     if (countdown > 0) {
       setPhase('countdown');
       hasFinishedRef.current = false;
@@ -136,11 +149,11 @@ export const SystemDynamicUpdateModal: React.FC<SystemDynamicUpdateModalProps> =
       setProgressPct(10);
       setActiveStepIdx(0);
     }
-  }, [countdown, phase]);
+  }, [countdown, phase, isActuallyActive]);
 
   // Animação dinâmica das etapas de processamento durante a fase 'applying'
   useEffect(() => {
-    if (phase !== 'applying') return;
+    if (!isActuallyActive || phase !== 'applying') return;
 
     let start = Date.now();
     const duration = 4500; // 4.5 segundos de animação detalhada
@@ -168,20 +181,24 @@ export const SystemDynamicUpdateModal: React.FC<SystemDynamicUpdateModalProps> =
     }, 50);
 
     return () => clearInterval(interval);
-  }, [phase]);
+  }, [phase, isActuallyActive]);
 
   // Conclusão com aguardo de 1.8 segundos para visualização do status de sucesso
   useEffect(() => {
-    if (phase === 'completed' && !hasFinishedRef.current) {
+    if (isActuallyActive && phase === 'completed' && !hasFinishedRef.current) {
       hasFinishedRef.current = true;
       const timer = setTimeout(() => {
+        // Marca o ciclo ativo como concluído antes do logout
+        if (updateId) {
+          completeSessionUpdateCycle(updateId);
+        }
         onFinishUpdate();
       }, 1800);
       return () => clearTimeout(timer);
     }
-  }, [phase, onFinishUpdate]);
+  }, [phase, onFinishUpdate, isActuallyActive, updateId]);
 
-  if (!isOpen) return null;
+  if (!isActuallyActive) return null;
 
   const currentStep = PROCESSING_STEPS[activeStepIdx] || PROCESSING_STEPS[0];
   const StepIcon = currentStep.icon;

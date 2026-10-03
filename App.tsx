@@ -140,7 +140,21 @@ import { UnauthorizedAccessModal } from './components/common/UnauthorizedAccessM
 import { canUserAccessRoute, cleanPermissionsArray } from './services/permissionService';
 import { SystemAIAssistantScreen } from './components/ai/SystemAIAssistantScreen';
 import { EgressMonitorModal } from './components/admin/EgressMonitorModal';
-import { performClientCleanup, checkAndApplyOfflineUpdate, checkAndApplyUserOfflineUpdate, markUserUpdateCompleted, acknowledgeUserUpdate, isUpdateAlreadyProcessed, markUpdateAsProcessed } from './services/systemUpdateService';
+import { 
+  performClientCleanup, 
+  checkAndApplyOfflineUpdate, 
+  checkAndApplyUserOfflineUpdate, 
+  markUserUpdateCompleted, 
+  acknowledgeUserUpdate, 
+  isUpdateAlreadyProcessed, 
+  markUpdateAsProcessed,
+  isSystemUpdateInProgress,
+  startSessionUpdateCycle,
+  completeSessionUpdateCycle,
+  resetSessionUpdateCycle,
+  clearOldUpdateFlags,
+  canExecuteSystemUpdateLogout
+} from './services/systemUpdateService';
 
 const VIEW_TO_PATH: Record<string, string> = {
   'login': '/Login',
@@ -1516,6 +1530,25 @@ const App: React.FC = () => {
   const [systemUpdateTarget, setSystemUpdateTarget] = useState<number | null>(null);
   const [systemUpdateCountdown, setSystemUpdateCountdown] = useState<number | null>(null);
   const [systemUpdateDetails, setSystemUpdateDetails] = useState<{ isIndividual?: boolean; triggeredBy?: string; triggeredAt?: string } | null>(null);
+  const [systemUpdateInProgress, setSystemUpdateInProgress] = useState<boolean>(false);
+  const currentActiveUpdateIdRef = useRef<number | null>(null);
+  const updateCycleStatusRef = useRef<'idle' | 'em_atualizacao' | 'concluida'>('idle');
+  const updateInitiatedInCurrentSessionRef = useRef<boolean>(false);
+
+  // Limpeza obrigatória de flags antigas de atualização e blindagem absoluta no login
+  useEffect(() => {
+    if (currentUser?.id) {
+      clearOldUpdateFlags();
+      setSystemUpdateInProgress(false);
+      setSystemUpdateCountdown(null);
+      setSystemUpdateTarget(null);
+      currentActiveUpdateIdRef.current = null;
+      updateCycleStatusRef.current = 'idle';
+      updateInitiatedInCurrentSessionRef.current = false;
+      isLoggingOutRef.current = false;
+      console.log('[SystemUpdate] Sessão autenticada: flags limpas, logout por atualização bloqueado.');
+    }
+  }, [currentUser?.id]);
   const [translatedCommitMsg, setTranslatedCommitMsg] = useState<string>('Carregando atualizações...');
   const [isUpdateModalDismissed, setIsUpdateModalDismissed] = useState(false);
 
@@ -1629,17 +1662,30 @@ const App: React.FC = () => {
           return newState;
         });
 
-        // Verifica se há atualização global ativa no futuro (sem deslogar quem está entrando e ignorando se já foi processada)
-        const { data } = await supabase.from('organization_settings').select('system_update_target').eq('id', 'global_config').single();
+        // STATUS NORMAL: Registros antigos no banco não iniciam ciclo de atualização
+        const { data } = await supabase.from('organization_settings').select('system_update_target, system_update_at').eq('id', 'global_config').single();
         const serverTarget = data?.system_update_target ? Number(data.system_update_target) : null;
-        if (serverTarget && serverTarget > (Date.now() + 3000) && !isUpdateAlreadyProcessed(serverTarget)) {
-          setSystemUpdateTarget(serverTarget);
-          setIsUpdateModalDismissed(false);
+        const now = Date.now();
+        const triggeredAtMs = data?.system_update_at ? new Date(data.system_update_at).getTime() : 0;
+        const isFresh = triggeredAtMs > 0 ? (now - triggeredAtMs < 30000) : false;
+
+        if (serverTarget && serverTarget > (now + 3000) && isFresh && !isUpdateAlreadyProcessed(serverTarget)) {
+          const started = startSessionUpdateCycle(serverTarget);
+          if (started) {
+            setSystemUpdateInProgress(true);
+            setSystemUpdateTarget(serverTarget);
+            currentActiveUpdateIdRef.current = serverTarget;
+            updateCycleStatusRef.current = 'em_atualizacao';
+            updateInitiatedInCurrentSessionRef.current = true;
+            setIsUpdateModalDismissed(false);
+          }
         } else {
-          if (serverTarget && serverTarget <= Date.now()) {
+          // Status normal: nenhuma atualização acontecendo -> não faz absolutamente nada
+          setSystemUpdateTarget(null);
+          setSystemUpdateInProgress(false);
+          if (serverTarget && serverTarget <= now) {
             markUpdateAsProcessed(serverTarget);
           }
-          setSystemUpdateTarget(null);
         }
       }
     };
@@ -1945,14 +1991,24 @@ const App: React.FC = () => {
           const now = Date.now();
           if (payload.new && 'system_update_target' in payload.new) {
             const target = Number(payload.new.system_update_target);
-            if (target && target > (now + 3000) && !isUpdateAlreadyProcessed(target)) {
-              setSystemUpdateTarget(target);
-              setSystemUpdateDetails({
-                isIndividual: false,
-                triggeredBy: payload.new.system_update_by_name || 'Administrador',
-                triggeredAt: payload.new.system_update_at
-              });
-              setIsUpdateModalDismissed(false);
+            const triggeredAtMs = payload.new.system_update_at ? new Date(payload.new.system_update_at).getTime() : 0;
+            const isFresh = triggeredAtMs > 0 ? (now - triggeredAtMs < 30000) : false;
+
+            if (target && target > (now + 3000) && isFresh && !isUpdateAlreadyProcessed(target)) {
+              const started = startSessionUpdateCycle(target);
+              if (started) {
+                setSystemUpdateInProgress(true);
+                setSystemUpdateTarget(target);
+                currentActiveUpdateIdRef.current = target;
+                updateCycleStatusRef.current = 'em_atualizacao';
+                updateInitiatedInCurrentSessionRef.current = true;
+                setSystemUpdateDetails({
+                  isIndividual: false,
+                  triggeredBy: payload.new.system_update_by_name || 'Administrador',
+                  triggeredAt: payload.new.system_update_at
+                });
+                setIsUpdateModalDismissed(false);
+              }
             }
           }
           const userRequests = (payload.new?.ui_config as any)?.user_update_requests;
@@ -1967,9 +2023,17 @@ const App: React.FC = () => {
 
             if (myReq && myReq.target) {
               const reqTarget = Number(myReq.target);
-              if (myReq.status === 'pending' || myReq.status === 'notified' || myReq.status === 'in_progress') {
-                if (reqTarget > (now + 3000) && !isUpdateAlreadyProcessed(reqTarget)) {
+              const reqTriggeredAt = myReq.triggeredAt ? new Date(myReq.triggeredAt).getTime() : 0;
+              const isReqFresh = reqTriggeredAt > 0 ? (now - reqTriggeredAt < 30000) : false;
+
+              if ((myReq.status === 'pending' || myReq.status === 'notified') && reqTarget > (now + 3000) && isReqFresh && !isUpdateAlreadyProcessed(reqTarget)) {
+                const started = startSessionUpdateCycle(reqTarget);
+                if (started) {
+                  setSystemUpdateInProgress(true);
                   setSystemUpdateTarget(reqTarget);
+                  currentActiveUpdateIdRef.current = reqTarget;
+                  updateCycleStatusRef.current = 'em_atualizacao';
+                  updateInitiatedInCurrentSessionRef.current = true;
                   setSystemUpdateDetails({
                     isIndividual: true,
                     triggeredBy: myReq.triggeredBy || 'Administrador',
@@ -1979,10 +2043,6 @@ const App: React.FC = () => {
                   if (activeUserId && myReq.status === 'pending') {
                     acknowledgeUserUpdate(activeUserId, myReq.version || myReq.target, 'notified');
                   }
-                } else if (activeUserId && reqTarget <= now) {
-                  // Atualização individual anterior expirada: marca silenciosamente como concluída e processada
-                  markUpdateAsProcessed(reqTarget);
-                  markUserUpdateCompleted(activeUserId, myReq.version || myReq.target);
                 }
               }
             }
@@ -1996,7 +2056,10 @@ const App: React.FC = () => {
           const p = payload.payload;
           const now = Date.now();
           const targetNum = p?.target ? Number(p.target) : 0;
-          if (targetNum > (now + 3000) && !isUpdateAlreadyProcessed(targetNum)) {
+          const triggeredAtMs = p?.triggeredAt ? new Date(p.triggeredAt).getTime() : 0;
+          const isFresh = triggeredAtMs > 0 ? (now - triggeredAtMs < 30000) : (targetNum > now && targetNum - now <= 70000);
+
+          if (targetNum > (now + 3000) && isFresh && !isUpdateAlreadyProcessed(targetNum)) {
             const activeUserId = currentUserRef.current?.id;
             const activeUsername = currentUserRef.current?.username;
             const isForMe = p.targetUserId
@@ -2007,23 +2070,37 @@ const App: React.FC = () => {
             if (p.targetUserId) {
               if (isForMe && activeUserId) {
                 console.log('[SystemUpdate] Evento de atualização individual recebido no canal global:', p);
+                const started = startSessionUpdateCycle(targetNum);
+                if (started) {
+                  setSystemUpdateInProgress(true);
+                  setSystemUpdateTarget(targetNum);
+                  currentActiveUpdateIdRef.current = targetNum;
+                  updateCycleStatusRef.current = 'em_atualizacao';
+                  updateInitiatedInCurrentSessionRef.current = true;
+                  setSystemUpdateDetails({
+                    isIndividual: true,
+                    triggeredBy: p.triggeredBy || 'Administrador',
+                    triggeredAt: p.triggeredAt
+                  });
+                  setIsUpdateModalDismissed(false);
+                  await acknowledgeUserUpdate(activeUserId, p.version || p.target, 'notified');
+                }
+              }
+            } else {
+              const started = startSessionUpdateCycle(targetNum);
+              if (started) {
+                setSystemUpdateInProgress(true);
                 setSystemUpdateTarget(targetNum);
+                currentActiveUpdateIdRef.current = targetNum;
+                updateCycleStatusRef.current = 'em_atualizacao';
+                updateInitiatedInCurrentSessionRef.current = true;
                 setSystemUpdateDetails({
-                  isIndividual: true,
+                  isIndividual: false,
                   triggeredBy: p.triggeredBy || 'Administrador',
                   triggeredAt: p.triggeredAt
                 });
                 setIsUpdateModalDismissed(false);
-                await acknowledgeUserUpdate(activeUserId, p.version || p.target, 'notified');
               }
-            } else {
-              setSystemUpdateTarget(targetNum);
-              setSystemUpdateDetails({
-                isIndividual: false,
-                triggeredBy: p.triggeredBy || 'Administrador',
-                triggeredAt: p.triggeredAt
-              });
-              setIsUpdateModalDismissed(false);
             }
           }
         }
@@ -2051,16 +2128,26 @@ const App: React.FC = () => {
           const p = payload.payload;
           const now = Date.now();
           const targetNum = p?.target ? Number(p.target) : 0;
-          if (targetNum > (now + 3000) && !isUpdateAlreadyProcessed(targetNum)) {
+          const triggeredAtMs = p?.triggeredAt ? new Date(p.triggeredAt).getTime() : 0;
+          const isFresh = triggeredAtMs > 0 ? (now - triggeredAtMs < 30000) : (targetNum > now && targetNum - now <= 70000);
+
+          if (targetNum > (now + 3000) && isFresh && !isUpdateAlreadyProcessed(targetNum)) {
             console.log('[SystemUpdate] Evento de atualização recebido no canal dedicado do usuário:', p);
-            setSystemUpdateTarget(targetNum);
-            setSystemUpdateDetails({
-              isIndividual: true,
-              triggeredBy: p.triggeredBy || 'Administrador',
-              triggeredAt: p.triggeredAt
-            });
-            setIsUpdateModalDismissed(false);
-            await acknowledgeUserUpdate(userId, p.version || p.target, 'notified');
+            const started = startSessionUpdateCycle(targetNum);
+            if (started) {
+              setSystemUpdateInProgress(true);
+              setSystemUpdateTarget(targetNum);
+              currentActiveUpdateIdRef.current = targetNum;
+              updateCycleStatusRef.current = 'em_atualizacao';
+              updateInitiatedInCurrentSessionRef.current = true;
+              setSystemUpdateDetails({
+                isIndividual: true,
+                triggeredBy: p.triggeredBy || 'Administrador',
+                triggeredAt: p.triggeredAt
+              });
+              setIsUpdateModalDismissed(false);
+              await acknowledgeUserUpdate(userId, p.version || p.target, 'notified');
+            }
           }
         }
       )
@@ -2638,7 +2725,8 @@ const App: React.FC = () => {
 
   // System Update Countdown Logic com cálculo preciso de expires_at
   useEffect(() => {
-    if (!systemUpdateTarget) {
+    // Se não há atualização ativa real em progresso, limpa e não executa contagem
+    if (!systemUpdateInProgress || !isSystemUpdateInProgress() || !systemUpdateTarget) {
       setSystemUpdateCountdown(null);
       return;
     }
@@ -2646,6 +2734,7 @@ const App: React.FC = () => {
     if (isUpdateAlreadyProcessed(systemUpdateTarget)) {
       setSystemUpdateCountdown(null);
       setSystemUpdateTarget(null);
+      setSystemUpdateInProgress(false);
       return;
     }
 
@@ -2655,6 +2744,7 @@ const App: React.FC = () => {
       markUpdateAsProcessed(systemUpdateTarget);
       setSystemUpdateCountdown(null);
       setSystemUpdateTarget(null);
+      setSystemUpdateInProgress(false);
       return;
     }
 
@@ -2679,9 +2769,10 @@ const App: React.FC = () => {
     }
 
     return () => clearInterval(interval);
-  }, [systemUpdateTarget, currentUser?.id, systemUpdateDetails?.isIndividual]);
+  }, [systemUpdateInProgress, systemUpdateTarget, currentUser?.id, systemUpdateDetails?.isIndividual]);
 
   // Sincronização Silenciosa de Atualização Individual Pendente ao carregar o usuário autenticado
+  // NUNCA executa logout nem interrompe a sessão de login
   useEffect(() => {
     if (!currentUser?.id || authLoading) return;
 
@@ -2696,58 +2787,94 @@ const App: React.FC = () => {
     verifyPendingUserUpdate();
   }, [currentUser?.id, authLoading]);
 
-  // Desconexão e Limpeza Completa de Cache ao término do countdown ou por ação imediata
+  // Desconexão e Limpeza Completa de Cache ao término do ciclo REAL de atualização
   const handleImmediateSystemUpdateLogout = useCallback(async () => {
+    // 1. Validação mandatória: a atualização deve estar ativamente em progresso
+    if (!systemUpdateInProgress) {
+      console.warn('[SystemUpdate] handleImmediateSystemUpdateLogout ignorado: Nenhuma atualização em andamento (systemUpdateInProgress = false).');
+      return;
+    }
+
+    // 2. Proteção contra execução duplicada / condição de corrida
     if (isLoggingOutRef.current) return;
+
+    // 3. Validação rigorosa de ID da atualização, sessão ativa e status 'concluida'
+    const activeUpdateId = systemUpdateTarget || currentActiveUpdateIdRef.current;
+    if (!activeUpdateId) {
+      console.warn('[SystemUpdate] handleImmediateSystemUpdateLogout ignorado: ausência de updateId.');
+      return;
+    }
+
+    const validation = canExecuteSystemUpdateLogout(activeUpdateId);
+    if (!validation.allowed) {
+      console.warn(`[SystemUpdate] Bloqueio estrito de logout por atualização: ${validation.reason}`);
+      setSystemUpdateCountdown(null);
+      setSystemUpdateTarget(null);
+      setSystemUpdateInProgress(false);
+      return;
+    }
+
     isLoggingOutRef.current = true;
 
     try {
-      const target = systemUpdateTarget || Date.now();
-      markUpdateAsProcessed(target);
-      await performClientCleanup(target);
+      markUpdateAsProcessed(activeUpdateId);
+      await performClientCleanup(activeUpdateId);
       if (currentUser?.id) {
-        await markUserUpdateCompleted(currentUser.id, target);
+        await markUserUpdateCompleted(currentUser.id, activeUpdateId);
       }
       console.warn(`[AUTH-DIAGNOSTIC] Origem do logout:
 função: handleImmediateSystemUpdateLogout
 arquivo: App.tsx
 motivo: Conclusão do ciclo de atualização do sistema
-updateId: ${target}
+updateId: ${activeUpdateId}
 userId: ${currentUser?.id || 'N/A'}
 authEvent: system_update_logout
 timestamp: ${new Date().toISOString()}`);
       await signOut('Atualização do Sistema Concluída');
     } catch (e) {
-      console.error('Erro na limpeza de cache/logout imediato:', e);
+      console.error('Erro na limpeza de cache/logout por atualização:', e);
     } finally {
+      resetSessionUpdateCycle();
       setSystemUpdateCountdown(null);
       setSystemUpdateTarget(null);
+      setSystemUpdateInProgress(false);
+      currentActiveUpdateIdRef.current = null;
+      updateCycleStatusRef.current = 'idle';
+      updateInitiatedInCurrentSessionRef.current = false;
       window.location.href = '/Login?update=1';
     }
-  }, [systemUpdateTarget, currentUser?.id, signOut]);
+  }, [systemUpdateInProgress, systemUpdateTarget, currentUser?.id, signOut]);
 
-  // Timeout de segurança para caso o modal não seja concluído por qualquer exceção externa
+  // Timeout de segurança exclusivo para ciclos REAIS de atualização ativos nesta sessão
   useEffect(() => {
+    // NUNCA executar timer se não houver atualização real em progresso nesta sessão
+    if (!systemUpdateInProgress || !isSystemUpdateInProgress()) {
+      return;
+    }
+
     if (systemUpdateCountdown === 0 && currentUser && systemUpdateTarget) {
       if (isUpdateAlreadyProcessed(systemUpdateTarget)) {
         setSystemUpdateCountdown(null);
         setSystemUpdateTarget(null);
+        setSystemUpdateInProgress(false);
         return;
       }
 
       // Garante que o usuário seja desconectado e atualizado após o tempo máximo do modal (12 segundos de segurança)
       const safetyTimer = setTimeout(() => {
-        if (!isUpdateAlreadyProcessed(systemUpdateTarget)) {
+        if (isSystemUpdateInProgress() && systemUpdateTarget) {
+          completeSessionUpdateCycle(systemUpdateTarget);
           handleImmediateSystemUpdateLogout();
         } else {
           setSystemUpdateCountdown(null);
           setSystemUpdateTarget(null);
+          setSystemUpdateInProgress(false);
         }
       }, 12000);
 
       return () => clearTimeout(safetyTimer);
     }
-  }, [systemUpdateCountdown, currentUser, systemUpdateTarget, handleImmediateSystemUpdateLogout]);
+  }, [systemUpdateInProgress, systemUpdateCountdown, currentUser, systemUpdateTarget, handleImmediateSystemUpdateLogout]);
 
   // Fetch Licitacao Global Protocol Counter
   useEffect(() => {
@@ -5312,9 +5439,16 @@ timestamp: ${new Date().toISOString()}`);
                         currentUser={currentUser}
                         users={users}
                         onUpdateTriggered={(target) => {
-                          setSystemUpdateTarget(target);
-                          setSystemUpdateCountdown(60);
-                          setIsUpdateModalDismissed(false);
+                          const started = startSessionUpdateCycle(target);
+                          if (started) {
+                            setSystemUpdateInProgress(true);
+                            setSystemUpdateTarget(target);
+                            currentActiveUpdateIdRef.current = target;
+                            updateCycleStatusRef.current = 'em_atualizacao';
+                            updateInitiatedInCurrentSessionRef.current = true;
+                            setSystemUpdateCountdown(60);
+                            setIsUpdateModalDismissed(false);
+                          }
                         }}
                         onBack={() => {
                           setAdminTab(null);
@@ -6796,7 +6930,9 @@ timestamp: ${new Date().toISOString()}`);
 
       {/* MODAL DINÂMICO DE ATUALIZAÇÃO DO SISTEMA EM DUAS ETAPAS COM NOVIDADES E ANIMAÇÃO */}
       <SystemDynamicUpdateModal
-        isOpen={systemUpdateCountdown !== null && systemUpdateCountdown >= 0}
+        isOpen={systemUpdateInProgress && systemUpdateCountdown !== null && systemUpdateCountdown >= 0}
+        updateId={systemUpdateTarget}
+        systemUpdateInProgress={systemUpdateInProgress}
         countdown={systemUpdateCountdown ?? 0}
         totalDuration={systemUpdateDetails?.isIndividual ? 10 : 60}
         isIndividual={systemUpdateDetails?.isIndividual}

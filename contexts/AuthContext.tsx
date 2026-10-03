@@ -1,8 +1,8 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { Session } from '@supabase/supabase-js';
 import { User, UserRole } from '../types';
+import { clearOldUpdateFlags, canExecuteSystemUpdateLogout } from '../services/systemUpdateService';
 
 interface AuthContextType {
     user: User | null;
@@ -67,6 +67,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Listen for changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             console.log(`[AUTH-DIAGNOSTIC] onAuthStateChange event: ${event}, user: ${session?.user?.id || 'none'}`);
+            if (event === 'SIGNED_IN') {
+                // Ao fazer login: limpa flags antigas de atualização e impede falsos positivos
+                clearOldUpdateFlags();
+            }
             setSession(session);
             if (session?.user) {
                 fetchProfile(session.user.id, session.user.email || '');
@@ -199,6 +203,13 @@ timestamp: ${new Date().toISOString()}`);
     };
 
     const signOut = async (reason = 'Ação manual do usuário / Logout') => {
+        if (reason === 'Atualização do Sistema Concluída') {
+            const validation = canExecuteSystemUpdateLogout();
+            if (!validation.allowed) {
+                console.warn(`[AUTH-DIAGNOSTIC] Bloqueio de signOut por atualização indevida: ${validation.reason}`);
+                return;
+            }
+        }
         console.warn(`[AUTH-DIAGNOSTIC] Origem do logout:
 função: signOut
 arquivo: contexts/AuthContext.tsx
