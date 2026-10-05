@@ -1,7 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ShieldCheck, 
-  Pause
+  Radio, 
+  Eye, 
+  Pause, 
+  Play, 
+  Info, 
+  MousePointer, 
+  Sparkles,
+  Lock,
+  Activity
 } from 'lucide-react';
 import { 
   AssistedMouseMovePayload, 
@@ -22,8 +30,8 @@ interface AssistedUserViewerOverlayProps {
 
 interface ActiveRipple {
   id: string;
-  pixelX: number;
-  pixelY: number;
+  xPct: number;
+  yPct: number;
 }
 
 export const AssistedUserViewerOverlay: React.FC<AssistedUserViewerOverlayProps> = ({
@@ -37,102 +45,62 @@ export const AssistedUserViewerOverlay: React.FC<AssistedUserViewerOverlayProps>
 }) => {
   const [clickRipples, setClickRipples] = useState<ActiveRipple[]>([]);
   const [isBannerCollapsed, setIsBannerCollapsed] = useState(false);
-  const [isCursorVisible, setIsCursorVisible] = useState(false);
 
-  const cursorNodeRef = useRef<HTMLDivElement | null>(null);
-  const latestCursorRef = useRef<AssistedMouseMovePayload | null>(null);
-  const currentPosRef = useRef<{ x: number; y: number; initialized: boolean }>({ x: 0, y: 0, initialized: false });
-  const rafIdRef = useRef<number | null>(null);
-  const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Mantém a ref sempre com o evento mais recente (descarta automaticamente eventos antigos)
-  useEffect(() => {
-    if (!virtualCursor || isPaused) {
-      latestCursorRef.current = null;
-      setIsCursorVisible(false);
-      return;
-    }
-
-    latestCursorRef.current = virtualCursor;
-    setIsCursorVisible(true);
-
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    hideTimerRef.current = setTimeout(() => {
-      setIsCursorVisible(false);
-    }, 8000);
-
-    return () => {
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    };
-  }, [virtualCursor, isPaused]);
-
-  // Loop de renderização visual ultra-fluido via requestAnimationFrame (60-120 FPS com LERP)
-  useEffect(() => {
-    let active = true;
-
-    const renderFrame = () => {
-      if (!active) return;
-
-      const payload = latestCursorRef.current;
-      if (payload && cursorNodeRef.current && !isPaused) {
-        // Reconstrói a posição exata baseada no elemento DOM + posição relativa
-        const { pixelX: targetX, pixelY: targetY } = resolveElementRelativePosition(payload);
-
-        if (!currentPosRef.current.initialized) {
-          currentPosRef.current.x = targetX;
-          currentPosRef.current.y = targetY;
-          currentPosRef.current.initialized = true;
-        } else {
-          const dx = targetX - currentPosRef.current.x;
-          const dy = targetY - currentPosRef.current.y;
-          const dist = Math.hypot(dx, dy);
-
-          // Se a distância for muito pequena, atinge o destino final exato sem erro de truncamento
-          if (dist < 0.25) {
-            currentPosRef.current.x = targetX;
-            currentPosRef.current.y = targetY;
-          } else if (dist > 500) {
-            // Se o cursor saltou para outra seção da tela, reposiciona imediatamente sem arrasto longo
-            currentPosRef.current.x = targetX;
-            currentPosRef.current.y = targetY;
-          } else {
-            // Interpolação suave (LERP) a ~42% por frame: resposta ultrarrápida e natural sem lag
-            currentPosRef.current.x += dx * 0.42;
-            currentPosRef.current.y += dy * 0.42;
-          }
-        }
-
-        // Posiciona o cursor virtual utilizando coordenadas do viewport com aceleração de GPU
-        cursorNodeRef.current.style.transform = `translate3d(${currentPosRef.current.x}px, ${currentPosRef.current.y}px, 0)`;
-      }
-
-      rafIdRef.current = requestAnimationFrame(renderFrame);
-    };
-
-    rafIdRef.current = requestAnimationFrame(renderFrame);
-
-    return () => {
-      active = false;
-      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
-    };
-  }, [isPaused]);
+  // Calcula a posição real do cursor do Admin na tela do usuário via elemento relativo
+  const computedCursorPos = useMemo(() => {
+    if (!virtualCursor || isPaused) return { xPct: 50, yPct: 50, pixelX: 0, pixelY: 0 };
+    return resolveElementRelativePosition({
+      targetElementId: virtualCursor.targetElementId,
+      dataAssistId: virtualCursor.dataAssistId,
+      selector: virtualCursor.selector,
+      elemXRel: virtualCursor.elemXRel,
+      elemYRel: virtualCursor.elemYRel,
+      viewportXRel: virtualCursor.viewportXRel,
+      viewportYRel: virtualCursor.viewportYRel,
+      xPct: virtualCursor.xPct,
+      yPct: virtualCursor.yPct
+    });
+  }, [
+    virtualCursor?.targetElementId,
+    virtualCursor?.dataAssistId,
+    virtualCursor?.selector,
+    virtualCursor?.elemXRel,
+    virtualCursor?.elemYRel,
+    virtualCursor?.viewportXRel,
+    virtualCursor?.viewportYRel,
+    virtualCursor?.xPct,
+    virtualCursor?.yPct,
+    virtualCursor?.timestamp,
+    isPaused
+  ]);
 
   // Renderiza efeito visual de pulso/ripple efêmero (400ms) quando o Administrador clica
   useEffect(() => {
     if (!lastClick || isPaused) return;
 
-    const clickPos = resolveElementRelativePosition(lastClick);
+    const clickPos = resolveElementRelativePosition({
+      targetElementId: lastClick.targetElementId,
+      dataAssistId: lastClick.dataAssistId,
+      selector: lastClick.selector,
+      elemXRel: lastClick.elemXRel,
+      elemYRel: lastClick.elemYRel,
+      viewportXRel: lastClick.viewportXRel,
+      viewportYRel: lastClick.viewportYRel,
+      xPct: lastClick.xPct,
+      yPct: lastClick.yPct
+    });
+
     const rippleId = lastClick.eventId || `clk_admin_${Date.now()}_${Math.random()}`;
 
     const newRipple: ActiveRipple = {
       id: rippleId,
-      pixelX: clickPos.pixelX,
-      pixelY: clickPos.pixelY
+      xPct: clickPos.xPct,
+      yPct: clickPos.yPct
     };
 
     setClickRipples((prev) => [...prev.filter(r => r.id !== rippleId).slice(-3), newRipple]);
 
-    // Destruição imediata e estrita após 400ms (duração do efeito visual efêmero)
+    // Destruição imediata e estrita após 400ms (duração do efeito visual)
     const timer = setTimeout(() => {
       setClickRipples((prev) => prev.filter((r) => r.id !== rippleId));
     }, 400);
@@ -207,53 +175,53 @@ export const AssistedUserViewerOverlay: React.FC<AssistedUserViewerOverlayProps>
         </div>
       </div>
 
-      {/* 2. CURSOR VIRTUAL DO ADMINISTRADOR (POSIÇÃO EXATA NO ELEMENTO VIA VIEWPORT E GPU) */}
-      <div
-        ref={cursorNodeRef}
-        data-assisted-cursor="true"
-        aria-hidden="true"
-        className="fixed top-0 left-0 z-[9995] pointer-events-none will-change-transform"
-        style={{
-          display: (isCursorVisible && !isPaused) ? 'block' : 'none'
-        }}
-      >
-        <div className="relative -translate-x-[5.5px] -translate-y-[3px]">
-          <svg
-            className="w-6 h-6 text-indigo-500 drop-shadow-[0_2px_10px_rgba(0,0,0,0.7)]"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87c.45 0 .67-.54.35-.85L5.85 2.85a.5.5 0 0 0-.35.36z"
-              stroke="white"
-              strokeWidth="1.6"
-              strokeLinejoin="round"
-            />
-          </svg>
+      {/* 2. CURSOR VIRTUAL DO ADMINISTRADOR (POSIÇÃO EXATA NO ELEMENTO) */}
+      {virtualCursor && !isPaused && (
+        <div
+          className="fixed z-[9995] pointer-events-none transition-all duration-75 ease-out"
+          style={{
+            left: `${computedCursorPos.xPct}%`,
+            top: `${computedCursorPos.yPct}%`,
+            transform: 'translate(-2px, -2px)'
+          }}
+        >
+          <div className="relative">
+            <svg
+              className="w-6 h-6 text-indigo-500 drop-shadow-[0_2px_10px_rgba(0,0,0,0.7)]"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87c.45 0 .67-.54.35-.85L5.85 2.85a.5.5 0 0 0-.35.36z"
+                stroke="white"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+            </svg>
 
-          {/* Etiqueta com o Nome do Administrador: ➤ [Nome] */}
-          <div className="absolute left-4 top-4 whitespace-nowrap bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-950 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-2xl border border-indigo-400/50 flex items-center gap-1 animate-in fade-in zoom-in-90">
-            <span className="text-indigo-300 font-extrabold text-[11px]">➤</span>
-            <span className="text-indigo-100 font-bold">{displayAdminName}</span>
+            {/* Etiqueta com o Nome do Administrador: ➤ [Nome] */}
+            <div className="absolute left-4 top-4 whitespace-nowrap bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-950 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-2xl border border-indigo-400/50 flex items-center gap-1 animate-in fade-in zoom-in-90">
+              <span className="text-indigo-300 font-extrabold text-[11px]">➤</span>
+              <span className="text-indigo-100 font-bold">{displayAdminName}</span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* 3. RIPPLES DE CLIQUE EFÊMEROS (400ms) COM POSICIONAMENTO EM VIEWPORT */}
+      {/* 3. RIPPLES DE CLIQUE EFÊMEROS (350-400ms) */}
       {clickRipples.map((ripple) => (
         <div
           key={ripple.id}
-          aria-hidden="true"
-          className="fixed top-0 left-0 pointer-events-none z-[9996]"
+          className="fixed pointer-events-none z-[9996]"
           style={{
-            transform: `translate3d(${ripple.pixelX}px, ${ripple.pixelY}px, 0)`
+            left: `${ripple.xPct}%`,
+            top: `${ripple.yPct}%`,
+            transform: 'translate(-50%, -50%)'
           }}
         >
-          <div className="relative -translate-x-1/2 -translate-y-1/2">
-            <span className="block w-10 h-10 rounded-full border-2 border-indigo-400 bg-indigo-500/30 animate-ping opacity-90" />
-            <span className="absolute inset-0 block w-5 h-5 m-auto rounded-full border border-indigo-300 bg-indigo-400/50 animate-pulse" />
-          </div>
+          <span className="block w-10 h-10 rounded-full border-2 border-indigo-400 bg-indigo-500/30 animate-ping opacity-90" />
+          <span className="absolute inset-0 block w-5 h-5 m-auto rounded-full border border-indigo-300 bg-indigo-400/50 animate-pulse" />
         </div>
       ))}
     </>

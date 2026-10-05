@@ -29,7 +29,6 @@ import {
   assistedSessionService, 
   setReactInputValue,
   resolveElementRelativePosition,
-  findTargetElementFromAnchor,
   AssistedMouseMovePayload, 
   AssistedClickPayload,
   AssistedOperationMode,
@@ -1259,9 +1258,21 @@ const App: React.FC = () => {
           // Em modo simulação, executa o clique programático na interface do usuário acompanhado
           if (assistedViewerData?.mode === 'simulation' && click.source !== 'user') {
             isApplyingRemoteSyncRef.current = true;
-            const pos = resolveElementRelativePosition(click);
-            let targetEl: HTMLElement | null = pos.element || findTargetElementFromAnchor(click.elementAnchor, click.selector, click.targetElementId, click.dataAssistId);
-            if (!targetEl && pos.pixelX !== undefined && pos.pixelY !== undefined) {
+            let targetEl: HTMLElement | null = null;
+            if (click.dataAssistId) {
+              targetEl = document.querySelector(`[data-assist-id="${click.dataAssistId}"]`);
+            }
+            if (!targetEl && click.targetElementId) {
+              targetEl = document.getElementById(click.targetElementId);
+            }
+            if (!targetEl && click.id) {
+              targetEl = document.getElementById(click.id);
+            }
+            if (!targetEl && click.selector) {
+              try { targetEl = document.querySelector(click.selector); } catch (e) {}
+            }
+            if (!targetEl) {
+              const pos = resolveElementRelativePosition(click);
               targetEl = document.elementFromPoint(pos.pixelX, pos.pixelY) as HTMLElement | null;
             }
             if (targetEl) {
