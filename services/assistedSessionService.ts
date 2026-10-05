@@ -56,6 +56,19 @@ export interface AssistedStateSnapshotPayload {
   senderId?: string;
 }
 
+export interface ElementAnchor {
+  primarySelector: string;
+  dataAssistId?: string | null;
+  id?: string | null;
+  name?: string | null;
+  testId?: string | null;
+  ariaLabel?: string | null;
+  tagName?: string;
+  role?: string | null;
+  textSnippet?: string | null;
+  fallbackSelectors?: string[];
+}
+
 export interface AssistedMouseMovePayload {
   eventId?: string;
   sessionId: string;
@@ -63,23 +76,32 @@ export interface AssistedMouseMovePayload {
   senderName: string;
   senderRole: 'admin' | 'user';
   route: string;
-  // Posicionamento relativo ao elemento / âncora (Independente de resolução)
+  // Sincronização exata baseada em Elemento DOM + Posição Relativa
+  elementAnchor?: ElementAnchor | null;
+  relativeX?: number; // 0.0 a 1.0 (percentual relativo dentro do elemento)
+  relativeY?: number; // 0.0 a 1.0 (percentual relativo dentro do elemento)
+  // Coordenadas de Fallback do Viewport Transmissor
+  clientX?: number;
+  clientY?: number;
+  normalizedX?: number; // clientX / viewportWidth (0.0 a 1.0)
+  normalizedY?: number; // clientY / viewportHeight (0.0 a 1.0)
+  scrollX: number;
+  scrollY: number;
+  viewportWidth: number;
+  viewportHeight: number;
+  // Posicionamento relativo ao elemento / âncora (Compatibilidade retroativa)
   targetElementId?: string | null;
   dataAssistId?: string | null;
   selector?: string | null;
-  elemXRel?: number; // 0.0 a 1.0 (percentual dentro do elemento)
-  elemYRel?: number; // 0.0 a 1.0 (percentual dentro do elemento)
-  // Posicionamento normalizado por viewport (fallback para áreas livres)
+  elemXRel?: number; // 0.0 a 1.0
+  elemYRel?: number; // 0.0 a 1.0
+  // Posicionamento normalizado por viewport (compatibilidade)
   viewportXRel: number; // 0.0 a 1.0
   viewportYRel: number; // 0.0 a 1.0
   xRelative: number;    // 0-100% relativo ao viewport
   yRelative: number;    // 0-100% relativo ao viewport
   xPct: number;         // Compatibilidade (0-100)
   yPct: number;         // Compatibilidade (0-100)
-  scrollX: number;
-  scrollY: number;
-  viewportWidth: number;
-  viewportHeight: number;
   dpr?: number;
   isTouch?: boolean;
   userName?: string;
@@ -90,6 +112,16 @@ export interface AssistedMouseMovePayload {
 export interface AssistedClickPayload {
   eventId: string; // clickEventId único e efêmero
   sessionId?: string;
+  // Sincronização exata baseada em Elemento DOM + Posição Relativa
+  elementAnchor?: ElementAnchor | null;
+  relativeX?: number;
+  relativeY?: number;
+  clientX?: number;
+  clientY?: number;
+  normalizedX?: number;
+  normalizedY?: number;
+  viewportWidth?: number;
+  viewportHeight?: number;
   targetElementId?: string | null;
   dataAssistId?: string | null;
   selector?: string | null;
@@ -248,18 +280,279 @@ export function setReactInputValue(
 }
 
 /**
- * Calcula a posição relativa precisa do cursor em relação a elementos na interface
+ * Escapa caracteres especiais para uso seguro em seletores CSS
+ */
+export function escapeCssSelector(str: string): string {
+  if (typeof CSS !== 'undefined' && CSS.escape) {
+    return CSS.escape(str);
+  }
+  return str.replace(/([ #;?%&,.+*~':"!^$[\]()=>|/@\\])/g, '\\$1');
+}
+
+/**
+ * Constrói um seletor CSS estrutural reproduzível para o elemento na árvore DOM
+ */
+export function generateStructuralCssSelector(el: HTMLElement): string {
+  if (!el || el === document.body) return 'body';
+  if (el === document.documentElement) return 'html';
+  if (!el.parentElement) return el.tagName.toLowerCase();
+
+  const parent = el.parentElement;
+  const tag = el.tagName.toLowerCase();
+
+  // 1. data-assist-id direto
+  const dataAssistId = el.getAttribute('data-assist-id');
+  if (dataAssistId) return `[data-assist-id="${escapeCssSelector(dataAssistId)}"]`;
+
+  // 2. id direto válido
+  if (el.id && !el.id.startsWith('react-') && !/^[0-9]/.test(el.id)) {
+    return `#${escapeCssSelector(el.id)}`;
+  }
+
+  // 3. name direto
+  const name = el.getAttribute('name');
+  if (name) return `${tag}[name="${escapeCssSelector(name)}"]`;
+
+  // 4. data-testid direto
+  const testId = el.getAttribute('data-testid');
+  if (testId) return `[data-testid="${escapeCssSelector(testId)}"]`;
+
+  // 5. aria-label direto
+  const ariaLabel = el.getAttribute('aria-label');
+  if (ariaLabel) return `${tag}[aria-label="${escapeCssSelector(ariaLabel)}"]`;
+
+  // 6. data-tab direto
+  const dataTab = el.getAttribute('data-tab');
+  if (dataTab) return `[data-tab="${escapeCssSelector(dataTab)}"]`;
+
+  // 7. Determina índice entre elementos irmãos da mesma tag
+  const siblings = Array.from(parent.children).filter(child => child.tagName.toLowerCase() === tag);
+  const index = siblings.indexOf(el) + 1;
+  const nthPart = siblings.length > 1 ? `:nth-of-type(${index})` : '';
+
+  if (parent === document.body) {
+    return `body > ${tag}${nthPart}`;
+  }
+
+  // Se o ancestral pai tem ID ou data-assist-id, usa ele como base curta
+  if (parent.getAttribute('data-assist-id')) {
+    return `[data-assist-id="${escapeCssSelector(parent.getAttribute('data-assist-id')!)}"] > ${tag}${nthPart}`;
+  }
+  if (parent.id && !parent.id.startsWith('react-') && !/^[0-9]/.test(parent.id)) {
+    return `#${escapeCssSelector(parent.id)} > ${tag}${nthPart}`;
+  }
+
+  // Se o pai for container comum sem id, sobe na hierarquia
+  const parentSelector = generateStructuralCssSelector(parent as HTMLElement);
+  return `${parentSelector} > ${tag}${nthPart}`;
+}
+
+/**
+ * Identifica o elemento e constrói a âncora estável com prioridades estritas:
+ * 1. data-assist-id
+ * 2. id
+ * 3. name
+ * 4. data-testid
+ * 5. aria-label
+ * 6. rota/estrutura DOM
+ * 7. seletor CSS estável
+ */
+export function buildElementAnchor(el: HTMLElement | null): ElementAnchor | null {
+  if (!el || el === document.body || el === document.documentElement) {
+    return null;
+  }
+
+  // Ancestrais semânticos próximos
+  const assistIdEl = el.closest('[data-assist-id]') as HTMLElement | null;
+  const idEl = el.closest('[id]:not([id^="react-"])') as HTMLElement | null;
+  const testIdEl = el.closest('[data-testid]') as HTMLElement | null;
+  const nameEl = el.closest('[name]') as HTMLElement | null;
+  const ariaLabelEl = el.closest('[aria-label]') as HTMLElement | null;
+  const semanticEl = el.closest('button, input, select, textarea, a, tr, [role="button"], [role="tab"], [data-card]') as HTMLElement | null;
+
+  const dataAssistId = el.getAttribute('data-assist-id') || assistIdEl?.getAttribute('data-assist-id') || null;
+  const id = (el.id && !el.id.startsWith('react-') && !/^[0-9]/.test(el.id)) ? el.id : (idEl?.id || null);
+  const testId = el.getAttribute('data-testid') || testIdEl?.getAttribute('data-testid') || null;
+  const name = el.getAttribute('name') || nameEl?.getAttribute('name') || null;
+  const ariaLabel = el.getAttribute('aria-label') || ariaLabelEl?.getAttribute('aria-label') || null;
+  const tagName = el.tagName.toLowerCase();
+  const role = el.getAttribute('role') || semanticEl?.getAttribute('role') || null;
+  const textSnippet = el.innerText ? el.innerText.trim().slice(0, 35) : null;
+
+  let primarySelector = '';
+  if (el.getAttribute('data-assist-id')) {
+    primarySelector = `[data-assist-id="${escapeCssSelector(el.getAttribute('data-assist-id')!)}"]`;
+  } else if (el.id && !el.id.startsWith('react-') && !/^[0-9]/.test(el.id)) {
+    primarySelector = `#${escapeCssSelector(el.id)}`;
+  } else if (el.getAttribute('data-testid')) {
+    primarySelector = `[data-testid="${escapeCssSelector(el.getAttribute('data-testid')!)}"]`;
+  } else if (el.getAttribute('name')) {
+    primarySelector = `${tagName}[name="${escapeCssSelector(el.getAttribute('name')!)}"]`;
+  } else if (el.getAttribute('aria-label')) {
+    primarySelector = `${tagName}[aria-label="${escapeCssSelector(el.getAttribute('aria-label')!)}"]`;
+  } else {
+    try {
+      primarySelector = generateStructuralCssSelector(el);
+    } catch (e) {
+      primarySelector = tagName;
+    }
+  }
+
+  // Lista de seletores de fallback em cascata caso o layout responsivo condense sub-elementos
+  const fallbackSelectors: string[] = [];
+  if (assistIdEl && assistIdEl !== el) {
+    const aid = assistIdEl.getAttribute('data-assist-id');
+    if (aid) fallbackSelectors.push(`[data-assist-id="${escapeCssSelector(aid)}"]`);
+  }
+  if (idEl && idEl !== el && idEl.id) {
+    fallbackSelectors.push(`#${escapeCssSelector(idEl.id)}`);
+  }
+  if (testIdEl && testIdEl !== el) {
+    const tid = testIdEl.getAttribute('data-testid');
+    if (tid) fallbackSelectors.push(`[data-testid="${escapeCssSelector(tid)}"]`);
+  }
+  if (nameEl && nameEl !== el) {
+    const n = nameEl.getAttribute('name');
+    if (n) fallbackSelectors.push(`[name="${escapeCssSelector(n)}"]`);
+  }
+  if (semanticEl && semanticEl !== el) {
+    try {
+      const semSel = generateStructuralCssSelector(semanticEl);
+      if (semSel && !fallbackSelectors.includes(semSel)) {
+        fallbackSelectors.push(semSel);
+      }
+    } catch (e) {}
+  }
+
+  return {
+    primarySelector,
+    dataAssistId,
+    id,
+    name,
+    testId,
+    ariaLabel,
+    tagName,
+    role,
+    textSnippet,
+    fallbackSelectors
+  };
+}
+
+/**
+ * Localiza o elemento alvo na tela receptora testando em ordem de estabilidade:
+ * 1. data-assist-id
+ * 2. id
+ * 3. name
+ * 4. data-testid
+ * 5. aria-label
+ * 6. seletor principal
+ * 7. seletores de fallback estruturais
+ */
+export function findTargetElementFromAnchor(
+  anchor?: ElementAnchor | null,
+  fallbackSelector?: string | null,
+  targetId?: string | null,
+  dataAssistId?: string | null
+): HTMLElement | null {
+  if (typeof document === 'undefined') return null;
+
+  // 1. data-assist-id
+  const assistId = anchor?.dataAssistId || dataAssistId;
+  if (assistId) {
+    try {
+      const el = document.querySelector(`[data-assist-id="${escapeCssSelector(assistId)}"]`) as HTMLElement | null;
+      if (el) return el;
+    } catch (e) {}
+  }
+
+  // 2. id
+  const elemId = anchor?.id || targetId;
+  if (elemId) {
+    try {
+      const el = document.getElementById(elemId);
+      if (el) return el;
+    } catch (e) {}
+  }
+
+  // 3. name
+  if (anchor?.name) {
+    try {
+      const el = document.querySelector(`[name="${escapeCssSelector(anchor.name)}"]`) as HTMLElement | null;
+      if (el) return el;
+    } catch (e) {}
+  }
+
+  // 4. data-testid
+  if (anchor?.testId) {
+    try {
+      const el = document.querySelector(`[data-testid="${escapeCssSelector(anchor.testId)}"]`) as HTMLElement | null;
+      if (el) return el;
+    } catch (e) {}
+  }
+
+  // 5. aria-label
+  if (anchor?.ariaLabel) {
+    try {
+      const el = document.querySelector(`[aria-label="${escapeCssSelector(anchor.ariaLabel)}"]`) as HTMLElement | null;
+      if (el) return el;
+    } catch (e) {}
+  }
+
+  // 6. primarySelector
+  if (anchor?.primarySelector) {
+    try {
+      const el = document.querySelector(anchor.primarySelector) as HTMLElement | null;
+      if (el) return el;
+    } catch (e) {}
+  }
+
+  // 7. fallbackSelectors
+  if (anchor?.fallbackSelectors && anchor.fallbackSelectors.length > 0) {
+    for (const sel of anchor.fallbackSelectors) {
+      try {
+        const el = document.querySelector(sel) as HTMLElement | null;
+        if (el) return el;
+      } catch (e) {}
+    }
+  }
+
+  // 8. Seletor legado de compatibilidade
+  if (fallbackSelector) {
+    try {
+      const el = document.querySelector(fallbackSelector) as HTMLElement | null;
+      if (el) return el;
+    } catch (e) {}
+  }
+
+  return null;
+}
+
+/**
+ * Calcula a posição relativa precisa do cursor em relação ao elemento sob o ponteiro
+ * Baseado rigorosamente em:
+ * 1. document.elementFromPoint(clientX, clientY)
+ * 2. âncora estável do elemento
+ * 3. const rect = element.getBoundingClientRect()
+ * 4. relativeX = (clientX - rect.left) / rect.width [limitado entre 0 e 1]
+ *    relativeY = (clientY - rect.top) / rect.height [limitado entre 0 e 1]
  */
 export function computeElementRelativePosition(
   clientX: number,
   clientY: number,
   source: 'admin' | 'user' = 'admin'
 ): {
+  elementAnchor: ElementAnchor | null;
+  relativeX: number;
+  relativeY: number;
+  normalizedX: number;
+  normalizedY: number;
+  clientX: number;
+  clientY: number;
   targetElementId?: string | null;
   dataAssistId?: string | null;
   selector?: string | null;
-  elemXRel?: number;
-  elemYRel?: number;
+  elemXRel: number;
+  elemYRel: number;
   viewportXRel: number;
   viewportYRel: number;
   scrollX: number;
@@ -274,13 +567,26 @@ export function computeElementRelativePosition(
   const scrollY = typeof window !== 'undefined' ? (window.scrollY || document.documentElement.scrollTop || 0) : 0;
   const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
 
-  const viewportXRel = Math.max(0, Math.min(1, clientX / Math.max(1, viewportW)));
-  const viewportYRel = Math.max(0, Math.min(1, clientY / Math.max(1, viewportH)));
+  // Fallback normalizado por viewport (0 a 1)
+  const normalizedX = Math.max(0, Math.min(1, clientX / Math.max(1, viewportW)));
+  const normalizedY = Math.max(0, Math.min(1, clientY / Math.max(1, viewportH)));
 
   if (typeof document === 'undefined') {
     return {
-      viewportXRel,
-      viewportYRel,
+      elementAnchor: null,
+      relativeX: 0.5,
+      relativeY: 0.5,
+      normalizedX,
+      normalizedY,
+      clientX,
+      clientY,
+      targetElementId: null,
+      dataAssistId: null,
+      selector: null,
+      elemXRel: 0.5,
+      elemYRel: 0.5,
+      viewportXRel: normalizedX,
+      viewportYRel: normalizedY,
       scrollX,
       scrollY,
       dpr,
@@ -289,11 +595,30 @@ export function computeElementRelativePosition(
     };
   }
 
-  const el = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
-  if (!el) {
+  // 1. Detecta o elemento abaixo do cursor
+  let rawElement = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+
+  // Ignora o próprio cursor virtual ou overlays se forem detectados
+  if (rawElement && rawElement.closest('[aria-hidden="true"], [data-assisted-cursor]')) {
+    rawElement = null;
+  }
+
+  if (!rawElement || rawElement === document.body || rawElement === document.documentElement) {
     return {
-      viewportXRel,
-      viewportYRel,
+      elementAnchor: null,
+      relativeX: 0.5,
+      relativeY: 0.5,
+      normalizedX,
+      normalizedY,
+      clientX,
+      clientY,
+      targetElementId: null,
+      dataAssistId: null,
+      selector: null,
+      elemXRel: 0.5,
+      elemYRel: 0.5,
+      viewportXRel: normalizedX,
+      viewportYRel: normalizedY,
       scrollX,
       scrollY,
       dpr,
@@ -302,38 +627,40 @@ export function computeElementRelativePosition(
     };
   }
 
-  // Procura âncora mais próxima estável
-  const anchor = el.closest('[data-assist-id], [id], button, input, select, textarea, a, [role="button"], [role="tab"], tr, [data-card]') as HTMLElement | null || el;
+  // 2. Identifica o elemento e constrói a âncora estável
+  const anchor = buildElementAnchor(rawElement);
 
-  const dataAssistId = anchor.getAttribute('data-assist-id') || undefined;
-  const id = anchor.id && !anchor.id.startsWith('react-') ? anchor.id : undefined;
-  let selector: string | undefined = undefined;
+  // 3. Obtém o rect CSS exato do elemento via getBoundingClientRect()
+  const rect = rawElement.getBoundingClientRect();
 
-  if (dataAssistId) selector = `[data-assist-id="${dataAssistId}"]`;
-  else if (id) selector = `#${id}`;
-  else {
-    const name = anchor.getAttribute('name');
-    if (name) selector = `[name="${name}"]`;
-    else if (anchor.getAttribute('data-tab')) selector = `[data-tab="${anchor.getAttribute('data-tab')}"]`;
-  }
-
-  const rect = anchor.getBoundingClientRect();
-  let elemXRel: number | undefined = undefined;
-  let elemYRel: number | undefined = undefined;
+  // 4. Calcula a posição percentual relativa dentro do elemento limitada estritamente entre 0 e 1
+  let relativeX = 0.5;
+  let relativeY = 0.5;
 
   if (rect.width > 0 && rect.height > 0) {
-    elemXRel = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    elemYRel = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+    relativeX = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    relativeY = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
   }
 
+  const primarySel = anchor?.primarySelector || null;
+  const assistId = anchor?.dataAssistId || null;
+  const id = anchor?.id || null;
+
   return {
-    targetElementId: id || null,
-    dataAssistId: dataAssistId || null,
-    selector: selector || null,
-    elemXRel,
-    elemYRel,
-    viewportXRel,
-    viewportYRel,
+    elementAnchor: anchor,
+    relativeX,
+    relativeY,
+    normalizedX,
+    normalizedY,
+    clientX,
+    clientY,
+    targetElementId: id,
+    dataAssistId: assistId,
+    selector: primarySel,
+    elemXRel: relativeX,
+    elemYRel: relativeY,
+    viewportXRel: normalizedX,
+    viewportYRel: normalizedY,
     scrollX,
     scrollY,
     dpr,
@@ -343,9 +670,24 @@ export function computeElementRelativePosition(
 }
 
 /**
- * Reconstrói a posição exata em pixels na tela de destino baseada no elemento relativo
+ * Reconstrói com precisão matemática absoluta a posição em pixels no viewport da tela receptora:
+ * 1. Localiza o mesmo elemento através do elementAnchor
+ * 2. Executa const rect = element.getBoundingClientRect()
+ * 3. Reconstrói a posição:
+ *    cursorX = rect.left + (relativeX * rect.width)
+ *    cursorY = rect.top + (relativeY * rect.height)
+ * 4. Fallback proporcional pelo viewport apenas se o elemento não for encontrado
  */
 export function resolveElementRelativePosition(payload: {
+  elementAnchor?: ElementAnchor | null;
+  relativeX?: number;
+  relativeY?: number;
+  clientX?: number;
+  clientY?: number;
+  normalizedX?: number;
+  normalizedY?: number;
+  viewportWidth?: number;
+  viewportHeight?: number;
   targetElementId?: string | null;
   dataAssistId?: string | null;
   selector?: string | null;
@@ -355,45 +697,105 @@ export function resolveElementRelativePosition(payload: {
   viewportYRel?: number;
   xPct?: number;
   yPct?: number;
-}): { pixelX: number; pixelY: number; xPct: number; yPct: number } {
+}): { pixelX: number; pixelY: number; xPct: number; yPct: number; matchedElement: boolean; element: HTMLElement | null } {
   const winW = typeof window !== 'undefined' ? window.innerWidth : 1920;
   const winH = typeof window !== 'undefined' ? window.innerHeight : 1080;
 
   if (typeof document === 'undefined') {
-    const xPct = payload.xPct ?? (payload.viewportXRel ? payload.viewportXRel * 100 : 50);
-    const yPct = payload.yPct ?? (payload.viewportYRel ? payload.viewportYRel * 100 : 50);
-    return { pixelX: (xPct / 100) * winW, pixelY: (yPct / 100) * winH, xPct, yPct };
+    const normX = payload.normalizedX ?? payload.viewportXRel ?? ((payload.xPct || 50) / 100);
+    const normY = payload.normalizedY ?? payload.viewportYRel ?? ((payload.yPct || 50) / 100);
+    return {
+      pixelX: normX * winW,
+      pixelY: normY * winH,
+      xPct: normX * 100,
+      yPct: normY * 100,
+      matchedElement: false,
+      element: null
+    };
   }
 
-  let targetEl: HTMLElement | null = null;
+  // 1. Localiza o mesmo elemento através das estratégias em cascata do elementAnchor
+  const targetEl = findTargetElementFromAnchor(
+    payload.elementAnchor,
+    payload.selector,
+    payload.targetElementId,
+    payload.dataAssistId
+  );
 
-  if (payload.dataAssistId) {
-    targetEl = document.querySelector(`[data-assist-id="${payload.dataAssistId}"]`);
-  }
-  if (!targetEl && payload.targetElementId) {
-    targetEl = document.getElementById(payload.targetElementId);
-  }
-  if (!targetEl && payload.selector) {
-    try { targetEl = document.querySelector(payload.selector); } catch (e) {}
-  }
+  const relX = payload.relativeX !== undefined
+    ? payload.relativeX
+    : (payload.elemXRel !== undefined ? payload.elemXRel : 0.5);
 
-  if (targetEl && payload.elemXRel !== undefined && payload.elemYRel !== undefined) {
+  const relY = payload.relativeY !== undefined
+    ? payload.relativeY
+    : (payload.elemYRel !== undefined ? payload.elemYRel : 0.5);
+
+  // 2. Se localizou o elemento na tela receptora
+  if (targetEl) {
     const rect = targetEl.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {
-      const pixelX = rect.left + (payload.elemXRel * rect.width);
-      const pixelY = rect.top + (payload.elemYRel * rect.height);
-      const xPct = Math.max(0, Math.min(100, (pixelX / winW) * 100));
-      const yPct = Math.max(0, Math.min(100, (pixelY / winH) * 100));
-      return { pixelX, pixelY, xPct, yPct };
+      // 3. Reconstruir a posição EXATA dentro do elemento:
+      const cursorX = rect.left + (relX * rect.width);
+      const cursorY = rect.top + (relY * rect.height);
+      const xPct = Math.max(0, Math.min(100, (cursorX / Math.max(1, winW)) * 100));
+      const yPct = Math.max(0, Math.min(100, (cursorY / Math.max(1, winH)) * 100));
+
+      return {
+        pixelX: cursorX,
+        pixelY: cursorY,
+        xPct,
+        yPct,
+        matchedElement: true,
+        element: targetEl
+      };
     }
   }
 
-  // Fallback: normalizado por viewport
-  const vpX = payload.viewportXRel !== undefined ? payload.viewportXRel : ((payload.xPct || 0) / 100);
-  const vpY = payload.viewportYRel !== undefined ? payload.viewportYRel : ((payload.yPct || 0) / 100);
-  const pixelX = vpX * winW;
-  const pixelY = vpY * winH;
-  return { pixelX, pixelY, xPct: vpX * 100, yPct: vpY * 100 };
+  // FALLBACK OBRIGATÓRIO (apenas se o elemento não for encontrado):
+  // normalizedX = clientX / senderViewportWidth
+  // normalizedY = clientY / senderViewportHeight
+  // receiverX = normalizedX * window.innerWidth
+  // receiverY = normalizedY * window.innerHeight
+  const senderW = Math.max(1, payload.viewportWidth || 1920);
+  const senderH = Math.max(1, payload.viewportHeight || 1080);
+
+  let normX = 0.5;
+  let normY = 0.5;
+
+  if (payload.normalizedX !== undefined) {
+    normX = payload.normalizedX;
+  } else if (payload.clientX !== undefined) {
+    normX = payload.clientX / senderW;
+  } else if (payload.viewportXRel !== undefined) {
+    normX = payload.viewportXRel;
+  } else if (payload.xPct !== undefined) {
+    normX = payload.xPct / 100;
+  }
+
+  if (payload.normalizedY !== undefined) {
+    normY = payload.normalizedY;
+  } else if (payload.clientY !== undefined) {
+    normY = payload.clientY / senderH;
+  } else if (payload.viewportYRel !== undefined) {
+    normY = payload.viewportYRel;
+  } else if (payload.yPct !== undefined) {
+    normY = payload.yPct / 100;
+  }
+
+  normX = Math.max(0, Math.min(1, normX));
+  normY = Math.max(0, Math.min(1, normY));
+
+  const receiverX = normX * winW;
+  const receiverY = normY * winH;
+
+  return {
+    pixelX: receiverX,
+    pixelY: receiverY,
+    xPct: normX * 100,
+    yPct: normY * 100,
+    matchedElement: false,
+    element: null
+  };
 }
 
 class AssistedSessionManager {
@@ -748,6 +1150,19 @@ class AssistedSessionManager {
       senderName: userName || this.currentSession.realAdmin.name,
       senderRole: 'admin',
       route: currentRoute,
+      // Sincronização exata baseada em Elemento DOM + Posição Relativa
+      elementAnchor: relPos.elementAnchor,
+      relativeX: relPos.relativeX,
+      relativeY: relPos.relativeY,
+      normalizedX: relPos.normalizedX,
+      normalizedY: relPos.normalizedY,
+      clientX: relPos.clientX,
+      clientY: relPos.clientY,
+      scrollX: relPos.scrollX,
+      scrollY: relPos.scrollY,
+      viewportWidth: relPos.viewportWidth,
+      viewportHeight: relPos.viewportHeight,
+      // Compatibilidade retroativa
       targetElementId: relPos.targetElementId,
       dataAssistId: relPos.dataAssistId,
       selector: relPos.selector,
@@ -759,10 +1174,6 @@ class AssistedSessionManager {
       yRelative: relPos.viewportYRel * 100,
       xPct: relPos.viewportXRel * 100,
       yPct: relPos.viewportYRel * 100,
-      scrollX: relPos.scrollX,
-      scrollY: relPos.scrollY,
-      viewportWidth: relPos.viewportWidth,
-      viewportHeight: relPos.viewportHeight,
       dpr: relPos.dpr,
       isTouch,
       userName: userName || this.currentSession.realAdmin.name,
@@ -799,6 +1210,15 @@ class AssistedSessionManager {
     const payload: AssistedClickPayload = {
       eventId: `clk_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       sessionId: this.currentSession.sessionId,
+      elementAnchor: relPos.elementAnchor,
+      relativeX: relPos.relativeX,
+      relativeY: relPos.relativeY,
+      normalizedX: relPos.normalizedX,
+      normalizedY: relPos.normalizedY,
+      clientX: relPos.clientX,
+      clientY: relPos.clientY,
+      viewportWidth: relPos.viewportWidth,
+      viewportHeight: relPos.viewportHeight,
       targetElementId: relPos.targetElementId || targetInfo?.id || null,
       dataAssistId: relPos.dataAssistId || targetInfo?.dataAssistId || null,
       selector: relPos.selector || targetInfo?.selector || null,
@@ -1176,6 +1596,15 @@ class AssistedSessionManager {
         event: 'assisted-click',
         payload: {
           sessionId,
+          elementAnchor: relPos.elementAnchor,
+          relativeX: relPos.relativeX,
+          relativeY: relPos.relativeY,
+          normalizedX: relPos.normalizedX,
+          normalizedY: relPos.normalizedY,
+          clientX: relPos.clientX,
+          clientY: relPos.clientY,
+          viewportWidth: relPos.viewportWidth,
+          viewportHeight: relPos.viewportHeight,
           targetElementId: relPos.targetElementId || null,
           dataAssistId: relPos.dataAssistId || targetInfo?.dataAssistId || null,
           selector: relPos.selector || targetInfo?.selector || null,
@@ -1210,6 +1639,17 @@ class AssistedSessionManager {
         senderName: currentUser.name,
         senderRole: 'user',
         route: currentRoute,
+        elementAnchor: relPos.elementAnchor,
+        relativeX: relPos.relativeX,
+        relativeY: relPos.relativeY,
+        normalizedX: relPos.normalizedX,
+        normalizedY: relPos.normalizedY,
+        clientX: relPos.clientX,
+        clientY: relPos.clientY,
+        scrollX: relPos.scrollX,
+        scrollY: relPos.scrollY,
+        viewportWidth: relPos.viewportWidth,
+        viewportHeight: relPos.viewportHeight,
         targetElementId: relPos.targetElementId,
         dataAssistId: relPos.dataAssistId,
         selector: relPos.selector,
@@ -1221,10 +1661,6 @@ class AssistedSessionManager {
         yRelative: relPos.viewportYRel * 100,
         xPct: relPos.viewportXRel * 100,
         yPct: relPos.viewportYRel * 100,
-        scrollX: relPos.scrollX,
-        scrollY: relPos.scrollY,
-        viewportWidth: relPos.viewportWidth,
-        viewportHeight: relPos.viewportHeight,
         dpr: relPos.dpr,
         isTouch,
         userName: currentUser.name,
