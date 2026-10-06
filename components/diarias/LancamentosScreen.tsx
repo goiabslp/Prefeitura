@@ -705,29 +705,48 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   }, [filteredEventos, currentPage, pageSize]);
 
   const mappedOrdersForReport: Order[] = useMemo(() => {
-    return filteredEventos.map(evt => {
+    // Filtrar todos os registros com status CONCLUÍDO acessíveis ao usuário
+    const concluidos = eventos.filter(evt => {
+      if (evt.status !== 'concluido') return false;
+
+      // 1. ADMINISTRADOR deve visualizar todos os lançamentos
+      if (currentUser?.role === 'admin') {
+        return true;
+      }
+
+      // 2. GESTOR / SERVIDOR só deve ver viagem que ele mesmo lançou, ou que ele é o gestor responsável, ou participante
+      const isOwner = evt.user_id === currentUser?.id;
+      
+      const isParticipant = evt.pessoas && Array.isArray(evt.pessoas) && evt.pessoas.some(p => {
+        if (!p || !currentUser) return false;
+        if (p.id === currentUser.id) return true;
+        const normalize = (t: string) => t ? t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : "";
+        return p.name && currentUser.name && normalize(p.name) === normalize(currentUser.name);
+      });
+
+      const isGestorOfAnyPerson = evt.pessoas && Array.isArray(evt.pessoas) && evt.pessoas.some(p => {
+        const gId = gestoresMap[p.id] || gestoresMap[p.name];
+        return gId === currentUser?.id;
+      });
+
+      const isTransferredGestor = evt.gestor_transferido_cargo && currentUser?.jobTitle
+        ? currentUser.jobTitle.trim().toLowerCase() === evt.gestor_transferido_cargo.trim().toLowerCase()
+        : false;
+
+      return isOwner || isParticipant || isGestorOfAnyPerson || isTransferredGestor;
+    });
+
+    return concluidos.map(evt => {
       const requesterNames = evt.pessoas && Array.isArray(evt.pessoas) && evt.pessoas.length > 0
         ? evt.pessoas.map((p: any) => p.name).join(', ')
         : evt.user_name || 'Servidor não informado';
-
-      const mapStatus = (st: string) => {
-        if (st === 'concluido') return 'completed';
-        if (st === 'cancelado' || st === 'rejeitado' || st === 'rejeitado_gestor' || st === 'viagem_cancelada') return 'rejected';
-        if (st === 'em_viagem' || st === 'aguardando_administrador' || st === 'aguardando_gestor' || st === 'aguardando_aprovacao') return 'approved';
-        return 'awaiting_approval';
-      };
-
-      const mapPaymentStatus = (st: string) => {
-        if (st === 'concluido') return 'paid';
-        return (evt as any).payment_status || 'pending';
-      };
 
       return {
         id: String(evt.id),
         protocol: `EVT-${String(evt.id).slice(0, 6).toUpperCase()}`,
         title: `Viagem Oficial: ${evt.destino}`,
-        status: mapStatus(evt.status),
-        paymentStatus: mapPaymentStatus(evt.status),
+        status: 'completed',
+        paymentStatus: (evt as any).payment_status || 'pending',
         createdAt: evt.created_at || new Date().toISOString(),
         userId: evt.user_id,
         userName: evt.user_name || requesterNames,
@@ -750,7 +769,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         }
       } as unknown as Order;
     });
-  }, [filteredEventos]);
+  }, [eventos, currentUser, gestoresMap]);
 
   const handleSelectModalTab = (tab: 'resumo' | 'justificativa' | 'comprovantes' | 'relatorio') => {
     setModalActiveTab(tab);

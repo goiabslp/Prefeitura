@@ -156,7 +156,7 @@ export const getAllDiariaEventos = async (): Promise<DiariaEvento[]> => {
     .from('diarias_eventos')
     .select(DIARIA_EVENTO_COLUMNS)
     .order('created_at', { ascending: false })
-    .limit(500);
+    .limit(2000);
 
   if (error) {
     const msg = error.message || error.details || JSON.stringify(error);

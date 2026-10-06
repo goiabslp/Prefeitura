@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     X, FileDown, Clock, Info,
     MapPin, Printer, ChevronUp,
-    Check, Square, CheckSquare, Minus
+    Check, Square, CheckSquare, Minus, Search
 } from 'lucide-react';
 import { Order } from '../../types';
 
@@ -15,8 +15,8 @@ interface DiariasReportModalProps {
 }
 
 /**
- * Modal para exportar relatório de diárias pendentes.
- * Filtra automaticamente todas as diárias pendentes e, ao gerar o relatório,
+ * Modal para exportar relatório de diárias concluídas.
+ * Filtra automaticamente todas as diárias com status concluído e, ao gerar o relatório,
  * atualiza seu status de pagamento para "CONTABILIDADE".
  */
 export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
@@ -29,6 +29,7 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
     const [step, setStep] = useState<'select' | 'report'>('select');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
+    const [searchTerm, setSearchTerm] = useState('');
     const reportRef = useRef<HTMLDivElement>(null);
 
     // Resetar estado ao fechar
@@ -36,6 +37,7 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
         setStep('select');
         setSelectedIds(new Set());
         setFilteredOrders([]);
+        setSearchTerm('');
         onClose();
     };
 
@@ -57,28 +59,43 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
         return new Date(order.createdAt);
     };
 
-    // Ao abrir o modal, filtra diárias pendentes (paymentStatus === 'pending' ou !paymentStatus)
+    // Ao abrir o modal, filtra diárias com status concluídos e não as pendentes
     useEffect(() => {
         if (isOpen) {
-            const pendentes = orders.filter(order => {
-                const status = order.paymentStatus;
-                return !status || status === 'pending';
+            const concluidos = orders.filter(order => {
+                return order.status === 'completed' || (order.status as string) === 'concluido' || (order as any).eventoStatus === 'concluido';
             });
-            // Ordenar por data de saída (mais antiga primeiro)
-            pendentes.sort((a, b) => getDepartureDateObj(a).getTime() - getDepartureDateObj(b).getTime());
-            setFilteredOrders(pendentes);
+            // Ordenar por data de saída (mais recente primeiro)
+            concluidos.sort((a, b) => getDepartureDateObj(b).getTime() - getDepartureDateObj(a).getTime());
+            setFilteredOrders(concluidos);
             setSelectedIds(new Set());
+            setSearchTerm('');
             setStep('select');
         }
     }, [isOpen, orders]);
 
-    // Status de pagamento
+    // Filtragem por termo de busca no modal
+    const displayOrders = useMemo(() => {
+        if (!searchTerm.trim()) return filteredOrders;
+        const term = searchTerm.toLowerCase().trim();
+        return filteredOrders.filter(order => {
+            const content = order.documentSnapshot?.content;
+            return (
+                (order.protocol && order.protocol.toLowerCase().includes(term)) ||
+                (content?.requesterName && content.requesterName.toLowerCase().includes(term)) ||
+                (content?.destination && content.destination.toLowerCase().includes(term)) ||
+                (content?.descriptionReason && content.descriptionReason.toLowerCase().includes(term))
+            );
+        });
+    }, [filteredOrders, searchTerm]);
+
+    // Status de exibição no relatório
     const getPaymentLabel = (status: Order['paymentStatus']) => {
         switch (status) {
             case 'paid': return { label: 'Pago', style: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
             case 'contabilidade': return { label: 'Contabilidade', style: 'bg-blue-50 text-blue-700 border-blue-200' };
             case 'pending':
-            default: return { label: 'Pendente', style: 'bg-amber-50 text-amber-700 border-amber-200' };
+            default: return { label: 'Concluído', style: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
         }
     };
 
@@ -92,12 +109,12 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
         });
     };
 
-    // Selecionar/Deselecionar todos
+    // Selecionar/Deselecionar todos da listagem visível
     const toggleAll = () => {
-        if (selectedIds.size === filteredOrders.length) {
+        if (selectedIds.size === displayOrders.length && displayOrders.length > 0) {
             setSelectedIds(new Set());
         } else {
-            setSelectedIds(new Set(filteredOrders.map(o => o.id)));
+            setSelectedIds(new Set(displayOrders.map(o => o.id)));
         }
     };
 
@@ -209,11 +226,11 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
                                 </div>
                                 <div>
                                     <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">
-                                        Exportar Relatório de Diárias Pendentes
+                                        Exportar Relatório de Diárias Concluídas
                                     </h3>
                                     <p className="text-xs text-slate-500 font-medium">
-                                        {step === 'select' && `${filteredOrders.length} item(s) pendente(s) encontrado(s) — Selecione os itens`}
-                                        {step === 'report' && `Relatório gerado com ${selectedOrders.length} item(s)`}
+                                        {step === 'select' && `${displayOrders.length} diária(s) concluída(s) encontrada(s) — Selecione os itens`}
+                                        {step === 'report' && `Relatório gerado com ${selectedOrders.length} diária(s) concluída(s)`}
                                     </p>
                                 </div>
                             </div>
@@ -255,34 +272,50 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
                             {/* STEP 1: Seleção de Itens */}
                             {step === 'select' && (
                                 <div className="flex flex-col">
-                                    {/* Barra de ações */}
-                                    <div className="px-6 py-3 bg-white border-b border-slate-100 flex items-center justify-between sticky top-0 z-10">
-                                        <button
-                                            onClick={toggleAll}
-                                            className="flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 hover:text-indigo-600 hover:border-indigo-200 transition-all font-bold text-[10px] uppercase tracking-widest active:scale-95"
-                                        >
-                                            {selectedIds.size === filteredOrders.length ? (
-                                                <><CheckSquare className="w-3.5 h-3.5 text-indigo-600" /> Desmarcar Todos</>
-                                            ) : selectedIds.size > 0 ? (
-                                                <><Minus className="w-3.5 h-3.5 text-indigo-600" /> {selectedIds.size} selecionado(s)</>
-                                            ) : (
-                                                <><Square className="w-3.5 h-3.5" /> Selecionar Todos</>
-                                            )}
-                                        </button>
+                                    {/* Barra de ações e busca rápida */}
+                                    <div className="px-6 py-3 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-10 shadow-xs">
+                                        <div className="flex items-center gap-3">
+                                            <button
+                                                onClick={toggleAll}
+                                                className="flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 hover:text-indigo-600 hover:border-indigo-200 transition-all font-bold text-[10px] uppercase tracking-widest active:scale-95"
+                                            >
+                                                {selectedIds.size === displayOrders.length && displayOrders.length > 0 ? (
+                                                    <><CheckSquare className="w-3.5 h-3.5 text-indigo-600" /> Desmarcar Todos</>
+                                                ) : selectedIds.size > 0 ? (
+                                                    <><Minus className="w-3.5 h-3.5 text-indigo-600" /> {selectedIds.size} selecionado(s)</>
+                                                ) : (
+                                                    <><Square className="w-3.5 h-3.5" /> Selecionar Todos</>
+                                                )}
+                                            </button>
+
+                                            <div className="relative">
+                                                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                <input
+                                                    type="text"
+                                                    value={searchTerm}
+                                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                                    placeholder="Filtrar solicitante, destino, código..."
+                                                    className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 w-64 transition-all"
+                                                />
+                                            </div>
+                                        </div>
+
                                         <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                                             Os itens selecionados mudarão para "Contabilidade" automaticamente ao gerar o relatório.
                                         </div>
                                     </div>
 
                                     {/* Lista de itens filtrados */}
-                                    {filteredOrders.length === 0 ? (
+                                    {displayOrders.length === 0 ? (
                                         <div className="flex flex-col items-center justify-center py-16 text-slate-400">
                                             <Clock className="w-12 h-12 mb-3 opacity-30 animate-pulse" />
-                                            <p className="font-bold text-sm">Nenhuma diária pendente de pagamento encontrada</p>
+                                            <p className="font-bold text-sm">
+                                                {searchTerm ? 'Nenhuma diária concluída encontrada para este termo' : 'Nenhuma diária com status concluído encontrada'}
+                                            </p>
                                         </div>
                                     ) : (
                                         <div className="divide-y divide-slate-100 pb-44">
-                                            {filteredOrders.map(order => {
+                                            {displayOrders.map(order => {
                                                 const content = order.documentSnapshot?.content;
                                                 const isSelected = selectedIds.has(order.id);
                                                 const payment = getPaymentLabel(order.paymentStatus);
@@ -485,7 +518,7 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
                             {step === 'select' ? (
                                 <>
                                     <span className="text-xs text-slate-500 font-bold">
-                                        {selectedIds.size} de {filteredOrders.length} selecionado(s)
+                                        {selectedIds.size} de {displayOrders.length} selecionado(s)
                                     </span>
                                     <button
                                         onClick={handleGenerateReport}
