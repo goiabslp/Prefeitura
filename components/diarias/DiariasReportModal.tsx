@@ -216,19 +216,19 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.9, y: 30 }}
                         transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-                        className={`bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col ${step === 'report' ? 'w-full max-w-4xl max-h-[90vh]' : 'w-full max-w-5xl max-h-[85vh]'}`}
+                        className={`bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col ${step === 'report' ? 'w-full max-w-4xl max-h-[92vh]' : 'w-full max-w-6xl max-h-[92vh]'}`}
                     >
-                        {/* Cabeçalho do Modal */}
-                        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0 bg-gradient-to-r from-indigo-50 to-violet-50">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-600/30">
-                                    <FileDown className="w-5 h-5 text-white" />
+                        {/* Cabeçalho do Modal - Compacto */}
+                        <div className="px-5 py-2.5 border-b border-slate-100 flex items-center justify-between shrink-0 bg-gradient-to-r from-indigo-50/80 to-violet-50/80">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center shadow-md shadow-indigo-600/20 shrink-0">
+                                    <FileDown className="w-4 h-4 text-white" />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">
+                                    <h3 className="text-sm font-black text-slate-900 tracking-tight leading-tight">
                                         Exportar Relatório de Diárias Concluídas
                                     </h3>
-                                    <p className="text-xs text-slate-500 font-medium">
+                                    <p className="text-[11px] text-slate-500 font-medium leading-none mt-0.5">
                                         {step === 'select' && `${displayOrders.length} diária(s) concluída(s) encontrada(s) — Selecione os itens`}
                                         {step === 'report' && `Relatório gerado com ${selectedOrders.length} diária(s) concluída(s)`}
                                     </p>
@@ -236,14 +236,14 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
                             </div>
                             <button
                                 onClick={handleClose}
-                                className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 hover:text-slate-600"
+                                className="p-1.5 hover:bg-slate-100 rounded-lg transition-all text-slate-400 hover:text-slate-600"
                             >
-                                <X className="w-5 h-5" />
+                                <X className="w-4 h-4" />
                             </button>
                         </div>
 
-                        {/* Indicador de Etapas */}
-                        <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 shrink-0">
+                        {/* Indicador de Etapas - Compacto */}
+                        <div className="px-5 py-1.5 bg-slate-50/80 border-b border-slate-100 shrink-0">
                             <div className="flex items-center gap-2">
                                 {[
                                     { key: 'select', label: 'Selecionar Diárias', icon: CheckSquare },
@@ -257,8 +257,8 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
                                             {i > 0 && (
                                                 <div className={`flex-1 h-0.5 rounded ${isDone || isActive ? 'bg-indigo-500' : 'bg-slate-200'}`} />
                                             )}
-                                            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isActive ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : isDone ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
-                                                <StepIcon className="w-3.5 h-3.5" />
+                                            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${isActive ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20' : isDone ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
+                                                <StepIcon className="w-3 h-3" />
                                                 <span className="hidden sm:inline">{s.label}</span>
                                             </div>
                                         </React.Fragment>
@@ -272,49 +272,49 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
                             {/* STEP 1: Seleção de Itens */}
                             {step === 'select' && (
                                 <div className="flex flex-col">
-                                    {/* Barra de ações e busca rápida */}
-                                    <div className="px-6 py-3 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-10 shadow-xs">
-                                        <div className="flex items-center gap-3">
+                                    {/* Barra de ações e busca rápida - Compacto */}
+                                    <div className="px-4 py-2 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-2.5 sticky top-0 z-10 shadow-xs">
+                                        <div className="flex items-center gap-2.5">
                                             <button
                                                 onClick={toggleAll}
-                                                className="flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 hover:text-indigo-600 hover:border-indigo-200 transition-all font-bold text-[10px] uppercase tracking-widest active:scale-95"
+                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 hover:text-indigo-600 hover:border-indigo-200 transition-all font-bold text-[9px] uppercase tracking-wider active:scale-95"
                                             >
                                                 {selectedIds.size === displayOrders.length && displayOrders.length > 0 ? (
-                                                    <><CheckSquare className="w-3.5 h-3.5 text-indigo-600" /> Desmarcar Todos</>
+                                                    <><CheckSquare className="w-3 h-3 text-indigo-600" /> Desmarcar Todos</>
                                                 ) : selectedIds.size > 0 ? (
-                                                    <><Minus className="w-3.5 h-3.5 text-indigo-600" /> {selectedIds.size} selecionado(s)</>
+                                                    <><Minus className="w-3 h-3 text-indigo-600" /> {selectedIds.size} selecionado(s)</>
                                                 ) : (
-                                                    <><Square className="w-3.5 h-3.5" /> Selecionar Todos</>
+                                                    <><Square className="w-3 h-3" /> Selecionar Todos</>
                                                 )}
                                             </button>
 
                                             <div className="relative">
-                                                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                                                 <input
                                                     type="text"
                                                     value={searchTerm}
                                                     onChange={(e) => setSearchTerm(e.target.value)}
                                                     placeholder="Filtrar solicitante, destino, código..."
-                                                    className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 w-64 transition-all"
+                                                    className="pl-7 pr-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 w-56 sm:w-72 transition-all"
                                                 />
                                             </div>
                                         </div>
 
-                                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                                        <div className="text-[9.5px] text-slate-400 font-semibold tracking-normal">
                                             Os itens selecionados mudarão para "Contabilidade" automaticamente ao gerar o relatório.
                                         </div>
                                     </div>
 
-                                    {/* Lista de itens filtrados */}
+                                    {/* Lista de itens filtrados - Grid Compacto */}
                                     {displayOrders.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-                                            <Clock className="w-12 h-12 mb-3 opacity-30 animate-pulse" />
-                                            <p className="font-bold text-sm">
+                                        <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                                            <Clock className="w-10 h-10 mb-2 opacity-30 animate-pulse" />
+                                            <p className="font-bold text-xs">
                                                 {searchTerm ? 'Nenhuma diária concluída encontrada para este termo' : 'Nenhuma diária com status concluído encontrada'}
                                             </p>
                                         </div>
                                     ) : (
-                                        <div className="divide-y divide-slate-100 pb-44">
+                                        <div className="divide-y divide-slate-100/90 pb-4">
                                             {displayOrders.map(order => {
                                                 const content = order.documentSnapshot?.content;
                                                 const isSelected = selectedIds.has(order.id);
@@ -324,63 +324,63 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
                                                     <button
                                                         key={order.id}
                                                         onClick={() => toggleItem(order.id)}
-                                                        className={`w-full flex items-center gap-4 px-6 py-4 text-left transition-all hover:bg-slate-50 ${isSelected ? 'bg-indigo-50/40' : ''}`}
+                                                        className={`w-full flex items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-slate-50/80 ${isSelected ? 'bg-indigo-50/50' : ''}`}
                                                     >
-                                                        {/* Checkbox */}
-                                                        <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all shrink-0 ${isSelected ? 'bg-indigo-600 border-indigo-600 shadow-lg shadow-indigo-600/20' : 'border-slate-300 bg-white hover:border-indigo-400'}`}>
-                                                            {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                                                        {/* Checkbox Compacto */}
+                                                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all shrink-0 ${isSelected ? 'bg-indigo-600 border-indigo-600 shadow-sm shadow-indigo-600/30' : 'border-slate-300 bg-white hover:border-indigo-400'}`}>
+                                                            {isSelected && <Check className="w-3 h-3 text-white" />}
                                                         </div>
 
                                                         {/* Protocolo */}
-                                                        <div className="shrink-0 w-28">
-                                                            <span className="font-mono text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-100">
+                                                        <div className="shrink-0 w-24">
+                                                            <span className="font-mono text-[9px] font-bold text-indigo-600 bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100">
                                                                 {order.protocol}
                                                             </span>
                                                         </div>
 
                                                         {/* Nome + Destino */}
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-sm font-bold text-slate-800 truncate">
+                                                        <div className="flex-1 min-w-0 pr-2">
+                                                            <p className="text-xs font-bold text-slate-800 truncate leading-tight">
                                                                 {content?.requesterName || '---'}
                                                             </p>
-                                                            <p className="text-[10px] text-slate-500 font-medium flex items-center gap-1 truncate font-sans">
-                                                                <MapPin className="w-3 h-3 shrink-0" />
+                                                            <p className="text-[10px] text-slate-500 font-medium flex items-center gap-1 truncate font-sans leading-none mt-0.5">
+                                                                <MapPin className="w-2.5 h-2.5 shrink-0 text-slate-400" />
                                                                 {content?.destination || 'Destino n/a'}
                                                             </p>
                                                         </div>
 
                                                         {/* Saída */}
                                                         <div className="shrink-0 text-right w-24">
-                                                            <p className="text-xs font-bold text-slate-700">
+                                                            <p className="text-[11px] font-bold text-slate-700 leading-tight">
                                                                 {getDepartureDate(order)}
                                                             </p>
                                                             {content?.returnDateTime && (
-                                                                <p className="text-[9px] text-slate-400 font-medium font-sans">
+                                                                <p className="text-[9px] text-slate-400 font-medium font-sans leading-none mt-0.5">
                                                                     Volta: {new Date(content.returnDateTime).toLocaleDateString('pt-BR')}
                                                                 </p>
                                                             )}
                                                         </div>
 
                                                         {/* Status Pagamento */}
-                                                        <div className="shrink-0 w-28">
-                                                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[9px] font-black uppercase tracking-wider ${payment.style}`}>
+                                                        <div className="shrink-0 w-24 text-center">
+                                                            <span className={`inline-flex items-center justify-center gap-1 px-2 py-0.5 rounded-md border text-[8.5px] font-black uppercase tracking-wider ${payment.style}`}>
                                                                 {payment.label}
                                                             </span>
                                                         </div>
 
                                                         {/* Ação: Motivo da Viagem */}
-                                                        <div className="shrink-0 w-12 flex justify-center">
+                                                        <div className="shrink-0 w-8 flex justify-center">
                                                             <div 
                                                                 className="relative group/tooltip"
                                                                 onClick={(e) => e.stopPropagation()}
                                                             >
                                                                 <button
                                                                     type="button"
-                                                                    className="p-1.5 hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-lg transition-all"
+                                                                    className="p-1 hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-md transition-all"
                                                                 >
-                                                                    <Info className="w-4 h-4" />
+                                                                    <Info className="w-3.5 h-3.5" />
                                                                 </button>
-                                                                <div className="absolute right-full bottom-[-8px] mr-3 w-[420px] sm:w-[480px] md:w-[500px] p-4 bg-slate-900 text-white text-[11px] rounded-2xl shadow-2xl opacity-0 pointer-events-none group-hover/tooltip:opacity-100 transition-opacity z-50 leading-relaxed text-left font-medium font-sans whitespace-normal break-words">
+                                                                <div className="absolute right-full bottom-[-8px] mr-3 w-[360px] sm:w-[440px] p-3.5 bg-slate-900 text-white text-[11px] rounded-xl shadow-2xl opacity-0 pointer-events-none group-hover/tooltip:opacity-100 transition-opacity z-50 leading-relaxed text-left font-medium font-sans whitespace-normal break-words">
                                                                     <span className="block text-[8px] font-black text-indigo-400 uppercase tracking-wider mb-1">Motivo da Viagem</span>
                                                                     {content?.descriptionReason || 'Nenhuma justificativa informada.'}
                                                                     <div className="absolute left-full bottom-[10px] w-2.5 h-2.5 bg-slate-900 rotate-45 -ml-1.5" />
@@ -513,19 +513,19 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
                             )}
                         </div>
 
-                        {/* Rodapé com ações */}
-                        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 shrink-0 flex items-center justify-between">
+                        {/* Rodapé com ações - Compacto */}
+                        <div className="px-5 py-2.5 border-t border-slate-100 bg-slate-50/80 shrink-0 flex items-center justify-between">
                             {step === 'select' ? (
                                 <>
-                                    <span className="text-xs text-slate-500 font-bold">
+                                    <span className="text-[11px] text-slate-500 font-bold">
                                         {selectedIds.size} de {displayOrders.length} selecionado(s)
                                     </span>
                                     <button
                                         onClick={handleGenerateReport}
                                         disabled={selectedIds.size === 0}
-                                        className="px-6 py-2.5 bg-indigo-600 text-white font-black text-[10px] uppercase tracking-[0.2em] rounded-xl hover:bg-indigo-700 active:scale-95 transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                                        className="px-5 py-2 bg-indigo-600 text-white font-black text-[9.5px] uppercase tracking-[0.15em] rounded-xl hover:bg-indigo-700 active:scale-95 transition-all shadow-md shadow-indigo-600/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
                                     >
-                                        <FileDown className="w-4 h-4" />
+                                        <FileDown className="w-3.5 h-3.5" />
                                         Gerar Relatório
                                     </button>
                                 </>
@@ -533,16 +533,16 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
                                 <>
                                     <button
                                         onClick={() => setStep('select')}
-                                        className="px-5 py-2.5 bg-white border border-slate-200 text-slate-600 font-black text-[10px] uppercase tracking-[0.2em] rounded-xl hover:bg-slate-100 active:scale-95 transition-all flex items-center gap-2"
+                                        className="px-4 py-2 bg-white border border-slate-200 text-slate-600 font-black text-[9.5px] uppercase tracking-[0.15em] rounded-xl hover:bg-slate-100 active:scale-95 transition-all flex items-center gap-1.5"
                                     >
-                                        <ChevronUp className="w-4 h-4" />
+                                        <ChevronUp className="w-3.5 h-3.5" />
                                         Voltar à Seleção
                                     </button>
                                     <button
                                         onClick={handlePrint}
-                                        className="px-6 py-2.5 bg-indigo-600 text-white font-black text-[10px] uppercase tracking-[0.2em] rounded-xl hover:bg-indigo-700 active:scale-95 transition-all shadow-lg shadow-indigo-600/20 flex items-center gap-2"
+                                        className="px-5 py-2 bg-indigo-600 text-white font-black text-[9.5px] uppercase tracking-[0.15em] rounded-xl hover:bg-indigo-700 active:scale-95 transition-all shadow-md shadow-indigo-600/20 flex items-center gap-1.5"
                                     >
-                                        <Printer className="w-4 h-4" />
+                                        <Printer className="w-3.5 h-3.5" />
                                         Imprimir Relatório
                                     </button>
                                 </>
