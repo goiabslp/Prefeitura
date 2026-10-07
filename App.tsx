@@ -3077,7 +3077,8 @@ timestamp: ${new Date().toISOString()}`);
 
     // 2FA Interception Logic
     // Skip 2FA if we already have a valid digital signature stored (e.g. from ComprasForm Step 5)
-    if (!skip2FA && appState.content.useDigitalSignature && !appState.content.digitalSignature?.enabled) {
+    // Compras não exige assinatura eletrônica para novos pedidos
+    if (activeBlock !== 'compras' && !skip2FA && appState.content.useDigitalSignature && !appState.content.digitalSignature?.enabled) {
       // Find the selected signature user
       // Find the selected signature user with NORMALIZED check
       // Fix: Handle accents, multiple spaces, and case sensitivity

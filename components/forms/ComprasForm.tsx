@@ -125,15 +125,14 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
   // Effects to enforce initial state empty values have been removed to prevent 
   // unintended state resets during user interaction.
 
-  // ENFORCEMENT EFFECT
+  // Garante que useDigitalSignature não seja forçado como obrigatório para Compras
   useEffect(() => {
-    // ENFORCE DIGITAL SIGNATURE ALWAYS
-    if (!content.useDigitalSignature) {
+    if (content.useDigitalSignature) {
       onUpdate(prev => ({
         ...prev,
         content: {
           ...prev.content,
-          useDigitalSignature: true
+          useDigitalSignature: false
         }
       }));
     }
@@ -1248,29 +1247,29 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
       )}
 
       {/* STEP 7: ASSINAR (Formerly Conclusão) */}
+      {/* STEP 7: REVISÃO E CONCLUSÃO (Assinatura Eletrônica Não Exigida) */}
       {((!isMobile && currentStep === 7) || (isMobile && currentStep === 9)) && (
         <div className={isMobile ? "w-full bg-white border border-slate-200/80 rounded-3xl shadow-xl p-6 space-y-5 flex flex-col animate-fade-in" : "space-y-4 border-t border-slate-200 pt-6"}>
           {isMobile ? (
             <div className="text-center flex flex-col items-center space-y-4 mb-2">
               <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto text-emerald-600 shadow-inner">
-                <ShieldCheck className="w-7 h-7" />
+                <CheckCircle2 className="w-7 h-7" />
               </div>
               <div className="space-y-1">
-                <h3 className="text-xl font-black text-slate-900 tracking-tight">Assinatura Digital</h3>
+                <h3 className="text-xl font-black text-slate-900 tracking-tight">Revisão e Finalização</h3>
                 <p className="text-slate-500 text-xs font-medium max-w-xs mx-auto">
-                  Revise os dados e assine digitalmente para finalizar o pedido.
+                  Revise os dados do seu pedido e clique em concluir para salvar no sistema.
                 </p>
               </div>
             </div>
           ) : (
             <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-600" /> Assinatura Digital
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Revisão e Finalização do Pedido
             </h3>
           )}
 
-          {/* STEP 5 LOGIC: 2FA & Certificate */}
-          {/* If Signed, show ONLY the Certificate */}
-          {isSigned ? (
+          {/* Se já possuir assinatura digital registrada (ex: visualização ou processo já assinado anteriormente) */}
+          {content.digitalSignature?.enabled ? (
             <div className="bg-white p-8 rounded-2xl border-2 border-emerald-500 shadow-xl animate-scale-in relative overflow-hidden">
               <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
                 <ShieldCheck className="w-32 h-32 text-emerald-900" />
@@ -1296,76 +1295,97 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                   </div>
                 </div>
               </div>
-              <div className="mt-6 bg-emerald-50/50 p-3 rounded-lg text-center">
-                <p className="text-xs text-emerald-700 font-medium flex items-center justify-center gap-2">
-                  <Lock className="w-3 h-3" />
-                  Este documento está protegido e pronto para processamento.
-                </p>
-              </div>
-
-              {/* FINALIZATION BUTTON - Only visible after signing */}
-              {(() => {
-                const effectiveCanFinish = canFinish || isSigned || !!content.digitalSignature?.enabled;
-                return (
-                  <div className="mt-8 flex justify-center">
-                    <button
-                      disabled={isSubmitting || isLoading || !effectiveCanFinish}
-                      onClick={async () => {
-                        if (!isSubmitting && effectiveCanFinish && onFinish) {
-                          setIsSubmitting(true);
-                          try {
-                            await onFinish();
-                          } catch (error) {
-                            console.error("Finalização falhou:", error);
-                          } finally {
-                            setIsSubmitting(false);
-                          }
-                        }
-                      }}
-                      className={`
-                         flex items-center gap-3 px-8 py-4 font-bold rounded-2xl shadow-xl transition-all w-full sm:w-auto justify-center
-                         ${isSubmitting || !effectiveCanFinish ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20 active:scale-95 animate-bounce-short'}
-                       `}
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <div className="w-5 h-5 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" />
-                          <span className="text-sm uppercase tracking-widest">Processando...</span>
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 className="w-5 h-5" />
-                          <span className="text-sm uppercase tracking-widest">
-                            {effectiveCanFinish ? 'Concluir Pedido' : 'Preencha os campos obrigatórios'}
-                          </span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                );
-              })()}
             </div>
           ) : (
-            /* Not Signed Yet - Unified Ready View */
-            <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-slate-200 shadow-xl shadow-slate-200/50 text-center animate-fade-in relative overflow-hidden">
-              {/* Background Decor */}
-              <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500" />
+            /* Novo Pedido - Revisão Direta Sem Necessidade de Assinatura Eletrônica */
+            <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-slate-200 shadow-xl shadow-slate-200/50 text-left animate-fade-in relative overflow-hidden space-y-6">
+              {/* Faixa Superior Decorativa */}
+              <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-500" />
 
-              {!showTwoFactor ? (
-                <div className="space-y-8 py-2">
-                  {/* Title Removed as per user request */}
-                  {/* SIGNATURE SELECTION GRID */}
+              <div className="flex items-center gap-3 bg-emerald-50/80 border border-emerald-200 rounded-2xl p-4 text-emerald-800">
+                <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
+                <div>
+                  <h4 className="font-bold text-sm text-emerald-900">Assinatura eletrônica dispensada</h4>
+                  <p className="text-xs text-emerald-700 mt-0.5">
+                    Este pedido de compra não exige assinatura eletrônica para ser registrado no sistema.
+                  </p>
+                </div>
+              </div>
 
-                  {/* SIGNATURE SELECTION GRID */}
-                  {allowedSignatures.length > 0 && (
-                    <div ref={signaturesGridRef} className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
-                      {sortedSignatures.map((sig) => {
-                        const isSelected = content.signatureName === sig.name && content.signatureRole === sig.role;
-                        return (
-                          <button
-                            type="button"
-                            key={sig.id}
-                            onClick={() => {
+              {/* Resumo estruturado do Pedido */}
+              <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200/80 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200/60 pb-2.5 gap-1">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Solicitante</span>
+                  <span className="text-sm font-bold text-slate-800">
+                    {content.requesterName || currentUser?.name} 
+                    <span className="text-xs font-normal text-slate-500 ml-1">
+                      ({content.requesterRole || currentUser?.jobTitle || 'Geral'} - {content.requesterSector || currentUser?.sector || 'Geral'})
+                    </span>
+                  </span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200/60 pb-2.5 gap-1">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Finalidade</span>
+                  <span className="text-sm font-semibold text-slate-800 max-w-xl text-left sm:text-right line-clamp-2">
+                    {content.title || 'Não informada'}
+                  </span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200/60 pb-2.5 gap-1">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Prioridade</span>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider w-fit ${
+                    content.priority === 'Urgência' ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {content.priority || 'Normal'}
+                  </span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200/60 pb-2.5 gap-1">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Itens do Pedido</span>
+                  <span className="text-sm font-bold text-slate-800">
+                    {(content.purchaseItems || []).length} item(ns) registrado(s)
+                  </span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200/60 pb-2.5 gap-1">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Origem do Pedido</span>
+                  <span className="text-sm font-medium text-slate-700">
+                    {content.resolucaoDescricao || 'N/A'} {content.resolucaoNumero ? `(Nº ${content.resolucaoNumero})` : ''}
+                  </span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Ficha Orçamentária</span>
+                  <span className="text-sm font-semibold text-slate-800">
+                    {content.fichaOrcamentaria || 'Pendente / Informar posteriormente'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Assinante impresso opcional para documento físico (se desejar indicar) */}
+              {allowedSignatures && allowedSignatures.length > 0 && (
+                <div className="pt-2">
+                  <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">
+                    Responsável no Rodapé do Documento (Opcional):
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl">
+                    {sortedSignatures.map((sig) => {
+                      const isSelected = content.signatureName === sig.name && content.signatureRole === sig.role;
+                      return (
+                        <button
+                          type="button"
+                          key={sig.id}
+                          onClick={() => {
+                            if (isSelected) {
+                              onUpdate({
+                                ...state,
+                                content: {
+                                  ...state.content,
+                                  signatureName: '',
+                                  signatureRole: ''
+                                }
+                              });
+                            } else {
                               onUpdate({
                                 ...state,
                                 content: {
@@ -1374,199 +1394,72 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                                   signatureRole: sig.role
                                 }
                               });
-                            }}
-                            className={`
-                              relative group flex flex-col items-start p-5 rounded-2xl border-2 transition-all duration-200 text-left
-                              ${isSelected
-                                ? 'border-indigo-600 bg-indigo-50/50 shadow-lg shadow-indigo-500/10 scale-[1.02] z-10'
-                                : 'border-slate-100 bg-slate-50 hover:border-indigo-200 hover:bg-white hover:shadow-md'
-                              }
-                            `}
-                          >
-                            <div className={`p-2.5 rounded-xl mb-3 transition-colors ${isSelected ? 'bg-indigo-600 text-white' : 'bg-white text-slate-400 group-hover:text-indigo-600 shadow-sm'}`}>
-                              <UserCheck className="w-6 h-6" />
-                            </div>
-
-                            <span className={`text-sm font-bold block mb-0.5 ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
-                              {sig.name}
-                            </span>
-                            <span className={`text-xs font-medium ${isSelected ? 'text-indigo-600' : 'text-slate-400'}`}>
-                              {sig.role}
-                            </span>
-
-                            {isSelected && (
-                              <div className="absolute top-4 right-4 text-indigo-600 animate-scale-in">
-                                <CheckCircle2 className="w-5 h-5 fill-indigo-600 text-white" />
-                              </div>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {(!allowedSignatures || allowedSignatures.length === 0) && (
-                    <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 text-amber-700 text-sm flex items-center justify-center gap-2">
-                      <AlertTriangle className="w-4 h-4" />
-                      <span>Nenhuma assinatura disponível para seu usuário.</span>
-                    </div>
-                  )}
-
-                  <div className="pt-4">
-                    <button
-                      ref={signButtonRef}
-                      disabled={!content.signatureName}
-                      onClick={() => {
-                        if (isAuthSessionValid()) {
-                          const sigId = Math.random().toString(36).substr(2, 9);
-                          setIsSigned(true);
-                          onUpdate({
-                            ...state,
-                            content: {
-                              ...state.content,
-                              digitalSignature: {
-                                enabled: true,
-                                method: '2FA_SESSION_TIME',
-                                ip: '192.168.1.100',
-                                date: new Date().toISOString(),
-                                id: sigId,
-                                signerName: content.signatureName,
-                                signerRole: content.signatureRole
-                              }
                             }
-                          });
-                        } else if (!isAuthPromoDismissedToday()) {
-                          setShowAuthTimePromo(true);
-                        } else {
-                          setShowTwoFactor(true);
-                        }
-                      }}
-                      className={`
-                        group relative inline-flex items-center justify-center gap-3 px-10 py-4 font-bold rounded-2xl shadow-xl transition-all duration-300 overflow-hidden
-                        ${!content.signatureName
-                          ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                          : 'bg-slate-900 text-white shadow-slate-900/30 hover:bg-slate-800 hover:scale-[1.02] active:scale-95'
-                        }
-                      `}
-                    >
-                      <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-                      <ShieldCheck className="w-5 h-5" />
-                      <span className="text-sm uppercase tracking-widest">Assinar Pedido</span>
-                    </button>
-                    <p className="text-[10px] text-slate-400 mt-4 uppercase tracking-widest font-bold flex items-center justify-center gap-1.5 opacity-70">
-                      <Lock className="w-3 h-3" /> Ambiente Seguro e Criptografado
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                /* 2FA UI - Centered */
-                /* 2FA UI - Centered & Responsive */
-                <div className="animate-slide-up w-full max-w-sm mx-auto flex flex-col justify-center min-h-[300px] h-full">
-                  <div className="flex-1 flex flex-col items-center justify-center space-y-4 sm:space-y-6 p-2">
-
-                    <div className="w-12 h-12 sm:w-16 sm:h-16 bg-slate-100 rounded-2xl flex items-center justify-center shrink-0">
-                      <Key className="w-6 h-6 sm:w-8 sm:h-8 text-slate-400" />
-                    </div>
-
-                    <div className="text-center">
-                      <h4 className="text-base sm:text-lg font-bold text-slate-800">Autenticação 2FA</h4>
-                      <p className="text-xs sm:text-sm text-slate-500 mt-1">Digite o código de 6 dígitos</p>
-                    </div>
-
-                    <div className="relative w-full max-w-[200px] sm:max-w-[240px]">
-                      <input
-                        type="text"
-                        maxLength={6}
-                        value={twoFactorCode}
-                        onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ''))}
-                        placeholder="000 000"
-                        autoFocus
-                        className="w-full text-center text-2xl sm:text-3xl font-mono font-bold tracking-[0.3em] sm:tracking-[0.5em] py-2 sm:py-3 border-b-4 border-slate-200 focus:border-indigo-600 outline-none bg-transparent transition-colors text-slate-800 placeholder-slate-200"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 sm:gap-4 w-full pt-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowTwoFactor(false)}
-                        className="px-4 py-3 rounded-xl border-2 border-slate-100 text-slate-500 font-bold hover:bg-slate-50 hover:text-slate-700 transition-all text-[10px] sm:text-xs uppercase tracking-wide"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        type="button"
-                        disabled={twoFactorCode.length !== 6}
-                        onClick={() => {
-                          if (twoFactorCode.length === 6) {
-                            recordAuthSuccess();
-                            const sigId = Math.random().toString(36).substr(2, 9);
-                            setIsSigned(true);
-                            onUpdate({
-                              ...state,
-                              content: {
-                                ...state.content,
-                                digitalSignature: {
-                                  enabled: true,
-                                  method: '2FA_APP',
-                                  ip: '192.168.1.100', // Mock
-                                  date: new Date().toISOString(),
-                                  id: sigId,
-                                  signerName: content.signatureName,
-                                  signerRole: content.signatureRole
-                                }
-                              }
-                            });
-
-                            // DO NOT TRIGGER FINISH YET - Wait for "Concluir Pedido" click
-                            // Logic moved to separate button in Certificate view.
-                          }
-                        }}
-                        className={`
-                          flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold text-[10px] sm:text-xs uppercase tracking-wide transition-all shadow-lg
-                          ${twoFactorCode.length === 6
-                            ? 'bg-emerald-600 text-white shadow-emerald-500/30 hover:bg-emerald-700 hover:scale-105 active:scale-95'
-                            : 'bg-slate-100 text-slate-300 cursor-not-allowed shadow-none'}
-                        `}
-                      >
-                        Confirmar
-                      </button>
-                    </div>
+                          }}
+                          className={`
+                            flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left text-xs
+                            ${isSelected
+                              ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
+                              : 'border-slate-200 bg-slate-50 hover:bg-white hover:border-slate-300'
+                            }
+                          `}
+                        >
+                          <UserCheck className={`w-4 h-4 shrink-0 ${isSelected ? 'text-emerald-600' : 'text-slate-400'}`} />
+                          <div className="truncate">
+                            <span className="font-bold block text-slate-800 truncate">{sig.name}</span>
+                            <span className="text-[10px] text-slate-500 block truncate">{sig.role}</span>
+                          </div>
+                          {isSelected && (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 ml-auto shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* AuthTimePromoModal para sugestão de tempo antes de assinar */}
-          {showAuthTimePromo && (
-            <AuthTimePromoModal
-              isOpen={showAuthTimePromo}
-              onClose={() => {
-                setShowAuthTimePromo(false);
-                setShowTwoFactor(true);
-              }}
-              onSuccessAuthorized={() => {
-                setShowAuthTimePromo(false);
-                const sigId = Math.random().toString(36).substr(2, 9);
-                setIsSigned(true);
-                onUpdate({
-                  ...state,
-                  content: {
-                    ...state.content,
-                    digitalSignature: {
-                      enabled: true,
-                      method: '2FA_SESSION_TIME',
-                      ip: '192.168.1.100',
-                      date: new Date().toISOString(),
-                      id: sigId,
-                      signerName: content.signatureName,
-                      signerRole: content.signatureRole
-                    }
+          {/* Botão de Finalização Direta */}
+          <div className="pt-4 flex justify-center">
+            <button
+              disabled={isSubmitting || isLoading || !canFinish}
+              onClick={async () => {
+                if (!isSubmitting && canFinish && onFinish) {
+                  setIsSubmitting(true);
+                  try {
+                    await onFinish();
+                  } catch (error) {
+                    console.error("Finalização falhou:", error);
+                  } finally {
+                    setIsSubmitting(false);
                   }
-                });
+                }
               }}
-            />
-          )}
+              className={`
+                flex items-center gap-3 px-10 py-4 font-bold rounded-2xl shadow-xl transition-all w-full sm:w-auto justify-center
+                ${isSubmitting || !canFinish 
+                  ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' 
+                  : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-600/25 active:scale-95'
+                }
+              `}
+            >
+              {isSubmitting || isLoading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span className="text-sm uppercase tracking-widest">Salvando Pedido...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span className="text-sm uppercase tracking-widest">
+                    {canFinish ? 'Finalizar e Concluir Pedido' : 'Preencha os campos obrigatórios'}
+                  </span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -179,7 +179,7 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
         { id: 'justificativa', title: 'JUSTIFICATIVA', icon: AlertCircle }, 
         { id: 'origem', title: 'ORIGEM', icon: FileText },
         { id: 'ficha', title: 'FICHA', icon: CreditCard },
-        { id: 'assinar', title: 'ASSINAR', icon: FileSignature },
+        { id: 'concluir', title: 'FINALIZAR', icon: CheckCircle2 },
     ];
 
     const steps = readOnly 
@@ -190,7 +190,7 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
         if (currentStep < steps.length - 1) {
             setCurrentStep(currentStep + 1);
         } else {
-            handleSignAndSubmit();
+            confirmSubmit();
         }
     };
 
@@ -259,16 +259,8 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
                fichaOrcamentaria.trim().length > 0;
     };
 
-    const handleSignAndSubmit = () => {
-        if (currentUser.twoFactorSecret) {
-            setIs2FAModalOpen(true);
-        } else {
-            alert('Você não possui 2FA configurado. Configure no seu perfil antes de assinar.');
-        }
-    };
-
     const confirmSubmit = async () => {
-        setIs2FAModalOpen(false);
+        if (isSubmitting) return;
         setIsSubmitting(true);
         try {
             await createProcesso.mutateAsync({
@@ -290,12 +282,6 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
                 })),
                 justificativa: {
                     texto: justificativa
-                },
-                assinatura: {
-                    usuario_id: currentUser.id!,
-                    hash_assinatura: '2FA_VERIFIED',
-                    ip_address: 'Client-Device',
-                    data_assinatura: new Date().toISOString()
                 }
             });
             onBack();
@@ -458,12 +444,12 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
                         </button>
                     ) : (
                         <button
-                            onClick={readOnly ? onBack : handleSignAndSubmit}
+                            onClick={readOnly ? onBack : confirmSubmit}
                             disabled={(readOnly ? false : !isAllValid()) || isSubmitting}
                             className={`flex items-center gap-2 px-6 py-2.5 ${readOnly ? 'bg-slate-900 hover:bg-slate-800 shadow-slate-900/20' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'} text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
                             {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : (readOnly ? <ArrowLeft className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />)}
-                            {isSubmitting ? 'Salvando...' : (readOnly ? 'Voltar' : 'Finalizar')}
+                            {isSubmitting ? 'Salvando...' : (readOnly ? 'Voltar' : 'Finalizar Pedido')}
                         </button>
                     )}
                 </div>
@@ -852,17 +838,17 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
                         </div>
                     )}
 
-                    {/* Step 6: Assinar */}
+                    {/* Step 6: Concluir e Finalizar */}
                     {currentStep === 5 && (
                         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 bg-white rounded-2xl shadow-sm border border-slate-100 p-8 text-center max-w-2xl mx-auto">
-                            <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner border border-blue-100">
-                                <FileSignature className="w-8 h-8" />
+                            <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner border border-emerald-100">
+                                <CheckCircle2 className="w-8 h-8" />
                             </div>
-                            <h2 className="text-2xl font-black text-slate-800 mb-2">{readOnly ? 'Assinatura Registrada' : 'Pronto para Assinar'}</h2>
+                            <h2 className="text-2xl font-black text-slate-800 mb-2">{readOnly ? 'Processo Registrado' : 'Pronto para Finalizar'}</h2>
                             <p className="text-slate-500 text-sm mb-6 leading-relaxed">
                                 {readOnly 
                                     ? 'Este processo licitatório já foi finalizado e os dados foram registrados no sistema.' 
-                                    : 'Você está prestes a concluir e assinar este processo licitatório. As informações serão registradas e enviadas para os setores responsáveis.'}
+                                    : 'Você está prestes a concluir este processo licitatório. As informações serão registradas e enviadas para os setores responsáveis sem exigência de assinatura eletrônica.'}
                             </p>
                             
                             <div className="bg-slate-50 rounded-xl p-5 text-left space-y-3 mb-6 border border-slate-100">
@@ -886,12 +872,16 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
 
                             {!readOnly && (
                                 <button
-                                    onClick={handleSignAndSubmit}
+                                    onClick={confirmSubmit}
                                     disabled={!isAllValid() || isSubmitting}
                                     className="w-full flex items-center justify-center gap-3 px-8 py-4 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <CheckCircle2 className="w-5 h-5" />
-                                    Assinar e Autenticar com 2FA
+                                    {isSubmitting ? (
+                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                    ) : (
+                                        <CheckCircle2 className="w-5 h-5" />
+                                    )}
+                                    {isSubmitting ? 'Salvando...' : 'Finalizar Pedido de Licitação'}
                                 </button>
                             )}
                         </div>
@@ -1016,7 +1006,7 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
                 ) : (
                     <button
                         type="button"
-                        onClick={readOnly ? onBack : handleSignAndSubmit}
+                        onClick={readOnly ? onBack : confirmSubmit}
                         disabled={(readOnly ? false : !isAllValid()) || isSubmitting}
                         className={`flex-[1.4] py-3 px-4 ${
                             readOnly

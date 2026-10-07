@@ -51,7 +51,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
         { key: 'anexos', title: 'Arquivos Anexos (Opcional)' },
         { key: 'ficha', title: 'Ficha Orçamentária' },
         { key: 'origem', title: 'Origem do Pedido' },
-        { key: 'assinatura', title: 'Assinatura e Envio' }
+        { key: 'conclusao', title: 'Revisão e Envio' }
     ];
 
     useEffect(() => {
@@ -61,6 +61,18 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
             setHasShownFichaModal(true);
         }
     }, [currentStep, hasShownFichaModal, isMobile]);
+
+    // Check Global Completion for "Finalizar" button (Sem exigir assinatura eletrônica)
+    const isAllMandatoryCompleted = useMemo(() => {
+        const hasTitle = !!(content.title && content.title.trim().length > 0);
+        const hasRequester = !!(content.requesterName && content.requesterName.trim().length > 0);
+        const hasPriority = !!content.priority;
+        const hasItems = !!(content.purchaseItems && content.purchaseItems.length > 0);
+        const hasBody = !!(content.body && content.body.trim().length > 0);
+        const hasOrigem = !!(content.resolucaoDescricao && (content.resolucaoDescricao === 'N/A' || content.resolucaoNumero));
+
+        return hasTitle && hasRequester && hasPriority && hasItems && hasBody && hasOrigem;
+    }, [content]);
 
     // --- Status Calculation Logic ---
     const stepsStatus = useMemo(() => {
@@ -73,7 +85,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
         const s4Valid = true; // Optional (Anexos)
         const s5Valid = !!(content.fichaOrcamentaria && content.fichaOrcamentaria !== 'N/A' && content.fichaOrcamentaria.trim() !== ''); // Ficha Orçamentária
         const s6Valid = !!(content.resolucaoDescricao && (content.resolucaoDescricao === 'N/A' || content.resolucaoNumero)); // Origem
-        const s7Valid = !!(content.signatureName); // Assinar
+        const s7Valid = isAllMandatoryCompleted; // Conclusão do pedido pronta
 
         // Helper to check "started" (partial) - simple check if ANY field is filled
         const s1Started = !!(content.title || content.requesterName || content.priority);
@@ -99,20 +111,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
         statuses[7] = getStatus(7, s7Valid, s7Started);
 
         return statuses;
-    }, [content, currentStep]);
-
-    // Check Global Completion for "Finalizar" button
-    const isAllMandatoryCompleted = useMemo(() => {
-        const hasTitle = !!(content.title && content.title.trim().length > 0);
-        const hasRequester = !!(content.requesterName && content.requesterName.trim().length > 0);
-        const hasPriority = !!content.priority;
-        const hasItems = !!(content.purchaseItems && content.purchaseItems.length > 0);
-        const hasBody = !!(content.body && content.body.trim().length > 0);
-        const hasOrigem = !!(content.resolucaoDescricao && (content.resolucaoDescricao === 'N/A' || content.resolucaoNumero));
-        const hasSignature = !!(content.signatureName || content.digitalSignature?.enabled);
-
-        return hasTitle && hasRequester && hasPriority && hasItems && hasBody && hasOrigem && hasSignature;
-    }, [content]);
+    }, [content, currentStep, isAllMandatoryCompleted]);
 
 
     const nextStep = () => {
@@ -391,27 +390,24 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
 
                 {/* 3. Botão de Ação (Avançar/Finalizar) */}
                 <div className="min-w-[120px] flex justify-end">
-                    {/* Hide Button in Step 7 (Assinar) - Form handles it */}
-                    {currentStep !== 7 && (
-                        !isAllMandatoryCompleted ? (
-                            <button
-                                onClick={nextStep}
-                                disabled={isLoading}
-                                className="flex items-center gap-1.5 px-4 py-1.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 shadow-sm active:scale-95 transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                <span>Avançar</span>
-                                <ChevronRight className="w-3.5 h-3.5" />
-                            </button>
-                        ) : (
-                            <button
-                                onClick={onFinish}
-                                disabled={isLoading}
-                                className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 shadow-sm active:scale-95 transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                                <span>{isLoading ? 'Salvando...' : 'Finalizar'}</span>
-                            </button>
-                        )
+                    {currentStep !== 7 ? (
+                        <button
+                            onClick={nextStep}
+                            disabled={isLoading}
+                            className="flex items-center gap-1.5 px-4 py-1.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 shadow-sm active:scale-95 transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <span>Avançar</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                    ) : (
+                        <button
+                            onClick={onFinish}
+                            disabled={!isAllMandatoryCompleted || isLoading}
+                            className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 shadow-sm active:scale-95 transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                            <span>{isLoading ? 'Salvando...' : 'Finalizar Pedido'}</span>
+                        </button>
                     )}
                 </div>
             </div>
