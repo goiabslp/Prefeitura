@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     X, FileDown, Clock, Info,
     MapPin, Printer, ChevronUp,
-    Check, Square, CheckSquare, Minus, Search
+    Check, Square, CheckSquare, Minus, Search, Loader2
 } from 'lucide-react';
 import { Order } from '../../types';
 
@@ -29,15 +29,20 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
     const [step, setStep] = useState<'select' | 'report'>('select');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
+    const [reportOrders, setReportOrders] = useState<Order[]>([]);
+    const [isGenerating, setIsGenerating] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const reportRef = useRef<HTMLDivElement>(null);
+    const prevIsOpenRef = useRef(false);
 
     // Resetar estado ao fechar
     const handleClose = () => {
         setStep('select');
         setSelectedIds(new Set());
         setFilteredOrders([]);
+        setReportOrders([]);
         setSearchTerm('');
+        setIsGenerating(false);
         onClose();
     };
 
@@ -59,9 +64,11 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
         return new Date(order.createdAt);
     };
 
-    // Ao abrir o modal, filtra diárias com status concluídos e não as pendentes
+    // Ao abrir o modal, filtra diárias com status concluídos
+    // Mantém a seleção e o passo 'report' intactos caso as diárias sejam atualizadas para contabilidade em segundo plano
     useEffect(() => {
-        if (isOpen) {
+        if (isOpen && !prevIsOpenRef.current) {
+            // Apenas no momento em que o modal é aberto
             const concluidos = orders.filter(order => {
                 return order.status === 'completed' || (order.status as string) === 'concluido' || (order as any).eventoStatus === 'concluido';
             });
@@ -69,9 +76,18 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
             concluidos.sort((a, b) => getDepartureDateObj(b).getTime() - getDepartureDateObj(a).getTime());
             setFilteredOrders(concluidos);
             setSelectedIds(new Set());
+            setReportOrders([]);
             setSearchTerm('');
             setStep('select');
+        } else if (isOpen && prevIsOpenRef.current) {
+            // Modal já aberto: atualiza lista de diárias sem resetar o que o usuário selecionou nem voltar a etapa
+            const concluidos = orders.filter(order => {
+                return order.status === 'completed' || (order.status as string) === 'concluido' || (order as any).eventoStatus === 'concluido';
+            });
+            concluidos.sort((a, b) => getDepartureDateObj(b).getTime() - getDepartureDateObj(a).getTime());
+            setFilteredOrders(concluidos);
         }
+        prevIsOpenRef.current = isOpen;
     }, [isOpen, orders]);
 
     // Filtragem por termo de busca no modal
@@ -118,24 +134,34 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
         }
     };
 
-    // Itens selecionados para o relatório
-    const selectedOrders = useMemo(() => {
+    // Itens finais para o relatório (prioriza a lista congelada no momento de gerar)
+    const ordersForReport = useMemo(() => {
+        if (reportOrders.length > 0) return reportOrders;
         return filteredOrders.filter(o => selectedIds.has(o.id));
-    }, [filteredOrders, selectedIds]);
+    }, [reportOrders, filteredOrders, selectedIds]);
 
     // Gerar relatório e alterar status dos registros selecionados para CONTABILIDADE automaticamente
     const handleGenerateReport = async () => {
-        if (selectedIds.size === 0) return;
+        if (selectedIds.size === 0 || isGenerating) return;
 
-        // Atualizar cada diária selecionada para 'contabilidade'
-        for (const orderId of Array.from(selectedIds)) {
-            const orderToUpdate = filteredOrders.find(o => o.id === orderId);
-            if (orderToUpdate && onUpdatePaymentStatus) {
-                await onUpdatePaymentStatus(orderToUpdate, 'contabilidade');
-            }
-        }
-
+        // Congela imediatamente os itens selecionados para o relatório
+        const selectedList = filteredOrders.filter(o => selectedIds.has(o.id));
+        setReportOrders(selectedList);
         setStep('report');
+        setIsGenerating(true);
+
+        try {
+            // Atualizar cada diária selecionada para 'contabilidade'
+            if (onUpdatePaymentStatus) {
+                for (const orderToUpdate of selectedList) {
+                    await onUpdatePaymentStatus(orderToUpdate, 'contabilidade');
+                }
+            }
+        } catch (error) {
+            console.error('Erro ao atualizar status para contabilidade:', error);
+        } finally {
+            setIsGenerating(false);
+        }
     };
 
     // Imprimir relatório
@@ -230,7 +256,7 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
                                     </h3>
                                     <p className="text-[11px] text-slate-500 font-medium leading-none mt-0.5">
                                         {step === 'select' && `${displayOrders.length} diária(s) concluída(s) encontrada(s) — Selecione os itens`}
-                                        {step === 'report' && `Relatório gerado com ${selectedOrders.length} diária(s) concluída(s)`}
+                                        {step === 'report' && `Relatório gerado com ${ordersForReport.length} diária(s) concluída(s)`}
                                     </p>
                                 </div>
                             </div>
@@ -402,7 +428,7 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
                                     <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200" ref={reportRef}>
                                         {/* Cabeçalho do documento padrão com logo */}
                                         {(() => {
-                                            const firstOrder = selectedOrders[0];
+                                            const firstOrder = ordersForReport[0];
                                             const stateBranding = (firstOrder?.documentSnapshot?.branding || {}) as any;
                                             const logoUrl = stateBranding.logoUrl || '';
                                             const primaryColor = stateBranding.primaryColor || '#4f46e5';
@@ -448,7 +474,7 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
                                                             Relatório de Diárias
                                                         </h1>
                                                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">
-                                                            Total de Diárias: {selectedOrders.length} {selectedOrders.length === 1 ? 'item' : 'itens'}
+                                                            Total de Diárias: {ordersForReport.length} {ordersForReport.length === 1 ? 'item' : 'itens'}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -468,7 +494,7 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {selectedOrders.map((order, idx) => {
+                                                {ordersForReport.map((order, idx) => {
                                                     const content = order.documentSnapshot?.content;
 
                                                     return (
@@ -522,11 +548,11 @@ export const DiariasReportModal: React.FC<DiariasReportModalProps> = ({
                                     </span>
                                     <button
                                         onClick={handleGenerateReport}
-                                        disabled={selectedIds.size === 0}
+                                        disabled={selectedIds.size === 0 || isGenerating}
                                         className="px-5 py-2 bg-indigo-600 text-white font-black text-[9.5px] uppercase tracking-[0.15em] rounded-xl hover:bg-indigo-700 active:scale-95 transition-all shadow-md shadow-indigo-600/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
                                     >
-                                        <FileDown className="w-3.5 h-3.5" />
-                                        Gerar Relatório
+                                        {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+                                        {isGenerating ? 'Gerando Relatório...' : 'Gerar Relatório'}
                                     </button>
                                 </>
                             ) : (
