@@ -22,7 +22,27 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
     onBack,
     onNavigate
 }) => {
+    const [gestorUserIds, setGestorUserIds] = useState<string[]>([]);
+
+    useEffect(() => {
+        const fetchGestores = async () => {
+            try {
+                const gestores = await db.getConsultasGestores();
+                setGestorUserIds(gestores);
+            } catch (err) {
+                console.error('Error fetching gestores in LiberarVagasScreen:', err);
+            }
+        };
+        fetchGestores();
+    }, []);
+
     const isAdmin = currentUser?.role === 'admin';
+    const isGestor = !!(currentUser && (
+        gestorUserIds.includes(currentUser.id) || 
+        currentUser.permissions?.includes('parent_consultas_gestor') || 
+        currentUser.permissions?.includes('sub_consultas_gestor')
+    ));
+    const canAddRetroativo = isAdmin || isGestor;
 
     // Estados de procedimentos e busca
     const [procedures, setProcedures] = useState<ConsultaProcedimento[]>([]);
@@ -1250,6 +1270,7 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                         const isSelected = selectedDate && formattedDay === formatDateToYYYYMMDD(selectedDate);
                                         const isToday = formattedDay === formatDateToYYYYMMDD(new Date());
                                         const isPast = day.getTime() < new Date(new Date().setHours(0,0,0,0)).getTime();
+                                        const isDisabled = isPast && !canAddRetroativo;
                                         const existingCount = vagas.filter(v => v.data === formattedDay).length;
 
                                         return (
@@ -1257,16 +1278,19 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                                 key={day.toISOString()}
                                                 type="button"
                                                 onClick={() => setSelectedDate(day)}
-                                                disabled={isPast}
+                                                disabled={isDisabled}
                                                 className={`h-9 w-full rounded-xl text-xs font-bold transition-all relative flex flex-col items-center justify-center cursor-pointer ${
                                                     isSelected 
                                                     ? 'bg-gradient-to-br from-sky-600 to-indigo-600 text-white font-black shadow-md shadow-sky-500/30 scale-105 z-10 ring-2 ring-white' 
                                                     : isToday
                                                     ? 'border-2 border-sky-500 text-sky-700 bg-sky-50/70 hover:bg-sky-100 font-black'
                                                     : isPast
-                                                    ? 'text-slate-300 cursor-not-allowed bg-slate-50/50'
+                                                    ? (canAddRetroativo
+                                                        ? 'text-amber-800 bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/80 font-extrabold'
+                                                        : 'text-slate-300 cursor-not-allowed bg-slate-50/50')
                                                     : 'hover:bg-white text-slate-700 bg-white/60 hover:shadow-2xs border border-transparent hover:border-slate-200 active:scale-95'
                                                 }`}
+                                                title={isPast ? (canAddRetroativo ? 'Data retroativa liberada para Gestores e Administradores' : 'Data passada bloqueada') : undefined}
                                             >
                                                 <span>{day.getDate()}</span>
                                                 {/* Indicador de vagas existentes no dia */}
@@ -1281,7 +1305,7 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                     })}
                                 </div>
 
-                                <div className="flex items-center gap-4 pt-1 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                                <div className="flex items-center gap-4 pt-1 text-[10px] text-slate-500 font-bold uppercase tracking-wider flex-wrap">
                                     <span className="flex items-center gap-1.5">
                                         <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs" />
                                         Com Vagas
@@ -1290,6 +1314,12 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                         <span className="w-2 h-2 rounded-full border-2 border-sky-500" />
                                         Hoje
                                     </span>
+                                    {canAddRetroativo && (
+                                        <span className="flex items-center gap-1.5 text-amber-800 font-bold">
+                                            <span className="w-2 h-2 rounded-full bg-amber-500" />
+                                            Retroativas Liberadas
+                                        </span>
+                                    )}
                                 </div>
 
                                 {/* Card da Data Selecionada e Vagas Existentes */}

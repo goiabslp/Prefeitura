@@ -848,6 +848,21 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                             {/* Ações Rápidas de Linha + Chevron */}
                             <div className="flex items-center gap-1.5 self-end wide:self-center shrink-0">
                                 <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                    {/* Ação Rápida: Marcar como Realizado (Exclusivo Administradores e Gestores) */}
+                                    {canComplete && booking.status !== 'Realizado' && booking.status !== 'Cancelado' && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (window.confirm(`Deseja marcar este agendamento como REALIZADO para ${patientName}?`)) {
+                                                    onStatusUpdate(booking.id, 'Realizado');
+                                                }
+                                            }}
+                                            className="w-8 h-8 rounded-xl bg-emerald-50 hover:bg-emerald-600 border border-emerald-300 text-emerald-700 hover:text-white flex items-center justify-center transition-all shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer"
+                                            title="Marcar como REALIZADO (Exclusivo Administradores e Gestores)"
+                                        >
+                                            <CheckCircle2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
                                     {canEdit && (
                                         <button
                                             type="button"
@@ -1248,13 +1263,31 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                             </button>
                                         )}
 
+                                        {/* BOTÃO MARCAR COMO REALIZADO (Exclusivo para Gestores e Administradores) */}
+                                        {canComplete && booking.status !== 'Realizado' && booking.status !== 'Cancelado' && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (window.confirm(`Deseja marcar o agendamento de ${patientName} (${formatProcedimentoLabel(booking.procedimento)}) como REALIZADO?`)) {
+                                                        onStatusUpdate(booking.id, 'Realizado');
+                                                    }
+                                                }}
+                                                className="flex items-center gap-1.5 px-3.5 py-1.5 text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-all text-xs font-black uppercase tracking-wider shadow-sm hover:shadow active:scale-95 cursor-pointer"
+                                                title="Marcar como REALIZADO (Exclusivo Administradores e Gestores)"
+                                            >
+                                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                                Realizado
+                                            </button>
+                                        )}
+
                                         {booking.status === 'Solicitado' && (
                                             <>
                                                 {canComplete && (
                                                     <button
                                                         type="button"
                                                         onClick={(e) => { e.stopPropagation(); onStatusUpdate(booking.id, 'Agendado'); }}
-                                                        className="flex items-center gap-1.5 px-3 py-1.5 text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors text-xs font-bold shadow-2xs cursor-pointer"
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 text-white bg-sky-600 hover:bg-sky-700 rounded-lg transition-colors text-xs font-bold shadow-2xs cursor-pointer"
                                                         title="Aprovar Agendamento"
                                                     >
                                                         <CheckCircle2 className="w-3.5 h-3.5" />
@@ -1277,17 +1310,6 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
 
                                         {booking.status === 'Agendado' && (
                                             <>
-                                                {canComplete && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={(e) => { e.stopPropagation(); onStatusUpdate(booking.id, 'Realizado'); }}
-                                                        className="flex items-center gap-1.5 px-3 py-1.5 text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors text-xs font-bold shadow-2xs cursor-pointer"
-                                                        title="Marcar Procedimento como Realizado"
-                                                    >
-                                                        <CheckCircle2 className="w-3.5 h-3.5" />
-                                                        Concluir
-                                                    </button>
-                                                )}
                                                 {canComplete && (
                                                     <button
                                                         type="button"
@@ -1517,12 +1539,12 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         fetchGestores();
     }, []);
 
-    // Regra de 2 Níveis: Administradores e Gestores autorizados possuem privilégios executivos exclusivos como Pausar/Retomar
+    // Regra de 2 Níveis: Administradores e Gestores autorizados possuem privilégios executivos exclusivos como Pausar/Retomar e Marcar como Realizado
     const isAdmin = currentUser.role === 'admin';
     const isGestor = gestorUserIds.includes(currentUser.id) || !!currentUser.permissions?.includes('parent_consultas_gestor') || !!currentUser.permissions?.includes('sub_consultas_gestor');
     const canPause = isAdmin || isGestor;
     const canCancel = true;
-    const canComplete = true;
+    const canComplete = isAdmin || isGestor;
     const canEdit = true;
     const canDelete = true;
 
@@ -1866,10 +1888,13 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             const updated = await db.updateAgendamentoStatus(id, newStatus);
             if (updated) {
                 setBookings(prev => prev.map(b => b.id === id ? updated : b));
+                setAllBookings(prev => prev.map(b => b.id === id ? updated : b));
             }
+            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+            await loadData(true);
         } catch (error: any) {
             alert(error.message || 'Erro ao alterar o status do agendamento.');
-            loadData(true);
+            await loadData(true);
         } finally {
             setOperatingId(null);
         }

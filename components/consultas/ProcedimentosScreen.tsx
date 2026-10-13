@@ -24,7 +24,27 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
     onNavigate,
     embedded = false
 }) => {
+    const [gestorUserIds, setGestorUserIds] = useState<string[]>([]);
+
+    useEffect(() => {
+        const fetchGestores = async () => {
+            try {
+                const gestores = await db.getConsultasGestores();
+                setGestorUserIds(gestores);
+            } catch (err) {
+                console.error('Error fetching gestores in ProcedimentosScreen:', err);
+            }
+        };
+        fetchGestores();
+    }, []);
+
     const isAdmin = currentUser?.role === 'admin';
+    const isGestor = !!(currentUser && (
+        gestorUserIds.includes(currentUser.id) || 
+        currentUser.permissions?.includes('parent_consultas_gestor') || 
+        currentUser.permissions?.includes('sub_consultas_gestor')
+    ));
+    const canAddRetroativo = isAdmin || isGestor;
     const [loading, setLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
 
@@ -1366,28 +1386,39 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                         const isSelected = selectedDate && formatDateToYYYYMMDD(day) === formatDateToYYYYMMDD(selectedDate);
                                         const isToday = formatDateToYYYYMMDD(day) === formatDateToYYYYMMDD(new Date());
                                         const isPast = day.getTime() < new Date(new Date().setHours(0,0,0,0)).getTime();
+                                        const isDisabled = isPast && !canAddRetroativo;
                                         
                                         return (
                                             <button
                                                 key={day.toISOString()}
                                                 type="button"
                                                 onClick={() => setSelectedDate(day)}
-                                                disabled={isPast}
+                                                disabled={isDisabled}
                                                 className={`h-8 w-full rounded-lg text-xs font-bold transition-all flex items-center justify-center cursor-pointer ${
                                                     isSelected 
                                                     ? 'bg-sky-600 text-white shadow-md shadow-sky-500/20' 
                                                     : isToday
-                                                    ? 'border border-sky-500 text-sky-600'
+                                                    ? 'border border-sky-500 text-sky-600 font-black'
                                                     : isPast
-                                                    ? 'text-slate-300 cursor-not-allowed'
+                                                    ? (canAddRetroativo
+                                                        ? 'text-amber-800 bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/80 font-extrabold'
+                                                        : 'text-slate-300 cursor-not-allowed')
                                                     : 'hover:bg-slate-100 text-slate-700'
                                                 }`}
+                                                title={isPast ? (canAddRetroativo ? 'Data retroativa liberada para Gestores e Administradores' : 'Data passada bloqueada') : undefined}
                                             >
                                                 {day.getDate()}
                                             </button>
                                         );
                                     })}
                                 </div>
+
+                                {canAddRetroativo && (
+                                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-50/80 border border-amber-200/70 rounded-xl text-[10px] font-bold text-amber-900 mt-2">
+                                        <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                                        <span>Datas retroativas liberadas para Gestores e Administradores</span>
+                                    </div>
+                                )}
                             </div>
                             
                             {/* Right side: Time slots */}
@@ -1398,9 +1429,14 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                 
                                 <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 text-center">
                                     <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Dia Selecionado</span>
-                                    <span className="text-xs font-bold text-slate-700">
+                                    <span className="text-xs font-bold text-slate-700 block">
                                         {selectedDate ? selectedDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }) : 'Nenhum'}
                                     </span>
+                                    {selectedDate && selectedDate.getTime() < new Date(new Date().setHours(0,0,0,0)).getTime() && (
+                                        <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300 mt-1">
+                                            ⚠️ Data Retroativa
+                                        </span>
+                                    )}
                                 </div>
                                 
                                 <div className="grid grid-cols-3 gap-1.5 max-h-[160px] overflow-y-auto pr-1">
