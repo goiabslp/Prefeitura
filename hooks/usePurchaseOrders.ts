@@ -24,7 +24,14 @@ export const usePurchaseOrders = () => {
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'purchase_orders' },
                 () => {
-                    queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.lists() });
+                    queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all });
+                }
+            )
+            .on(
+                'broadcast',
+                { event: 'purchase_order_event' },
+                () => {
+                    queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all });
                 }
             )
             .subscribe();

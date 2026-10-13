@@ -3688,7 +3688,73 @@ timestamp: ${new Date().toISOString()}`);
     }
   }, []);
 
-  // Sincronização de Purchase Orders unificada no canal central de compras para evitar conexões duplicadas
+  // Sincronização de Purchase Orders unificada no canal central de compras para sincronização em tempo real com perfil Compras
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const comprasChannel = supabase.channel('compras-realtime-channel', {
+      config: { broadcast: { self: false } }
+    })
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'purchase_orders' },
+        async (payload) => {
+          console.log('[Compras Realtime] postgres_changes:', payload);
+          const orderId = (payload.new as any)?.id || (payload.old as any)?.id;
+          const newStatus = (payload.new as any)?.status;
+          const isApproved = newStatus === 'approved';
+
+          await syncOrders('compras');
+
+          const user = currentUserRef.current;
+          const isComprasUser = user?.role === 'compras' ||
+            (user?.permissions as string[])?.includes('sub_compras_historico') ||
+            (user?.permissions as string[])?.includes('parent_compras') ||
+            (user?.permissions as string[])?.includes('compras') ||
+            user?.sector?.toLowerCase().includes('compras');
+
+          if (isComprasUser && isApproved && user?.role !== 'admin') {
+            showToast('Novo pedido aprovado pela administração recebido em tempo real!', 'success');
+          }
+
+          window.dispatchEvent(new CustomEvent('compras-realtime-update', {
+            detail: { orderId, isApproved, newStatus, payload }
+          }));
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'purchase_order_event' },
+        async (payload) => {
+          console.log('[Compras Realtime] broadcast:', payload);
+          const p = payload.payload;
+          const isApproved = p?.eventType === 'APPROVAL' || p?.newStatus === 'approved';
+          const orderId = p?.orderId;
+
+          await syncOrders('compras');
+
+          const user = currentUserRef.current;
+          const isComprasUser = user?.role === 'compras' ||
+            (user?.permissions as string[])?.includes('sub_compras_historico') ||
+            (user?.permissions as string[])?.includes('parent_compras') ||
+            (user?.permissions as string[])?.includes('compras') ||
+            user?.sector?.toLowerCase().includes('compras');
+
+          if (isComprasUser && isApproved && user?.role !== 'admin') {
+            showToast('Novo pedido aprovado pela administração recebido em tempo real!', 'success');
+          }
+
+          window.dispatchEvent(new CustomEvent('compras-realtime-update', {
+            detail: { orderId, isApproved, data: p }
+          }));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(comprasChannel);
+    };
+  }, [currentUser?.id, syncOrders]);
 
   // OPTIMISTIC DELETE HANDLER
   const handleDeleteOrder = async (id: string) => {
@@ -4145,6 +4211,13 @@ timestamp: ${new Date().toISOString()}`);
       // 4. API Sync
       if (updatedOrder.blockType === 'compras') {
         await comprasService.updateOrderStatus(updatedOrder.id, updatedOrder.status, newMovement);
+        comprasService.notifyPurchaseOrderRealtime({
+          eventType: updatedOrder.status === 'approved' ? 'APPROVAL' : 'UPDATE',
+          orderId: updatedOrder.id,
+          newStatus: updatedOrder.status,
+          order: updatedOrder,
+          actorName: currentUser.name
+        });
       } else if (updatedOrder.blockType === 'diarias') {
         await diariasService.saveServiceRequest(updatedOrder);
       } else if (updatedOrder.blockType === 'licitacao') {

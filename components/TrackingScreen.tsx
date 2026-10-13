@@ -221,12 +221,21 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
     const { data: remoteAllPurchaseOrders } = usePurchaseOrders();
     const allPurchaseOrders = React.useMemo(() => {
-        if (!remoteAllPurchaseOrders) return [];
-        if (!orders || orders.length === 0) return remoteAllPurchaseOrders;
-        return remoteAllPurchaseOrders.map(order => {
-            const local = orders.find(o => o.id === order.id);
-            return local ? { ...order, ...local } : order;
+        const remote = remoteAllPurchaseOrders || [];
+        const purchaseOrdersFromState = orders.filter(o => o.blockType === 'compras');
+
+        const mergedMap = new Map<string, Order>();
+        purchaseOrdersFromState.forEach(o => mergedMap.set(o.id, o));
+        remote.forEach(order => {
+            const existing = mergedMap.get(order.id);
+            if (existing) {
+                mergedMap.set(order.id, { ...existing, ...order });
+            } else {
+                mergedMap.set(order.id, order);
+            }
         });
+
+        return Array.from(mergedMap.values());
     }, [remoteAllPurchaseOrders, orders]);
 
     const purchaseStatusCounts = React.useMemo(() => {
@@ -260,12 +269,23 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
     const purchaseOrdersData = React.useMemo(() => {
         const remote = infinitePurchaseOrders?.pages.flat() || [];
+        const purchaseOrdersFromState = orders.filter(o => o.blockType === 'compras');
         
-        // Final merged list
-        const baseList = (!orders || orders.length === 0) ? remote : remote.map(order => {
-            const local = orders.find(o => o.id === order.id);
-            return local ? { ...order, ...local } : order;
+        // Mapeia todas as ordens garantindo atualização imediata em tempo real
+        const mergedMap = new Map<string, Order>();
+        purchaseOrdersFromState.forEach(o => mergedMap.set(o.id, o));
+        remote.forEach(order => {
+            const existing = mergedMap.get(order.id);
+            if (existing) {
+                mergedMap.set(order.id, { ...existing, ...order });
+            } else {
+                mergedMap.set(order.id, order);
+            }
         });
+
+        const baseList = Array.from(mergedMap.values()).sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
 
         // Apply local overrides for absolute immediate feedback
         const withOverrides = baseList.map(order => {
@@ -284,12 +304,46 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
             return withOverrides.filter(order => {
                 const isSemMov = checkIsSemMovimentacao(order);
                 if (isSemMov) return false;
-                return true;
+
+                const status = order.status;
+                const pStatus = order.purchaseStatus || (status === 'approved' ? 'recebido' : null);
+
+                if (purchaseStatusFilter === 'pending_approval') {
+                    return status === 'pending' || status === 'awaiting_approval' || status === 'payment_account' || status === 'awaiting_ficha';
+                }
+                if (purchaseStatusFilter === 'rejected') {
+                    return status === 'rejected';
+                }
+                if (purchaseStatusFilter === 'recebido') {
+                    return pStatus === 'recebido' || status === 'approved';
+                }
+                return pStatus === purchaseStatusFilter;
             });
         }
 
         return withOverrides;
     }, [infinitePurchaseOrders, orders, localOptimisticUpdates, purchaseStatusFilter]);
+
+    // Listener Realtime nativo para Compras em TrackingScreen
+    useEffect(() => {
+        const handleRealtimeUpdate = (e: any) => {
+            const detail = e.detail;
+            if (detail?.orderId) {
+                setLocalOptimisticUpdates(prev => {
+                    if (!prev[detail.orderId]) return prev;
+                    const next = { ...prev };
+                    delete next[detail.orderId];
+                    return next;
+                });
+            }
+            queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all });
+        };
+
+        window.addEventListener('compras-realtime-update', handleRealtimeUpdate);
+        return () => {
+            window.removeEventListener('compras-realtime-update', handleRealtimeUpdate);
+        };
+    }, [queryClient]);
 
 
     // DIARIAS

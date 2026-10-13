@@ -4,6 +4,26 @@ import { notificationService } from './notificationService';
 
 import { handleSupabaseError } from '../utils/errorUtils';
 
+export const notifyPurchaseOrderRealtime = (payload: {
+    eventType: 'INSERT' | 'UPDATE' | 'DELETE' | 'APPROVAL';
+    orderId: string;
+    newStatus?: string;
+    newPurchaseStatus?: string;
+    order?: any;
+    actorName?: string;
+}) => {
+    try {
+        const channel = supabase.channel('compras-realtime-channel');
+        channel.send({
+            type: 'broadcast',
+            event: 'purchase_order_event',
+            payload
+        });
+    } catch (e) {
+        console.warn('[comprasService] Falha ao enviar broadcast realtime:', e);
+    }
+};
+
 export const getAllPurchaseOrders = async (lightweight = true, page = 0, limit = 50, searchTerm = '', status?: string, purchaseStatus?: string): Promise<Order[]> => {
     // ... select specific columns
     const columns = lightweight
@@ -205,11 +225,25 @@ export const savePurchaseOrder = async (order: Order): Promise<void> => {
             }
         }
     }
+
+    notifyPurchaseOrderRealtime({
+        eventType: isNewOrder ? 'INSERT' : 'UPDATE',
+        orderId: dbOrder.id,
+        newStatus: dbOrder.status,
+        newPurchaseStatus: dbOrder.purchase_status,
+        order: dbOrder,
+        actorName: dbOrder.user_name
+    });
 };
 
 export const deletePurchaseOrder = async (id: string): Promise<void> => {
     const { error } = await supabase.from('purchase_orders').delete().eq('id', id);
     if (error) throw error;
+
+    notifyPurchaseOrderRealtime({
+        eventType: 'DELETE',
+        orderId: id
+    });
 };
 
 export const uploadPurchaseAttachment = async (blob: Blob, fileName: string): Promise<string> => {
@@ -301,6 +335,14 @@ export const updateOrderStatus = async (id: string, status: string, historyEntry
             }
         }
     }
+
+    notifyPurchaseOrderRealtime({
+        eventType: finalStatus === 'approved' ? 'APPROVAL' : 'UPDATE',
+        orderId: id,
+        newStatus: finalStatus,
+        order: { id, status: finalStatus, status_history: newHistory },
+        actorName: historyEntry?.userName || 'Administrador'
+    });
 };
 
 export const updateCompletionForecast = async (id: string, forecast: string): Promise<void> => {
@@ -316,6 +358,12 @@ export const updateCompletionForecast = async (id: string, forecast: string): Pr
         .update({ completion_forecast: forecast })
         .eq('id', id);
     if (error) throw error;
+
+    notifyPurchaseOrderRealtime({
+        eventType: 'UPDATE',
+        orderId: id,
+        order: { id, completion_forecast: forecast }
+    });
 };
 
 export const updatePurchaseStatus = async (id: string, status: string, historyEntry: any | null, budgetFileUrl?: string, completionForecast?: string, contabilidadeApproval?: any): Promise<void> => {
@@ -411,6 +459,14 @@ export const updatePurchaseStatus = async (id: string, status: string, historyEn
             link: '/Compras' // or specific link
         });
     }
+
+    notifyPurchaseOrderRealtime({
+        eventType: 'UPDATE',
+        orderId: id,
+        newPurchaseStatus: status,
+        order: { id, purchase_status: status },
+        actorName: historyEntry?.userName
+    });
 };
 
 export const getInventoryItems = async (isTendered?: boolean, category?: string): Promise<InventoryItem[]> => {
@@ -627,4 +683,11 @@ export const updateOrderAccount = async (orderId: string, accountDescription: st
         .eq('id', orderId);
 
     if (updateError) throw updateError;
+
+    notifyPurchaseOrderRealtime({
+        eventType: advanceStatus ? 'APPROVAL' : 'UPDATE',
+        orderId: orderId,
+        newStatus: advanceStatus ? 'approved' : undefined,
+        actorName: userName
+    });
 };
