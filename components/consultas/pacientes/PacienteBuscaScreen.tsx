@@ -1,25 +1,47 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ConsultaPaciente, User } from '../../../types';
 import { normalizarNumeros, correspondeSequencialNome } from '../../../services/pacienteHistoricoService';
 import * as db from '../../../services/consultasService';
-import { Search, Plus, User as UserIcon, Phone, MapPin, Hash, ShieldCheck, ArrowRight, Loader2, ArrowLeft, AlertCircle, X, Users, CreditCard } from 'lucide-react';
+import { 
+    Search, 
+    Plus, 
+    User as UserIcon, 
+    Phone, 
+    MapPin, 
+    Hash, 
+    ArrowRight, 
+    Loader2, 
+    ArrowLeft, 
+    X, 
+    Users, 
+    CreditCard, 
+    ChevronLeft, 
+    ChevronRight, 
+    ChevronsLeft, 
+    ChevronsRight 
+} from 'lucide-react';
 import { PacienteFormModal } from './PacienteFormModal';
 
 interface PacienteBuscaScreenProps {
     onSelectPaciente: (pacienteId: string) => void;
     onBack?: () => void;
     currentUser?: User | null;
+    initialPagina?: number;
 }
+
+const ITENS_POR_PAGINA = 25;
 
 export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
     onSelectPaciente,
     onBack,
-    currentUser
+    currentUser,
+    initialPagina = 1
 }) => {
     const [pacientes, setPacientes] = useState<ConsultaPaciente[]>([]);
     const [loading, setLoading] = useState(true);
 
     const [termoBusca, setTermoBusca] = useState('');
+    const [paginaAtual, setPaginaAtual] = useState<number>(initialPagina);
 
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [editingPatient, setEditingPatient] = useState<ConsultaPaciente | null>(null);
@@ -40,12 +62,36 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
         carregarPacientes();
     }, []);
 
+    // Atualiza a página caso venha alterada via rota externa/props
+    useEffect(() => {
+        if (initialPagina && initialPagina !== paginaAtual) {
+            setPaginaAtual(initialPagina);
+        }
+    }, [initialPagina]);
+
+    // Escuta navegação pelo histórico do navegador (botão voltar/avançar)
+    useEffect(() => {
+        const handlePopState = () => {
+            const path = window.location.pathname;
+            const match = path.match(/\/pagina\/(\d+)/i);
+            if (match && match[1]) {
+                const p = parseInt(match[1], 10);
+                if (!isNaN(p) && p >= 1) setPaginaAtual(p);
+            } else if (path.toLowerCase().endsWith('/pacientes') || path.toLowerCase().endsWith('/pacientes/')) {
+                setPaginaAtual(1);
+            }
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
+
     // Pesquisa unificada que engloba tudo automaticamente:
     // CPF / Cartão SUS: correspondência exata após normalização.
     // Nome: correspondência sequencial de caracteres, sem utilizar contains genérico.
     const pacientesFiltrados = useMemo(() => {
         if (!termoBusca.trim()) {
-            return pacientes.slice(0, 25);
+            return pacientes;
         }
 
         const rawTerm = termoBusca.trim();
@@ -63,12 +109,48 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
         });
     }, [pacientes, termoBusca]);
 
+    // Ao digitar na busca, reinicia para página 1
+    const handleBuscaChange = (novoTermo: string) => {
+        setTermoBusca(novoTermo);
+        if (paginaAtual !== 1) {
+            handleMudarPagina(1, false);
+        }
+    };
+
+    // Total de páginas calculado
+    const totalPaginas = useMemo(() => {
+        return Math.max(1, Math.ceil(pacientesFiltrados.length / ITENS_POR_PAGINA));
+    }, [pacientesFiltrados.length]);
+
+    // Mudança de página sincronizada com nova Rota URL
+    const handleMudarPagina = useCallback((novaPagina: number, syncUrl = true) => {
+        const pageAlvo = Math.max(1, Math.min(novaPagina, totalPaginas));
+        setPaginaAtual(pageAlvo);
+
+        if (syncUrl && typeof window !== 'undefined') {
+            const targetUrl = pageAlvo === 1 ? '/Regulacao/Pacientes' : `/Regulacao/Pacientes/pagina/${pageAlvo}`;
+            if (window.location.pathname !== targetUrl) {
+                window.history.pushState({}, '', targetUrl);
+                window.dispatchEvent(new Event('popstate'));
+            }
+        }
+    }, [totalPaginas]);
+
+    // Fatiamento dos 25 pacientes exibidos nesta página
+    const pacientesPaginados = useMemo(() => {
+        const inicio = (paginaAtual - 1) * ITENS_POR_PAGINA;
+        return pacientesFiltrados.slice(inicio, inicio + ITENS_POR_PAGINA);
+    }, [pacientesFiltrados, paginaAtual]);
+
     const formatarCpf = (cpf?: string) => {
         if (!cpf) return 'Sem CPF';
         const c = normalizarNumeros(cpf);
         if (c.length === 11) return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
         return cpf;
     };
+
+    const inicioIndice = (paginaAtual - 1) * ITENS_POR_PAGINA;
+    const fimIndice = Math.min(inicioIndice + ITENS_POR_PAGINA, pacientesFiltrados.length);
 
     return (
         <div className="flex-1 w-full h-full flex flex-col p-2 sm:p-3 overflow-hidden gap-2 bg-[#f8fafc]">
@@ -95,7 +177,7 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
                                 Central de Gestão de Pacientes
                             </h1>
                             <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-sky-50 text-sky-700 border border-sky-200 whitespace-nowrap">
-                                {loading ? 'Carregando...' : `${pacientesFiltrados.length} localizado(s)`}
+                                {loading ? 'Carregando...' : `${pacientesFiltrados.length} no total • Pág ${paginaAtual}/${totalPaginas}`}
                             </span>
                         </div>
                     </div>
@@ -119,14 +201,14 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
                             type="text"
                             placeholder="Pesquisar por CPF, Cartão SUS ou Nome completo do paciente..."
                             value={termoBusca}
-                            onChange={(e) => setTermoBusca(e.target.value)}
+                            onChange={(e) => handleBuscaChange(e.target.value)}
                             className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-8 py-1.5 text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-sky-500 focus:ring-1 focus:ring-sky-500/20 transition-all"
                         />
                         <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                         {termoBusca && (
                             <button
                                 type="button"
-                                onClick={() => setTermoBusca('')}
+                                onClick={() => handleBuscaChange('')}
                                 className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-1 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
                                 title="Limpar pesquisa"
                             >
@@ -135,7 +217,7 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
                         )}
                     </div>
                     <span className="text-slate-400 text-[9px] uppercase font-bold hidden md:inline shrink-0">
-                        CPF/SUS exato • Nome sequencial
+                        25 por pág. • CPF/SUS exato • Nome sequencial
                     </span>
                 </div>
             </div>
@@ -167,7 +249,7 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-2.5">
-                        {pacientesFiltrados.map((paciente) => {
+                        {pacientesPaginados.map((paciente) => {
                             const cpfFormatado = formatarCpf(paciente.cpf);
                             const temPendenciaCadastro = !paciente.cpf || !paciente.sus_number || !paciente.phone || !paciente.birth_date;
 
@@ -242,6 +324,90 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
                     </div>
                 )}
             </div>
+
+            {/* Barra de Paginação Integrada (Ultra Compacta e Sincronizada com URL) */}
+            {pacientesFiltrados.length > 0 && (
+                <div className="bg-white rounded-xl py-1.5 px-2.5 sm:px-3 border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-1.5 shrink-0">
+                    <span className="text-[11px] font-bold text-slate-500">
+                        Mostrando <strong className="text-slate-800">{inicioIndice + 1}–{fimIndice}</strong> de <strong className="text-slate-800">{pacientesFiltrados.length}</strong> pacientes
+                        <span className="text-slate-400 font-medium ml-1">({ITENS_POR_PAGINA} por página)</span>
+                    </span>
+
+                    <div className="flex items-center gap-1">
+                        {/* Primeira Página */}
+                        <button
+                            type="button"
+                            onClick={() => handleMudarPagina(1)}
+                            disabled={paginaAtual === 1}
+                            className="p-1 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 transition-all cursor-pointer"
+                            title="Primeira página"
+                        >
+                            <ChevronsLeft className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Página Anterior */}
+                        <button
+                            type="button"
+                            onClick={() => handleMudarPagina(paginaAtual - 1)}
+                            disabled={paginaAtual === 1}
+                            className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer"
+                        >
+                            <ChevronLeft className="w-3 h-3" /> <span>Anterior</span>
+                        </button>
+
+                        {/* Pílulas de Páginas com Range Inteligente */}
+                        <div className="flex items-center gap-1 mx-1">
+                            {Array.from({ length: totalPaginas }, (_, i) => i + 1)
+                                .filter(p => p === 1 || p === totalPaginas || Math.abs(p - paginaAtual) <= 1)
+                                .map((p, idx, arr) => {
+                                    const prev = arr[idx - 1];
+                                    const showEllipsis = prev && p - prev > 1;
+                                    const isAtiva = p === paginaAtual;
+
+                                    return (
+                                        <React.Fragment key={p}>
+                                            {showEllipsis && (
+                                                <span className="text-[10px] font-bold text-slate-400 px-0.5">...</span>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleMudarPagina(p)}
+                                                className={`min-w-[24px] h-6 px-1.5 rounded-md text-[10px] font-black uppercase transition-all cursor-pointer flex items-center justify-center ${
+                                                    isAtiva
+                                                        ? 'bg-sky-600 text-white shadow-2xs'
+                                                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700'
+                                                }`}
+                                            >
+                                                {p}
+                                            </button>
+                                        </React.Fragment>
+                                    );
+                                })}
+                        </div>
+
+                        {/* Próxima Página */}
+                        <button
+                            type="button"
+                            onClick={() => handleMudarPagina(paginaAtual + 1)}
+                            disabled={paginaAtual === totalPaginas}
+                            className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer"
+                        >
+                            <span>Próxima</span> <ChevronRight className="w-3 h-3" />
+                        </button>
+
+                        {/* Última Página */}
+                        <button
+                            type="button"
+                            onClick={() => handleMudarPagina(totalPaginas)}
+                            disabled={paginaAtual === totalPaginas}
+                            className="p-1 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 transition-all cursor-pointer"
+                            title="Última página"
+                        >
+                            <ChevronsRight className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Modal de Cadastro de Paciente */}
             {isFormModalOpen && (

@@ -16,16 +16,27 @@ export const PacientesHubScreen: React.FC<PacientesHubScreenProps> = ({
     // Parse da Rota atual a partir da window.location.pathname
     const parseRoute = useCallback(() => {
         if (typeof window === 'undefined') {
-            return { pacienteId: null, aba: 'visao-geral' as AbaPaciente };
+            return { pacienteId: null, aba: 'visao-geral' as AbaPaciente, pagina: 1 };
         }
 
         const rawPath = window.location.pathname;
-        // Padrão: /Regulacao/Pacientes/:id ou /Consultas/Pacientes/:id e opcionais /solicitacoes, /medicamentos, etc.
+        // Padrão: /Regulacao/Pacientes/:id ou /Regulacao/Pacientes/pagina/:num e opcionais /solicitacoes, etc.
         const regex = /\/(?:regulacao|consultas)\/pacientes\/([^/]+)(?:\/([^/]+))?/i;
         const match = rawPath.match(regex);
 
         if (match && match[1]) {
             const rawId = match[1];
+
+            // Rota específica de paginação: /Regulacao/Pacientes/pagina/:num
+            if (rawId.toLowerCase() === 'pagina') {
+                const num = parseInt(match[2] || '1', 10);
+                return {
+                    pacienteId: null,
+                    aba: 'visao-geral' as AbaPaciente,
+                    pagina: isNaN(num) || num < 1 ? 1 : num
+                };
+            }
+
             // Se não for rota estática
             if (rawId.toLowerCase() !== 'novo' && rawId.toLowerCase() !== 'dados') {
                 let subAba: AbaPaciente = 'visao-geral';
@@ -35,11 +46,19 @@ export const PacientesHubScreen: React.FC<PacientesHubScreenProps> = ({
                 else if (rawAba === 'linha-do-tempo') subAba = 'linha-do-tempo';
                 else if (rawAba === 'analise') subAba = 'analise';
 
-                return { pacienteId: rawId, aba: subAba };
+                return { pacienteId: rawId, aba: subAba, pagina: 1 };
             }
         }
 
-        return { pacienteId: null, aba: 'visao-geral' as AbaPaciente };
+        // Suporte opcional a query string: ?pagina=2 ou ?page=2
+        const searchParams = new URLSearchParams(window.location.search);
+        const queryPage = parseInt(searchParams.get('pagina') || searchParams.get('page') || '1', 10);
+
+        return {
+            pacienteId: null,
+            aba: 'visao-geral' as AbaPaciente,
+            pagina: isNaN(queryPage) || queryPage < 1 ? 1 : queryPage
+        };
     }, []);
 
     const [routeInfo, setRouteInfo] = useState(parseRoute());
@@ -60,7 +79,7 @@ export const PacientesHubScreen: React.FC<PacientesHubScreenProps> = ({
             window.history.pushState({}, '', targetUrl);
             window.dispatchEvent(new Event('popstate'));
         }
-        setRouteInfo({ pacienteId: id, aba: 'visao-geral' });
+        setRouteInfo({ pacienteId: id, aba: 'visao-geral', pagina: 1 });
     };
 
     // Volta para a tela de localização / busca de pacientes
@@ -70,7 +89,7 @@ export const PacientesHubScreen: React.FC<PacientesHubScreenProps> = ({
             window.history.pushState({}, '', targetUrl);
             window.dispatchEvent(new Event('popstate'));
         }
-        setRouteInfo({ pacienteId: null, aba: 'visao-geral' });
+        setRouteInfo({ pacienteId: null, aba: 'visao-geral', pagina: 1 });
     };
 
     if (routeInfo.pacienteId) {
@@ -89,6 +108,7 @@ export const PacientesHubScreen: React.FC<PacientesHubScreenProps> = ({
             onSelectPaciente={handleSelectPaciente}
             onBack={onBack}
             currentUser={currentUser}
+            initialPagina={routeInfo.pagina}
         />
     );
 };
