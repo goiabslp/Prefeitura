@@ -11,7 +11,7 @@ import { DadosScreen } from './DadosScreen';
 import { HistoricoScreen } from './HistoricoScreen';
 import { DashboardScreen } from './DashboardScreen';
 import { FarmaciaAlertProvider } from './FarmaciaAlertContext';
-import { PacientesTab } from '../common/PacientesTab';
+import { PacientesHubScreen } from '../consultas/pacientes/PacientesHubScreen';
 import { ModuleGestorScreen } from '../common/ModuleGestorScreen';
 import { userCanAccessSubmodule } from '../../services/permissionService';
 
@@ -329,7 +329,7 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
                 </div>
             )}
 
-            <main className={`flex-1 ${showEstoque || showConsultar || showRetirar ? 'p-2 md:p-3 overflow-hidden' : 'overflow-y-auto p-4 md:p-6'} custom-scrollbar flex flex-col min-h-0`}>
+            <main className={`flex-1 ${showEstoque || showConsultar || showRetirar || showPacientes ? 'p-2 md:p-3 overflow-hidden' : 'overflow-y-auto p-4 md:p-6'} custom-scrollbar flex flex-col min-h-0`}>
                 {!isSubView ? (
                     <FarmaciaDashboard
                         currentUser={currentUser}
@@ -375,8 +375,12 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
                         subView={subView}
                     />
                 ) : showPacientes ? (
-                    <div className="w-full flex-1 flex flex-col h-full max-h-full min-h-0 bg-white/95 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden animate-in fade-in duration-200 p-2 sm:p-3">
-                        <PacientesTab onBack={() => onNavigate('farmacia')} accentColor="pink" />
+                    <div className="w-full flex-1 flex flex-col h-full max-h-full min-h-0 bg-transparent overflow-hidden animate-in fade-in duration-200">
+                        <PacientesHubScreen
+                            onBack={() => onNavigate('farmacia')}
+                            currentUser={currentUser}
+                            baseRoute="/FarmaciaPopular/Pacientes"
+                        />
                     </div>
                 ) : showGestor ? (
                     <ModuleGestorScreen

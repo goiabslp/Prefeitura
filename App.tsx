@@ -2231,6 +2231,13 @@ const App: React.FC = () => {
             window.dispatchEvent(new Event('consultas-procedimentos-changed'));
           }
         )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'farmacia_movimentacoes' },
+          () => {
+            window.dispatchEvent(new Event('farmacia-movimentacoes-changed'));
+          }
+        )
         .subscribe();
       activeChannels.push(consultasChannel);
     }
@@ -2257,6 +2264,20 @@ const App: React.FC = () => {
           { event: '*', schema: 'public', table: 'farmacia_config' },
           () => {
             window.dispatchEvent(new Event('farmacia-config-changed'));
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'consultas_pacientes' },
+          () => {
+            window.dispatchEvent(new Event('consultas-pacientes-changed'));
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'consultas_agendamentos' },
+          () => {
+            window.dispatchEvent(new Event('consultas-agendamentos-changed'));
           }
         )
         .subscribe();
@@ -2391,6 +2412,14 @@ const App: React.FC = () => {
 
       if (lookupPath.startsWith('/regulacao/pacientes')) {
         setCurrentView('consultas');
+        setAppState(prev => ({ ...prev, view: 'pacientes' }));
+        setActiveBlock(null);
+        setIsAdminSidebarOpen(false);
+        return;
+      }
+
+      if (lookupPath.startsWith('/farmaciapopular/pacientes')) {
+        setCurrentView('farmacia');
         setAppState(prev => ({ ...prev, view: 'pacientes' }));
         setActiveBlock(null);
         setIsAdminSidebarOpen(false);

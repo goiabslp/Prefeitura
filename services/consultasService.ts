@@ -182,6 +182,10 @@ export const createPaciente = async (paciente: Omit<ConsultaPaciente, 'id' | 'cr
         }
 
         if (error) throw error;
+        if (typeof window !== 'undefined' && data) {
+            window.dispatchEvent(new CustomEvent('consultas-pacientes-changed', { detail: data }));
+            window.dispatchEvent(new CustomEvent('paciente-alterado', { detail: data }));
+        }
         return data;
     } catch (error: any) {
         const appError = handleSupabaseError(error);
@@ -240,6 +244,10 @@ export const updatePaciente = async (id: string, updates: Partial<ConsultaPacien
         }
 
         if (error) throw error;
+        if (typeof window !== 'undefined' && data) {
+            window.dispatchEvent(new CustomEvent('consultas-pacientes-changed', { detail: data }));
+            window.dispatchEvent(new CustomEvent('paciente-alterado', { detail: data }));
+        }
         return data;
     } catch (error: any) {
         const appError = handleSupabaseError(error);

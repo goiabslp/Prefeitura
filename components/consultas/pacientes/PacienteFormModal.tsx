@@ -122,6 +122,10 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
             }
 
             if (saved) {
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('consultas-pacientes-changed', { detail: saved }));
+                    window.dispatchEvent(new CustomEvent('paciente-alterado', { detail: saved }));
+                }
                 onSuccess(saved);
                 onClose();
             } else {

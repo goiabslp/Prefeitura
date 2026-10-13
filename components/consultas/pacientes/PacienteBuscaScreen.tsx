@@ -27,6 +27,7 @@ interface PacienteBuscaScreenProps {
     onBack?: () => void;
     currentUser?: User | null;
     initialPagina?: number;
+    baseRoute?: string;
 }
 
 const ITENS_POR_PAGINA = 25;
@@ -35,8 +36,21 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
     onSelectPaciente,
     onBack,
     currentUser,
-    initialPagina = 1
+    initialPagina = 1,
+    baseRoute
 }) => {
+    // Rota base canônica ativa (/FarmaciaPopular/Pacientes ou /Regulacao/Pacientes)
+    const resolvedBaseRoute = useMemo(() => {
+        if (baseRoute) return baseRoute;
+        if (typeof window !== 'undefined') {
+            const raw = window.location.pathname.toLowerCase();
+            if (raw.startsWith('/farmaciapopular')) {
+                return '/FarmaciaPopular/Pacientes';
+            }
+        }
+        return '/Regulacao/Pacientes';
+    }, [baseRoute]);
+
     const [pacientes, setPacientes] = useState<ConsultaPaciente[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -60,6 +74,18 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
 
     useEffect(() => {
         carregarPacientes();
+    }, []);
+
+    // Sincronização em tempo real: recarrega lista se paciente for cadastrado/editado em qualquer rota
+    useEffect(() => {
+        const handleSync = () => carregarPacientes();
+        window.addEventListener('consultas-pacientes-changed', handleSync);
+        window.addEventListener('paciente-alterado', handleSync);
+
+        return () => {
+            window.removeEventListener('consultas-pacientes-changed', handleSync);
+            window.removeEventListener('paciente-alterado', handleSync);
+        };
     }, []);
 
     // Atualiza a página caso venha alterada via rota externa/props
@@ -122,19 +148,19 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
         return Math.max(1, Math.ceil(pacientesFiltrados.length / ITENS_POR_PAGINA));
     }, [pacientesFiltrados.length]);
 
-    // Mudança de página sincronizada com nova Rota URL
+    // Mudança de página sincronizada com nova Rota URL preservando a rota de origem
     const handleMudarPagina = useCallback((novaPagina: number, syncUrl = true) => {
         const pageAlvo = Math.max(1, Math.min(novaPagina, totalPaginas));
         setPaginaAtual(pageAlvo);
 
         if (syncUrl && typeof window !== 'undefined') {
-            const targetUrl = pageAlvo === 1 ? '/Regulacao/Pacientes' : `/Regulacao/Pacientes/pagina/${pageAlvo}`;
+            const targetUrl = pageAlvo === 1 ? resolvedBaseRoute : `${resolvedBaseRoute}/pagina/${pageAlvo}`;
             if (window.location.pathname !== targetUrl) {
                 window.history.pushState({}, '', targetUrl);
                 window.dispatchEvent(new Event('popstate'));
             }
         }
-    }, [totalPaginas]);
+    }, [totalPaginas, resolvedBaseRoute]);
 
     // Fatiamento dos 25 pacientes exibidos nesta página
     const pacientesPaginados = useMemo(() => {

@@ -55,14 +55,28 @@ interface PacienteDashboardScreenProps {
     onBack: () => void;
     currentUser?: User | null;
     initialAba?: AbaPaciente;
+    baseRoute?: string;
 }
 
 export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = ({
     pacienteId,
     onBack,
     currentUser,
-    initialAba = 'visao-geral'
+    initialAba = 'visao-geral',
+    baseRoute
 }) => {
+    // Rota base canônica ativa (/FarmaciaPopular/Pacientes ou /Regulacao/Pacientes)
+    const resolvedBaseRoute = useMemo(() => {
+        if (baseRoute) return baseRoute;
+        if (typeof window !== 'undefined') {
+            const raw = window.location.pathname.toLowerCase();
+            if (raw.startsWith('/farmaciapopular')) {
+                return '/FarmaciaPopular/Pacientes';
+            }
+        }
+        return '/Regulacao/Pacientes';
+    }, [baseRoute]);
+
     const [paciente, setPaciente] = useState<ConsultaPaciente | null>(null);
     const [solicitacoes, setSolicitacoes] = useState<ConsultaAgendamento[]>([]);
     const [medicamentos, setMedicamentos] = useState<FarmaciaMovimentacao[]>([]);
@@ -105,12 +119,29 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
         carregarDados();
     }, [carregarDados]);
 
-    // Sincronização da Rota URL ao mudar de aba
+    // Sincronização imediata em tempo real: qualquer alteração de cadastro,
+    // solicitação na regulação ou dispensação de medicamento na farmácia atualiza o dashboard
+    useEffect(() => {
+        const handleSync = () => carregarDados();
+        window.addEventListener('consultas-pacientes-changed', handleSync);
+        window.addEventListener('paciente-alterado', handleSync);
+        window.addEventListener('consultas-agendamentos-changed', handleSync);
+        window.addEventListener('farmacia-movimentacoes-changed', handleSync);
+
+        return () => {
+            window.removeEventListener('consultas-pacientes-changed', handleSync);
+            window.removeEventListener('paciente-alterado', handleSync);
+            window.removeEventListener('consultas-agendamentos-changed', handleSync);
+            window.removeEventListener('farmacia-movimentacoes-changed', handleSync);
+        };
+    }, [carregarDados]);
+
+    // Sincronização da Rota URL ao mudar de aba preservando a rota de origem
     const handleMudarAba = (novaAba: AbaPaciente) => {
         setAbaAtiva(novaAba);
         if (typeof window !== 'undefined') {
             const subPath = novaAba === 'visao-geral' ? '' : `/${novaAba}`;
-            const targetUrl = `/Regulacao/Pacientes/${pacienteId}${subPath}`;
+            const targetUrl = `${resolvedBaseRoute}/${pacienteId}${subPath}`;
             if (window.location.pathname !== targetUrl) {
                 window.history.pushState({}, '', targetUrl);
                 window.dispatchEvent(new Event('popstate'));
@@ -673,3 +704,7 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
         </div>
     );
 };
+
+// Exporta alias unificado conforme convenção de componente reutilizável
+export const PacienteDashboard = PacienteDashboardScreen;
+
