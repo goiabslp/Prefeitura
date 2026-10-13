@@ -71,78 +71,71 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
     };
 
     return (
-        <div className="flex-1 w-full h-full flex flex-col p-3 sm:p-5 overflow-hidden gap-3.5">
-            {/* Header com Navegação e Título */}
-            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
-                <div className="flex items-center gap-3">
-                    {onBack && (
-                        <button
-                            type="button"
-                            onClick={onBack}
-                            className="p-2 sm:p-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer shrink-0"
-                            title="Voltar ao Menu de Regulação"
-                        >
-                            <ArrowLeft className="w-4 h-4" />
-                        </button>
-                    )}
-                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-sky-500 to-sky-600 text-white flex items-center justify-center shadow-md shadow-sky-500/20 shrink-0">
-                        <Users className="w-5 h-5" />
+        <div className="flex-1 w-full h-full flex flex-col p-2 sm:p-3 overflow-hidden gap-2 bg-[#f8fafc]">
+            {/* Header e Barra de Busca Integrados Ultra Compactos */}
+            <div className="bg-white rounded-xl py-1.5 px-2.5 sm:px-3 border border-slate-200/90 shadow-2xs flex flex-col gap-1.5 shrink-0">
+                {/* Linha Superior: Voltar + Título + Status + Botão Cadastrar */}
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                        {onBack && (
+                            <button
+                                type="button"
+                                onClick={onBack}
+                                className="p-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer shrink-0"
+                                title="Voltar ao Menu de Regulação"
+                            >
+                                <ArrowLeft className="w-3.5 h-3.5" />
+                            </button>
+                        )}
+                        <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-sky-500 to-sky-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                            <Users className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                            <h1 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight uppercase leading-none truncate">
+                                Central de Gestão de Pacientes
+                            </h1>
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-sky-50 text-sky-700 border border-sky-200 whitespace-nowrap">
+                                {loading ? 'Carregando...' : `${pacientesFiltrados.length} localizado(s)`}
+                            </span>
+                        </div>
                     </div>
-                    <div>
-                        <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight uppercase leading-tight">
-                            Central de Gestão de Pacientes
-                        </h1>
-                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                            Localização de Prontuários e Histórico Integrado (Regulação & Farmácia)
-                        </p>
-                    </div>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setEditingPatient(null);
+                            setIsFormModalOpen(true);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-black uppercase tracking-wider shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer shrink-0"
+                    >
+                        <Plus className="w-3 h-3" /> <span>Cadastrar Paciente</span>
+                    </button>
                 </div>
 
-                <button
-                    type="button"
-                    onClick={() => {
-                        setEditingPatient(null);
-                        setIsFormModalOpen(true);
-                    }}
-                    className="px-4 py-2.5 rounded-2xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-black uppercase tracking-wider shadow-md shadow-sky-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
-                >
-                    <Plus className="w-4 h-4" /> <span>Cadastrar Paciente</span>
-                </button>
-            </div>
-
-            {/* Caixa de Busca Unificada (1 Único Campo que engloba tudo) */}
-            <div className="bg-white rounded-3xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs space-y-2.5 shrink-0">
-                <div className="relative w-full">
-                    <input
-                        type="text"
-                        placeholder="Pesquisar por CPF, Cartão SUS ou Nome completo do paciente..."
-                        value={termoBusca}
-                        onChange={(e) => setTermoBusca(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-11 pr-10 py-3 text-xs sm:text-sm font-bold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 transition-all shadow-2xs"
-                    />
-                    <Search className="w-5 h-5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    {termoBusca && (
-                        <button
-                            type="button"
-                            onClick={() => setTermoBusca('')}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-1.5 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
-                            title="Limpar pesquisa"
-                        >
-                            <X className="w-4 h-4" />
-                        </button>
-                    )}
-                </div>
-
-                <div className="flex items-center justify-between text-[11px] text-slate-400 font-bold px-1">
-                    <span>
-                        {loading
-                            ? 'Carregando base de pacientes...'
-                            : `${pacientesFiltrados.length} paciente(s) localizado(s) ${
-                                  termoBusca ? 'para esta busca' : '(amostragem inicial)'
-                              }`}
-                    </span>
-                    <span className="text-slate-400 text-[10px] uppercase font-extrabold hidden sm:inline">
-                        Regra: Correspondência exata para CPF/SUS e sequencial para Nome
+                {/* Linha Inferior: Campo Único de Busca */}
+                <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                        <input
+                            type="text"
+                            placeholder="Pesquisar por CPF, Cartão SUS ou Nome completo do paciente..."
+                            value={termoBusca}
+                            onChange={(e) => setTermoBusca(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-8 py-1.5 text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-sky-500 focus:ring-1 focus:ring-sky-500/20 transition-all"
+                        />
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        {termoBusca && (
+                            <button
+                                type="button"
+                                onClick={() => setTermoBusca('')}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-1 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+                                title="Limpar pesquisa"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        )}
+                    </div>
+                    <span className="text-slate-400 text-[9px] uppercase font-bold hidden md:inline shrink-0">
+                        CPF/SUS exato • Nome sequencial
                     </span>
                 </div>
             </div>
@@ -173,7 +166,7 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
                         </button>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-2.5">
                         {pacientesFiltrados.map((paciente) => {
                             const cpfFormatado = formatarCpf(paciente.cpf);
                             const temPendenciaCadastro = !paciente.cpf || !paciente.sus_number || !paciente.phone || !paciente.birth_date;
@@ -182,65 +175,65 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
                                 <div
                                     key={paciente.id}
                                     onClick={() => onSelectPaciente(paciente.id)}
-                                    className="bg-white rounded-3xl p-4 border border-slate-200/90 hover:border-sky-300 hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col justify-between group space-y-3"
+                                    className="bg-white rounded-xl p-2.5 sm:p-3 border border-slate-200/90 hover:border-sky-300 hover:shadow-xs transition-all cursor-pointer flex flex-col justify-between group space-y-1.5"
                                 >
-                                    <div className="space-y-2">
-                                        <div className="flex items-start justify-between gap-2">
+                                    <div className="space-y-1">
+                                        <div className="flex items-center justify-between gap-1.5">
                                             <div className="min-w-0 flex-1">
-                                                <h3 className="text-sm font-black text-slate-900 group-hover:text-sky-700 transition-colors uppercase tracking-tight truncate leading-snug">
+                                                <h3 className="text-xs sm:text-sm font-black text-slate-900 group-hover:text-sky-700 transition-colors uppercase tracking-tight truncate leading-tight">
                                                     {paciente.name}
                                                 </h3>
                                                 {paciente.nickname && (
-                                                    <span className="text-[11px] font-bold text-slate-400 block truncate">
+                                                    <span className="text-[10px] font-bold text-slate-400 block truncate">
                                                         ({paciente.nickname})
                                                     </span>
                                                 )}
                                             </div>
 
                                             {temPendenciaCadastro ? (
-                                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+                                                <span className="px-1.5 py-0.2 rounded text-[8px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
                                                     Pendente
                                                 </span>
                                             ) : (
-                                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                                                <span className="px-1.5 py-0.2 rounded text-[8px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
                                                     Completo
                                                 </span>
                                             )}
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
-                                            <div className="flex items-center gap-1.5 text-slate-600 truncate">
-                                                <CreditCard className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                        <div className="grid grid-cols-2 gap-1 text-[10px] sm:text-[11px] pt-0.5">
+                                            <div className="flex items-center gap-1 text-slate-600 truncate">
+                                                <CreditCard className="w-3 h-3 text-slate-400 shrink-0" />
                                                 <span className="font-mono truncate">{cpfFormatado}</span>
                                             </div>
 
-                                            <div className="flex items-center gap-1.5 text-slate-600 truncate">
-                                                <Hash className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                            <div className="flex items-center gap-1 text-slate-600 truncate">
+                                                <Hash className="w-3 h-3 text-slate-400 shrink-0" />
                                                 <span className="font-mono truncate">
                                                     {paciente.sus_number ? `SUS: ${paciente.sus_number}` : 'Sem SUS'}
                                                 </span>
                                             </div>
 
-                                            <div className="flex items-center gap-1.5 text-slate-600 truncate">
-                                                <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                                <span className="truncate">{paciente.phone || 'Sem telefone'}</span>
+                                            <div className="flex items-center gap-1 text-slate-600 truncate">
+                                                <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                                                <span className="truncate">{paciente.phone || 'Sem tel'}</span>
                                             </div>
 
-                                            <div className="flex items-center gap-1.5 text-slate-600 truncate">
-                                                <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                            <div className="flex items-center gap-1 text-slate-600 truncate">
+                                                <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
                                                 <span className="truncate">{paciente.neighborhood || 'Bairro N/I'}</span>
                                             </div>
                                         </div>
                                     </div>
 
                                     {/* Rodapé do Card com Ação */}
-                                    <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase truncate">
+                                    <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px]">
+                                        <span className="font-bold text-slate-400 uppercase truncate">
                                             {paciente.agente_saude ? `ACS: ${paciente.agente_saude}` : 'Sem Agente'}
                                         </span>
 
-                                        <span className="text-sky-600 group-hover:text-sky-800 font-black text-[11px] uppercase tracking-wider flex items-center gap-1 shrink-0">
-                                            Abrir Dashboard <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                                        <span className="text-sky-600 group-hover:text-sky-800 font-black uppercase tracking-wider flex items-center gap-0.5 shrink-0">
+                                            Ver Histórico <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
                                         </span>
                                     </div>
                                 </div>

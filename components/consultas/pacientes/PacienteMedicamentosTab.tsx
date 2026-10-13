@@ -31,93 +31,82 @@ export const PacienteMedicamentosTab: React.FC<PacienteMedicamentosTabProps> = (
     }, [medicamentos, filtroTexto]);
 
     return (
-        <div className="space-y-4">
-            {/* Cards de Métricas da Farmácia */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
-                <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/90 shadow-2xs">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
-                        Total de Retiradas
+        <div className="space-y-2">
+            {/* Cards de Métricas de Farmácia (Ultra Compactos) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5">
+                <div className="bg-white rounded-lg py-1.5 px-2 border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+                    <span className="text-[8px] font-black uppercase tracking-wider text-slate-400 block truncate">
+                        Total Retiradas
                     </span>
-                    <div className="flex items-baseline gap-1 mt-1">
-                        <span className="text-xl sm:text-2xl font-black text-slate-900">
+                    <div className="flex items-baseline justify-between mt-0.5">
+                        <span className="text-base font-black text-slate-900">
                             {indicadores.totalRetiradasMedicamentos}
                         </span>
-                        <span className="text-xs text-slate-400 font-bold">operações</span>
+                        <span className="text-[8px] text-purple-600 font-bold truncate">Operações oficiais</span>
                     </div>
-                    <span className="text-[10px] text-purple-600 font-bold block mt-0.5">
-                        Registros oficiais de saída
-                    </span>
                 </div>
 
-                <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/90 shadow-2xs">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
-                        Medicamentos Distintos
+                <div className="bg-white rounded-lg py-1.5 px-2 border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+                    <span className="text-[8px] font-black uppercase tracking-wider text-slate-400 block truncate">
+                        Fármacos Distintos
                     </span>
-                    <div className="flex items-baseline gap-1 mt-1">
-                        <span className="text-xl sm:text-2xl font-black text-purple-700">
+                    <div className="flex items-baseline justify-between mt-0.5">
+                        <span className="text-base font-black text-purple-700">
                             {indicadores.totalMedicamentosDiferentes}
                         </span>
-                        <span className="text-xs text-slate-400 font-bold">itens</span>
+                        <span className="text-[8px] text-slate-500 font-bold truncate">Itens diferentes</span>
                     </div>
-                    <span className="text-[10px] text-slate-500 font-medium block mt-0.5">
-                        Diferentes fármacos retirados
-                    </span>
                 </div>
 
-                <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/90 shadow-2xs">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
-                        Quantidade Física Entregue
+                <div className="bg-white rounded-lg py-1.5 px-2 border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+                    <span className="text-[8px] font-black uppercase tracking-wider text-slate-400 block truncate">
+                        Qtd Entregue
                     </span>
-                    <div className="flex items-baseline gap-1 mt-1">
-                        <span className="text-xl sm:text-2xl font-black text-slate-900">
+                    <div className="flex items-baseline justify-between mt-0.5">
+                        <span className="text-base font-black text-slate-900">
                             {indicadores.totalQuantidadeFisicaEntregue}
                         </span>
-                        <span className="text-xs text-slate-400 font-bold">unidades</span>
+                        <span className="text-[8px] text-slate-500 font-bold truncate">Unidades físicas</span>
                     </div>
-                    <span className="text-[10px] text-slate-500 font-medium block mt-0.5">
-                        Comprimidos / frascos
-                    </span>
                 </div>
 
-                <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/90 shadow-2xs">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                <div className="bg-white rounded-lg py-1.5 px-2 border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+                    <span className="text-[8px] font-black uppercase tracking-wider text-slate-400 block truncate">
                         Última Retirada
                     </span>
-                    <div className="flex items-baseline gap-1 mt-1">
-                        <span className="text-sm sm:text-base font-black text-slate-900 truncate">
+                    <div className="flex items-baseline justify-between mt-0.5">
+                        <span className="text-sm font-black text-slate-900 truncate">
                             {indicadores.dataUltimaMovimentacao
                                 ? new Date(indicadores.dataUltimaMovimentacao).toLocaleDateString('pt-BR')
                                 : 'Sem registro'}
                         </span>
+                        <span className="text-[8px] text-slate-500 font-bold truncate">Balcão Farmácia</span>
                     </div>
-                    <span className="text-[10px] text-slate-500 font-medium block mt-0.5">
-                        Data do último atendimento
-                    </span>
                 </div>
             </div>
 
-            {/* Aviso Técnico / LGPD / Uso Clínico */}
-            <div className="bg-purple-50/70 border border-purple-200/80 rounded-2xl p-3 flex items-start gap-2.5 text-xs text-purple-900">
-                <Info className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
-                <p className="leading-relaxed">
-                    <strong>Nota administrativa:</strong> O histórico de dispensação reflete exclusivamente as entregas físicas registradas no balcão da Farmácia Popular. Não presume uso contínuo, adesão ao tratamento ou consumo efetivo sem avaliação médica ou farmacêutica direta.
+            {/* Aviso Técnico / LGPD / Uso Clínico (Discreto e Compacto) */}
+            <div className="bg-purple-50/70 border border-purple-200/80 rounded-lg p-1.5 sm:px-2.5 flex items-center gap-1.5 text-[10px] text-purple-900">
+                <Info className="w-3 h-3 text-purple-600 shrink-0" />
+                <p className="truncate">
+                    <strong>Nota administrativa:</strong> Histórico reflete exclusivamente entregas físicas no balcão da Farmácia Popular.
                 </p>
             </div>
 
             {/* Barra de Busca de Medicamentos */}
-            <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+            <div className="bg-white rounded-xl p-1.5 sm:px-2.5 border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-1.5">
                 <div className="relative flex-1">
                     <input
                         type="text"
                         placeholder="Buscar por medicamento, lote, médico prescritor ou CRM..."
                         value={filtroTexto}
                         onChange={(e) => setFiltroTexto(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/10 transition-all"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 transition-all"
                     />
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                 </div>
-                <div className="text-xs font-bold text-slate-500 text-right">
-                    {medicamentosFiltrados.length} dispensação(ões) encontrada(s)
+                <div className="text-[10px] font-bold text-slate-500 text-right shrink-0">
+                    {medicamentosFiltrados.length} dispensação(ões)
                 </div>
             </div>
 

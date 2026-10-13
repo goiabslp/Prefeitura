@@ -110,10 +110,10 @@ export const PacienteSolicitacoesTab: React.FC<PacienteSolicitacoesTabProps> = (
     };
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-2">
             {/* Barra de Filtros e Busca Rápida */}
-            <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/90 shadow-2xs space-y-3">
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+            <div className="bg-white rounded-xl p-2 sm:px-3 border border-slate-200/90 shadow-2xs space-y-1.5">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-1.5">
                     {/* Campo de Busca */}
                     <div className="relative flex-1">
                         <input
@@ -121,18 +121,18 @@ export const PacienteSolicitacoesTab: React.FC<PacienteSolicitacoesTabProps> = (
                             placeholder="Filtrar por procedimento, especialidade ou prestador..."
                             value={filtroTexto}
                             onChange={(e) => setFiltroTexto(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 transition-all"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-sky-500 focus:ring-1 focus:ring-sky-500/20 transition-all"
                         />
-                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                     </div>
 
                     {/* Filtros em Pílulas */}
-                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
+                    <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5 sm:pb-0">
                         <select
                             value={filtroStatus}
                             onChange={(e) => setFiltroStatus(e.target.value)}
                             aria-label="Filtrar por situação do atendimento"
-                            className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-700 focus:bg-white focus:border-sky-500 transition-all cursor-pointer"
+                            className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 focus:bg-white focus:border-sky-500 transition-all cursor-pointer"
                         >
                             <option value="todos">Todas as Situações</option>
                             <option value="fila">Aguardando Vaga / Fila</option>
@@ -146,7 +146,7 @@ export const PacienteSolicitacoesTab: React.FC<PacienteSolicitacoesTabProps> = (
                             value={filtroPrioridade}
                             onChange={(e) => setFiltroPrioridade(e.target.value)}
                             aria-label="Filtrar por prioridade"
-                            className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-700 focus:bg-white focus:border-sky-500 transition-all cursor-pointer"
+                            className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 focus:bg-white focus:border-sky-500 transition-all cursor-pointer"
                         >
                             <option value="todas">Todas as Prioridades</option>
                             <option value="Normal">Normal</option>
@@ -156,23 +156,23 @@ export const PacienteSolicitacoesTab: React.FC<PacienteSolicitacoesTabProps> = (
                     </div>
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold px-1">
+                <div className="flex items-center justify-between text-[10px] text-slate-500 font-bold px-0.5">
                     <span>{solicitacoesFiltradas.length} solicitação(ões) encontrada(s)</span>
                     <span className="text-sky-700 font-extrabold flex items-center gap-1">
-                        <Sparkles className="w-3 h-3 text-sky-500" /> Indicador Inteligente Ativo
+                        <Sparkles className="w-2.5 h-2.5 text-sky-500" /> Indicador Inteligente Ativo
                     </span>
                 </div>
             </div>
 
             {/* Listagem de Solicitações (Cards Mobile First de Alta Densidade) */}
             {solicitacoesFiltradas.length === 0 ? (
-                <div className="bg-white rounded-3xl p-8 border border-slate-200/90 text-center space-y-2">
-                    <Clock className="w-10 h-10 text-slate-300 mx-auto" />
-                    <h4 className="text-sm font-black uppercase text-slate-700">Nenhuma solicitação encontrada</h4>
-                    <p className="text-xs text-slate-400">Tente ajustar os filtros ou o período selecionado.</p>
+                <div className="bg-white rounded-2xl p-6 border border-slate-200/90 text-center space-y-1.5">
+                    <Clock className="w-8 h-8 text-slate-300 mx-auto" />
+                    <h4 className="text-xs font-black uppercase text-slate-700">Nenhuma solicitação encontrada</h4>
+                    <p className="text-[11px] text-slate-400">Tente ajustar os filtros ou o período selecionado.</p>
                 </div>
             ) : (
-                <div className="space-y-3">
+                <div className="space-y-2">
                     {solicitacoesFiltradas.map((sol) => {
                         const indicador = calcularIndicadorTempoEspera(sol);
                         const isExpanded = expandedItemId === sol.id;
@@ -181,16 +181,16 @@ export const PacienteSolicitacoesTab: React.FC<PacienteSolicitacoesTabProps> = (
                         return (
                             <div
                                 key={sol.id}
-                                className="bg-white rounded-2xl border border-slate-200/90 hover:border-sky-200 shadow-2xs hover:shadow-xs transition-all overflow-hidden"
+                                className="bg-white rounded-xl border border-slate-200/90 hover:border-sky-200 shadow-2xs hover:shadow-xs transition-all overflow-hidden"
                             >
                                 {/* Topo do Card */}
-                                <div className="p-3.5 sm:p-4">
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                                <div className="p-2.5 sm:p-3">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                                         <div className="min-w-0 flex-1">
-                                            <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                                            <div className="flex flex-wrap items-center gap-1 mb-0.5">
                                                 {getStatusBadge(sol.status, sol.is_paused)}
                                                 {getIndicadorVisualBadge(indicador)}
-                                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase ${
+                                                <span className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase ${
                                                     sol.priority === 'Urgência'
                                                         ? 'bg-rose-100 text-rose-800'
                                                         : sol.priority === 'Especial'

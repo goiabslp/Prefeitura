@@ -43,7 +43,9 @@ import {
     CalendarCheck,
     Layers,
     Stethoscope,
-    Loader2
+    Loader2,
+    ChevronDown,
+    ChevronUp
 } from 'lucide-react';
 
 export type AbaPaciente = 'visao-geral' | 'solicitacoes' | 'medicamentos' | 'linha-do-tempo' | 'analise';
@@ -75,6 +77,7 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
     // Modais
     const [isRelatorioOpen, setIsRelatorioOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [alertasOpen, setAlertasOpen] = useState(false);
 
     // Carrega dados completos do paciente
     const carregarDados = useCallback(async () => {
@@ -235,103 +238,97 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
     }
 
     return (
-        <div className="flex-1 w-full h-full flex flex-col p-2.5 sm:p-4 overflow-hidden gap-3 min-h-0 bg-[#f8fafc]">
-            {/* 1. CABEÇALHO COMPACTO DO PACIENTE */}
-            <div className="bg-white rounded-3xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs flex flex-col gap-3 shrink-0">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    {/* Botão Voltar + Dados Cadastrais Principais */}
-                    <div className="flex items-start sm:items-center gap-2.5 min-w-0 flex-1">
+        <div className="flex-1 w-full h-full flex flex-col p-2 sm:p-3 overflow-hidden gap-2 min-h-0 bg-[#f8fafc]">
+            {/* 1. CABEÇALHO ULTRACOMPACTO DO PACIENTE */}
+            <div className="bg-white rounded-xl py-1.5 px-2.5 sm:px-3 border border-slate-200/90 shadow-2xs shrink-0 flex flex-col gap-1">
+                <div className="flex items-center justify-between gap-2">
+                    {/* Botão Voltar + Avatar + Nome + Tag */}
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
                         <button
                             type="button"
                             onClick={onBack}
-                            className="p-2 sm:p-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer shrink-0 mt-0.5 sm:mt-0"
+                            className="p-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer shrink-0"
                             title="Voltar à lista de pacientes"
                         >
-                            <ArrowLeft className="w-4 h-4" />
+                            <ArrowLeft className="w-3.5 h-3.5" />
                         </button>
 
-                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-sky-500/20 shrink-0 font-black text-sm uppercase">
+                        <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-sky-500 to-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0 font-black text-[11px] uppercase">
                             {paciente.name.charAt(0)}
                         </div>
 
-                        <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                                <h1 className="text-base sm:text-lg font-black text-slate-900 uppercase tracking-tight truncate leading-tight">
-                                    {paciente.name}
-                                </h1>
-                                {paciente.nickname && (
-                                    <span className="text-xs font-bold text-slate-400 truncate">
-                                        ({paciente.nickname})
-                                    </span>
-                                )}
-                                {isCadastroCompleto ? (
-                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                        Cadastro Completo
-                                    </span>
-                                ) : (
-                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
-                                        Dados Pendentes
-                                    </span>
-                                )}
-                            </div>
-
-                            {/* Linha Compacta de Metadados */}
-                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 font-medium mt-1">
-                                <span className="font-mono text-slate-700 font-bold">
-                                    CPF: {cpfFormatado}
+                        <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                            <h1 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-tight truncate leading-none">
+                                {paciente.name}
+                            </h1>
+                            {paciente.nickname && (
+                                <span className="text-[10px] font-bold text-slate-400 truncate">
+                                    ({paciente.nickname})
                                 </span>
-                                <span>•</span>
-                                <span className="font-mono text-slate-700 font-bold">
-                                    SUS: {paciente.sus_number || 'Sem Cartão SUS'}
+                            )}
+                            {isCadastroCompleto ? (
+                                <span className="px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    Completo
                                 </span>
-                                <span>•</span>
-                                <span>
-                                    {paciente.birth_date ? new Date(paciente.birth_date).toLocaleDateString('pt-BR') : 'Sem data'}{' '}
-                                    {idade !== null ? `(${idade} anos)` : ''}
+                            ) : (
+                                <span className="px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
+                                    Dados Pendentes
                                 </span>
-                                <span>•</span>
-                                <span>Tel: {paciente.phone || 'Sem telefone'}</span>
-                            </div>
+                            )}
                         </div>
                     </div>
 
                     {/* Ações Rápidas no Cabeçalho */}
-                    <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                    <div className="flex items-center gap-1 shrink-0">
                         <button
                             type="button"
                             onClick={() => setIsEditModalOpen(true)}
-                            className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
+                            className="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer"
                             title="Editar Dados Cadastrais"
                         >
-                            <Edit3 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Editar</span>
+                            <Edit3 className="w-2.5 h-2.5" /> <span>Editar</span>
                         </button>
 
                         <button
                             type="button"
                             onClick={() => setIsRelatorioOpen(true)}
-                            className="px-4 py-2 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white text-xs font-black uppercase tracking-wider shadow-md shadow-sky-600/20 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                            className="px-2.5 py-0.5 rounded-lg bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white text-[10px] font-black uppercase tracking-wider shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
                         >
-                            <FileText className="w-3.5 h-3.5" /> <span>Gerar Relatório</span>
+                            <FileText className="w-2.5 h-2.5" /> <span>Relatório</span>
                         </button>
                     </div>
                 </div>
 
-                {/* Sub-linha de Endereço e Agente ACS */}
-                <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-[10px] sm:text-[11px] text-slate-500">
-                    <span className="flex items-center gap-1 truncate">
-                        <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                        {paciente.street ? `${paciente.street}, ` : ''}{paciente.neighborhood || 'Bairro N/I'} • {paciente.city || 'SÃO JOSÉ DO GOIABAL - MG'}
+                {/* Linha única contínua de Metadados e Localização */}
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-500 font-medium leading-none pt-0.5 border-t border-slate-100/90">
+                    <span className="font-mono text-slate-700 font-bold">CPF: {cpfFormatado}</span>
+                    <span className="text-slate-300">•</span>
+                    <span className="font-mono text-slate-700 font-bold">SUS: {paciente.sus_number || 'Sem Cartão'}</span>
+                    <span className="text-slate-300">•</span>
+                    <span>
+                        {paciente.birth_date ? new Date(paciente.birth_date).toLocaleDateString('pt-BR') : 'Sem data'}
+                        {idade !== null ? ` (${idade}a)` : ''}
                     </span>
-                    <span className="font-bold text-sky-700 truncate">
-                        ACS: {paciente.agente_saude || 'Nenhum agente vinculado'}
+                    <span className="text-slate-300">•</span>
+                    <span>Tel: {paciente.phone || 'Sem tel'}</span>
+                    {paciente.agente_saude && (
+                        <>
+                            <span className="text-slate-300">•</span>
+                            <span className="text-sky-700 font-bold">ACS: {paciente.agente_saude}</span>
+                        </>
+                    )}
+                    <span className="text-slate-300">•</span>
+                    <span className="flex items-center gap-0.5 truncate text-slate-400">
+                        <MapPin className="w-2.5 h-2.5 text-slate-300 shrink-0" />
+                        {paciente.street ? `${paciente.street}, ` : ''}{paciente.neighborhood || 'Bairro N/I'} • {paciente.city || 'SÃO JOSÉ DO GOIABAL - MG'}
                     </span>
                 </div>
             </div>
 
             {/* 2. BARRA DE NAVEGAÇÃO POR ABAS COM ROTA URL E FILTRO DE PERÍODO */}
-            <div className="bg-white rounded-2xl p-2 sm:p-2.5 border border-slate-200/90 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-2.5 shrink-0">
-                {/* Abas Principais (Mobile First com scroll horizontal oculto) */}
-                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1 md:pb-0">
+            <div className="bg-white rounded-lg py-1 px-1.5 sm:px-2 border border-slate-200/90 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-1 shrink-0">
+                {/* Abas Principais */}
+                <div className="flex items-center gap-0.5 overflow-x-auto no-scrollbar">
                     {[
                         { key: 'visao-geral', label: 'Visão Geral', icon: Layers },
                         { key: 'solicitacoes', label: `Solicitações (${indicadores.totalSolicitacoes})`, icon: Clock },
@@ -346,13 +343,13 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
                                 key={tab.key}
                                 type="button"
                                 onClick={() => handleMudarAba(tab.key as AbaPaciente)}
-                                className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
                                     isAtiva
-                                        ? 'bg-slate-900 text-white shadow-xs'
+                                        ? 'bg-slate-900 text-white shadow-2xs'
                                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                                 }`}
                             >
-                                <Icon className={`w-3.5 h-3.5 ${isAtiva ? 'text-sky-400' : 'text-slate-400'}`} />
+                                <Icon className={`w-2.5 h-2.5 ${isAtiva ? 'text-sky-400' : 'text-slate-400'}`} />
                                 <span>{tab.label}</span>
                             </button>
                         );
@@ -360,20 +357,20 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
                 </div>
 
                 {/* Filtro de Períodos Rápidos */}
-                <div className="flex items-center gap-1 self-start md:self-auto bg-slate-100 p-1 rounded-xl overflow-x-auto no-scrollbar">
+                <div className="flex items-center gap-0.5 self-start md:self-auto bg-slate-100 p-0.5 rounded-md overflow-x-auto no-scrollbar">
                     {[
                         { key: 'hoje', label: 'Hoje' },
-                        { key: '7dias', label: '7 dias' },
-                        { key: '30dias', label: '30 dias' },
-                        { key: '90dias', label: '90 dias' },
-                        { key: '1ano', label: '1 ano' },
+                        { key: '7dias', label: '7d' },
+                        { key: '30dias', label: '30d' },
+                        { key: '90dias', label: '90d' },
+                        { key: '1ano', label: '1a' },
                         { key: 'tudo', label: 'Tudo' }
                     ].map(p => (
                         <button
                             key={p.key}
                             type="button"
                             onClick={() => setPeriodoFiltro(p.key as any)}
-                            className={`px-2.5 py-1 rounded-lg text-[10px] sm:text-xs font-extrabold uppercase transition-all cursor-pointer whitespace-nowrap ${
+                            className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase transition-all cursor-pointer whitespace-nowrap ${
                                 periodoFiltro === p.key
                                     ? 'bg-white text-sky-800 shadow-2xs'
                                     : 'text-slate-600 hover:text-slate-900'
@@ -386,111 +383,140 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
             </div>
 
             {/* 3. CONTEÚDO PRINCIPAL DA ABA SELECIONADA */}
-            <div className="flex-1 overflow-y-auto no-scrollbar min-h-0 space-y-4">
+            <div className="flex-1 overflow-y-auto no-scrollbar min-h-0 space-y-2">
                 {abaAtiva === 'visao-geral' && (
-                    <div className="space-y-4 animate-in fade-in duration-150">
-                        {/* Seção Alertas do Gestor (se houver) */}
+                    <div className="space-y-2 animate-in fade-in duration-150">
+                        {/* Seção Alertas do Gestor Compacta / Retrátil */}
                         {alertas.length > 0 && (
-                            <div className="bg-amber-50/80 rounded-3xl p-3.5 sm:p-4 border border-amber-200/90 shadow-2xs space-y-2.5">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-7 h-7 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black">
-                                            <ShieldAlert className="w-4 h-4" />
+                            <div className="bg-amber-50/90 rounded-lg p-1.5 sm:px-2.5 border border-amber-200/90 shadow-2xs transition-all">
+                                <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                        <div className="w-4 h-4 rounded bg-amber-500 text-white flex items-center justify-center shrink-0">
+                                            <ShieldAlert className="w-2.5 h-2.5" />
                                         </div>
-                                        <h3 className="text-xs sm:text-sm font-black uppercase tracking-tight text-amber-950">
-                                            Atenção do Gestor • {alertas.length} Ponto(s) de Atenção
-                                        </h3>
+                                        <span className="text-[10px] font-black uppercase text-amber-950 shrink-0">
+                                            Atenção ({alertas.length}):
+                                        </span>
+                                        <div className="flex items-center gap-1 overflow-hidden text-[10px] text-amber-900 truncate">
+                                            {alertas.slice(0, 3).map(al => (
+                                                <span key={al.id} className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-white/80 border border-amber-200/70 text-[9px] font-bold text-amber-900 truncate">
+                                                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${al.severidade === 'alta' ? 'bg-rose-500' : 'bg-amber-500'}`} />
+                                                    <span className="truncate">{al.titulo}</span>
+                                                </span>
+                                            ))}
+                                            {alertas.length > 3 && (
+                                                <span className="text-[9px] font-bold text-amber-800 shrink-0">
+                                                    +{alertas.length - 3} mais
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
-                                    <span className="text-[10px] font-bold text-amber-800 uppercase">
-                                        Monitoramento Automático
-                                    </span>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setAlertasOpen(!alertasOpen)}
+                                        className="px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 text-[9px] font-black uppercase tracking-wider flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
+                                    >
+                                        <span>{alertasOpen ? 'Ocultar' : 'Detalhes'}</span>
+                                        {alertasOpen ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+                                    </button>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                    {alertas.map(al => (
-                                        <div
-                                            key={al.id}
-                                            className="bg-white rounded-2xl p-2.5 sm:p-3 border border-amber-200/80 flex items-start gap-2.5 text-xs text-slate-700 shadow-2xs"
-                                        >
-                                            <span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                                                al.severidade === 'alta' ? 'bg-rose-500' : al.severidade === 'media' ? 'bg-amber-500' : 'bg-blue-500'
-                                            }`} />
-                                            <div className="flex-1 min-w-0">
-                                                <strong className="block text-slate-900 leading-snug">{al.titulo}</strong>
-                                                <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">{al.descricao}</p>
+                                {alertasOpen && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1.5 pt-1.5 mt-1.5 border-t border-amber-200/60 animate-in fade-in duration-150">
+                                        {alertas.map(al => (
+                                            <div
+                                                key={al.id}
+                                                className="bg-white rounded-lg p-1.5 border border-amber-200/80 flex items-start gap-1.5 text-xs text-slate-700 shadow-2xs"
+                                            >
+                                                <span className={`w-1.5 h-1.5 rounded-full mt-1 shrink-0 ${
+                                                    al.severidade === 'alta' ? 'bg-rose-500' : al.severidade === 'media' ? 'bg-amber-500' : 'bg-blue-500'
+                                                }`} />
+                                                <div className="flex-1 min-w-0">
+                                                    <strong className="block text-slate-900 text-[10px] leading-snug">{al.titulo}</strong>
+                                                    <p className="text-[9px] text-slate-600 mt-0.5 leading-tight">{al.descricao}</p>
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
-                                </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         )}
 
-                        {/* Grid de Indicadores Consolidados */}
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
-                            <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs">
-                                <span className="text-[10px] font-black uppercase text-slate-400 block leading-tight">Total Solicitações</span>
-                                <span className="text-xl sm:text-2xl font-black text-slate-900 mt-1 block">{indicadores.totalSolicitacoes}</span>
-                                <span className="text-[10px] text-sky-600 font-bold block mt-0.5">Exames e consultas</span>
+                        {/* Régua de Indicadores Consolidados (Ultra Compacta) */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5">
+                            <div className="bg-white rounded-lg py-1.5 px-2 border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+                                <span className="text-[8px] font-black uppercase tracking-wider text-slate-400 block truncate">Total Solicitações</span>
+                                <div className="flex items-baseline justify-between mt-0.5">
+                                    <span className="text-base font-black text-slate-900">{indicadores.totalSolicitacoes}</span>
+                                    <span className="text-[8px] text-sky-600 font-bold truncate">Exames e consult.</span>
+                                </div>
                             </div>
 
-                            <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs">
-                                <span className="text-[10px] font-black uppercase text-slate-400 block leading-tight">Aguardando Vaga</span>
-                                <span className="text-xl sm:text-2xl font-black text-sky-700 mt-1 block">{indicadores.aguardandoVaga}</span>
-                                <span className="text-[10px] text-slate-500 font-bold block mt-0.5">Em fila de espera</span>
+                            <div className="bg-white rounded-lg py-1.5 px-2 border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+                                <span className="text-[8px] font-black uppercase tracking-wider text-slate-400 block truncate">Aguardando Vaga</span>
+                                <div className="flex items-baseline justify-between mt-0.5">
+                                    <span className="text-base font-black text-sky-700">{indicadores.aguardandoVaga}</span>
+                                    <span className="text-[8px] text-slate-500 font-bold truncate">Fila de espera</span>
+                                </div>
                             </div>
 
-                            <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs">
-                                <span className="text-[10px] font-black uppercase text-slate-400 block leading-tight">Agendadas</span>
-                                <span className="text-xl sm:text-2xl font-black text-indigo-700 mt-1 block">{indicadores.agendadas}</span>
-                                <span className="text-[10px] text-slate-500 font-bold block mt-0.5">Com data marcada</span>
+                            <div className="bg-white rounded-lg py-1.5 px-2 border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+                                <span className="text-[8px] font-black uppercase tracking-wider text-slate-400 block truncate">Agendadas</span>
+                                <div className="flex items-baseline justify-between mt-0.5">
+                                    <span className="text-base font-black text-indigo-700">{indicadores.agendadas}</span>
+                                    <span className="text-[8px] text-slate-500 font-bold truncate">Com data</span>
+                                </div>
                             </div>
 
-                            <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs">
-                                <span className="text-[10px] font-black uppercase text-slate-400 block leading-tight">Realizadas</span>
-                                <span className="text-xl sm:text-2xl font-black text-emerald-700 mt-1 block">{indicadores.realizadas}</span>
-                                <span className="text-[10px] text-emerald-600 font-bold block mt-0.5">Atendimentos feitos</span>
+                            <div className="bg-white rounded-lg py-1.5 px-2 border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+                                <span className="text-[8px] font-black uppercase tracking-wider text-slate-400 block truncate">Realizadas</span>
+                                <div className="flex items-baseline justify-between mt-0.5">
+                                    <span className="text-base font-black text-emerald-700">{indicadores.realizadas}</span>
+                                    <span className="text-[8px] text-emerald-600 font-bold truncate">Atendimentos</span>
+                                </div>
                             </div>
 
-                            <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs">
-                                <span className="text-[10px] font-black uppercase text-slate-400 block leading-tight">Pausadas / Cancel.</span>
-                                <span className="text-xl sm:text-2xl font-black text-amber-700 mt-1 block">
-                                    {indicadores.pausadas + indicadores.canceladas}
-                                </span>
-                                <span className="text-[10px] text-slate-500 font-bold block mt-0.5">
-                                    {indicadores.pausadas} pausadas • {indicadores.canceladas} canc.
-                                </span>
+                            <div className="bg-white rounded-lg py-1.5 px-2 border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+                                <span className="text-[8px] font-black uppercase tracking-wider text-slate-400 block truncate">Pausadas / Cancel.</span>
+                                <div className="flex items-baseline justify-between mt-0.5">
+                                    <span className="text-base font-black text-amber-700">{indicadores.pausadas + indicadores.canceladas}</span>
+                                    <span className="text-[8px] text-slate-500 font-bold truncate">{indicadores.pausadas} p. • {indicadores.canceladas} c.</span>
+                                </div>
                             </div>
 
-                            <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs">
-                                <span className="text-[10px] font-black uppercase text-slate-400 block leading-tight">Tempo Médio Espera</span>
-                                <span className="text-xl sm:text-2xl font-black text-slate-900 mt-1 block">{indicadores.tempoMedioEsperaDias}d</span>
-                                <span className="text-[10px] text-slate-500 font-bold block mt-0.5">Dias corridos</span>
+                            <div className="bg-white rounded-lg py-1.5 px-2 border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+                                <span className="text-[8px] font-black uppercase tracking-wider text-slate-400 block truncate">Média Espera</span>
+                                <div className="flex items-baseline justify-between mt-0.5">
+                                    <span className="text-base font-black text-slate-900">{indicadores.tempoMedioEsperaDias}d</span>
+                                    <span className="text-[8px] text-slate-500 font-bold truncate">Dias corridos</span>
+                                </div>
                             </div>
                         </div>
 
                         {/* Bloco de Atendimento Integrado e Prazos */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-2.5">
                             {/* Card Visão de Atendimento Integrado */}
-                            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-3">
+                            <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
-                                            <Activity className="w-4 h-4" />
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="w-6 h-6 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center">
+                                            <Activity className="w-3.5 h-3.5" />
                                         </div>
                                         <div>
-                                            <h3 className="text-xs sm:text-sm font-black uppercase text-slate-900">
+                                            <h3 className="text-xs font-black uppercase text-slate-900 leading-tight">
                                                 Visão de Atendimento Integrado
                                             </h3>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase">
+                                            <p className="text-[9px] font-bold text-slate-400 uppercase leading-none">
                                                 Regulação + Consultas + Farmácia Popular
                                             </p>
                                         </div>
                                     </div>
-                                    <span className="text-[10px] font-black uppercase text-sky-600">Tempo Real</span>
+                                    <span className="text-[9px] font-black uppercase text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded">Tempo Real</span>
                                 </div>
 
-                                <div className="space-y-2 text-xs">
-                                    <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200/60 flex items-center justify-between">
+                                <div className="space-y-1.5 text-[11px]">
+                                    <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-between">
                                         <span className="text-slate-600 font-medium">Solicitação mais antiga em aberto:</span>
                                         <strong className="text-slate-900 font-black">
                                             {indicadores.solicitacaoMaisAntigaPendente
@@ -499,7 +525,7 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
                                         </strong>
                                     </div>
 
-                                    <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200/60 flex items-center justify-between">
+                                    <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-between">
                                         <span className="text-slate-600 font-medium">Data do último atendimento:</span>
                                         <strong className="text-slate-900 font-black">
                                             {indicadores.dataUltimoAtendimento
@@ -508,7 +534,7 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
                                         </strong>
                                     </div>
 
-                                    <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200/60 flex items-center justify-between">
+                                    <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-between">
                                         <span className="text-slate-600 font-medium">Última movimentação no município:</span>
                                         <strong className="text-slate-900 font-black">
                                             {indicadores.dataUltimaMovimentacao
@@ -517,7 +543,7 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
                                         </strong>
                                     </div>
 
-                                    <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200/60 flex items-center justify-between">
+                                    <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-between">
                                         <span className="text-slate-600 font-medium">Total de dispensações na Farmácia:</span>
                                         <strong className="text-purple-900 font-black">
                                             {indicadores.totalRetiradasMedicamentos} retiradas ({indicadores.totalQuantidadeFisicaEntregue} un entregues)
@@ -527,17 +553,17 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
                             </div>
 
                             {/* Card Resumo das Últimas Movimentações */}
-                            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-3">
+                            <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-                                            <Clock className="w-4 h-4" />
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="w-6 h-6 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+                                            <Clock className="w-3.5 h-3.5" />
                                         </div>
                                         <div>
-                                            <h3 className="text-xs sm:text-sm font-black uppercase text-slate-900">
+                                            <h3 className="text-xs font-black uppercase text-slate-900 leading-tight">
                                                 Últimas Movimentações
                                             </h3>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase">
+                                            <p className="text-[9px] font-bold text-slate-400 uppercase leading-none">
                                                 Linha do tempo recente
                                             </p>
                                         </div>
@@ -546,17 +572,17 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
                                     <button
                                         type="button"
                                         onClick={() => handleMudarAba('linha-do-tempo')}
-                                        className="text-[11px] font-black uppercase text-sky-600 hover:text-sky-800 cursor-pointer"
+                                        className="text-[10px] font-black uppercase text-sky-600 hover:text-sky-800 cursor-pointer"
                                     >
                                         Ver Todas →
                                     </button>
                                 </div>
 
-                                <div className="space-y-2">
+                                <div className="space-y-1.5">
                                     {linhaDoTempo.slice(0, 4).map(it => (
                                         <div
                                             key={it.id}
-                                            className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200/60 flex items-center justify-between gap-2 text-xs"
+                                            className="p-2 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-between gap-2 text-[11px]"
                                         >
                                             <div className="min-w-0 flex-1">
                                                 <strong className="block text-slate-800 truncate">{it.titulo}</strong>
