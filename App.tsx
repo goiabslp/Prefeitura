@@ -126,6 +126,7 @@ import { LancamentosScreen } from './components/diarias/LancamentosScreen';
 import { GestoresScreen } from './components/diarias/GestoresScreen';
 import { ViajarScreen } from './components/diarias/ViajarScreen';
 import { AdiantamentoScreen } from './components/diarias/AdiantamentoScreen';
+import { ReembolsoScreen } from './components/diarias/ReembolsoScreen';
 import { OficiosHistory } from './components/oficios/OficiosHistory';
 import { LicitacaoDashboard } from './components/licitacao/LicitacaoDashboard';
 import { LicitacaoWizard } from './components/licitacao/LicitacaoWizard';
@@ -191,6 +192,11 @@ const VIEW_TO_PATH: Record<string, string> = {
   'diarias-adiantamento-valores': '/Diarias/Adiantamento/Valores',
   'diarias-adiantamento-bancario': '/Diarias/Adiantamento/Bancario',
   'diarias-adiantamento-justificativa': '/Diarias/Adiantamento/Justificativa',
+  'diarias-reembolso': '/Diarias/Reembolso',
+  'diarias-reembolso-dados': '/Diarias/Reembolso/Dados',
+  'diarias-reembolso-descricao': '/Diarias/Reembolso/Descricao',
+  'diarias-reembolso-despesas': '/Diarias/Reembolso/Despesas',
+  'diarias-reembolso-anexos': '/Diarias/Reembolso/Anexos',
   'editor:oficio': '/Editor/Oficio',
   'editor:compras': '/Editor/Compras',
   'editor:diarias': '/Editor/Diarias',
@@ -395,7 +401,7 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
 
 const App: React.FC = () => {
   // State controlling the active module view
-  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'order-details' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-editar-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'diarias-adiantamento' | 'diarias-adiantamento-servidor' | 'diarias-adiantamento-viagem' | 'diarias-adiantamento-valores' | 'diarias-adiantamento-bancario' | 'diarias-adiantamento-justificativa' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao:kanban' | 'licitacao:kanban-view' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'noticias' | 'upload' | 'politica-privacidade' | 'politica-privacidade-app' | 'assistente-ia' | 'chat' | 'art' | 'documentos'>(() => {
+  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'order-details' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-editar-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'diarias-adiantamento' | 'diarias-adiantamento-servidor' | 'diarias-adiantamento-viagem' | 'diarias-adiantamento-valores' | 'diarias-adiantamento-bancario' | 'diarias-adiantamento-justificativa' | 'diarias-reembolso' | 'diarias-reembolso-dados' | 'diarias-reembolso-descricao' | 'diarias-reembolso-despesas' | 'diarias-reembolso-anexos' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao:kanban' | 'licitacao:kanban-view' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'noticias' | 'upload' | 'politica-privacidade' | 'politica-privacidade-app' | 'assistente-ia' | 'chat' | 'art' | 'documentos'>(() => {
     if (typeof window !== 'undefined') {
       let rawPath = window.location.pathname;
       try { rawPath = decodeURIComponent(rawPath); } catch (e) {}
@@ -2364,6 +2370,12 @@ const App: React.FC = () => {
         return;
       } else if (path.startsWith('/diarias/novo')) {
         setCurrentView('diarias-novo-evento');
+        return;
+      } else if (path.startsWith('/diarias/adiantamento')) {
+        setCurrentView('diarias-adiantamento');
+        return;
+      } else if (path.startsWith('/diarias/reembolso')) {
+        setCurrentView('diarias-reembolso');
         return;
       } else if (path.startsWith('/upload')) {
         setCurrentView('upload');
@@ -6874,6 +6886,16 @@ timestamp: ${new Date().toISOString()}`);
 
             {(currentView === 'diarias-adiantamento' || currentView.startsWith('diarias-adiantamento-')) && (
               <AdiantamentoScreen
+                currentUser={currentUser}
+                onBack={() => {
+                  window.history.pushState({}, '', '/Diarias');
+                  window.dispatchEvent(new Event('popstate'));
+                }}
+              />
+            )}
+
+            {(currentView === 'diarias-reembolso' || currentView.startsWith('diarias-reembolso-')) && (
+              <ReembolsoScreen
                 currentUser={currentUser}
                 onBack={() => {
                   window.history.pushState({}, '', '/Diarias');

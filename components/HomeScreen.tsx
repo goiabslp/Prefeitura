@@ -427,6 +427,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: 'amber'
                 });
             }
+            if (canAccessSub('parent_diarias', 'sub_diarias_reembolso')) {
+                actionButtons.push({
+                    label: 'Reembolso',
+                    desc: 'Reembolso de Despesas',
+                    icon: Wallet,
+                    onClick: () => {
+                        window.history.pushState({}, '', '/Diarias/Reembolso');
+                        window.dispatchEvent(new Event('popstate'));
+                    },
+                    color: 'indigo'
+                });
+            }
         }
 
         // Licitação Specific Buttons

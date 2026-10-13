@@ -116,6 +116,19 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
           '/Diarias/Adiantamento/Bancario',
           '/Diarias/Adiantamento/Justificativa'
         ]
+      },
+      {
+        key: 'sub_diarias_reembolso',
+        legacyKeys: ['parent_diarias_reembolso'],
+        label: 'Reembolso',
+        description: 'Solicitação e controle de reembolso de despesas de viagem',
+        routes: [
+          '/Diarias/Reembolso',
+          '/Diarias/Reembolso/Dados',
+          '/Diarias/Reembolso/Descricao',
+          '/Diarias/Reembolso/Despesas',
+          '/Diarias/Reembolso/Anexos'
+        ]
       }
     ]
   },
