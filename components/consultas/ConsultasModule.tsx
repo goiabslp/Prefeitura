@@ -7,7 +7,7 @@ import { AcompanharScreen } from './AcompanharScreen';
 import { DadosScreen } from './DadosScreen';
 import { LiberarVagasScreen } from './LiberarVagasScreen';
 import { ProcedimentosScreen } from './ProcedimentosScreen';
-import { PacientesTab } from '../common/PacientesTab';
+import { PacientesHubScreen } from './pacientes/PacientesHubScreen';
 import { ModuleGestorScreen } from '../common/ModuleGestorScreen';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { userCanAccessSubmodule } from '../../services/permissionService';
@@ -323,8 +323,11 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                             onNavigate={onNavigate}
                         />
                     ) : showPacientes ? (
-                        <div className="w-full flex-1 flex flex-col h-full max-h-full min-h-0 bg-white/95 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden animate-in fade-in duration-200 p-2 sm:p-3">
-                            <PacientesTab onBack={() => onNavigate('consultas')} accentColor="sky" />
+                        <div className="w-full flex-1 flex flex-col h-full max-h-full min-h-0 bg-transparent overflow-hidden animate-in fade-in duration-200">
+                            <PacientesHubScreen
+                                onBack={() => onNavigate('consultas')}
+                                currentUser={currentUser}
+                            />
                         </div>
                     ) : showDados ? (
                         <DadosScreen

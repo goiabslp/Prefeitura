@@ -2389,6 +2389,14 @@ const App: React.FC = () => {
       // Suporte a redirecionamento retrocompatível de /consultas para /regulacao
       const lookupPath = path.startsWith('/consultas') ? path.replace('/consultas', '/regulacao') : path;
 
+      if (lookupPath.startsWith('/regulacao/pacientes')) {
+        setCurrentView('consultas');
+        setAppState(prev => ({ ...prev, view: 'pacientes' }));
+        setActiveBlock(null);
+        setIsAdminSidebarOpen(false);
+        return;
+      }
+
       const matchedEntry = Object.entries(PATH_TO_STATE).find(
         ([key]) => {
           let normKey = key;
