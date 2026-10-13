@@ -1702,24 +1702,101 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
 
             let filtered = allBookingData;
             if (globalSearch.trim()) {
-                const rawSearch = globalSearch.toLowerCase().trim();
-                const cleanNumbers = rawSearch.replace(/\D/g, '');
+                const rawSearch = globalSearch.trim();
+                const searchLower = rawSearch.toLowerCase();
+                const searchNorm = searchLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                const cleanDigits = rawSearch.replace(/\D/g, '');
 
                 filtered = filtered.filter(a => {
-                    const nameMatch = a.paciente?.name ? a.paciente.name.toLowerCase().includes(rawSearch) : false;
-                    const nicknameMatch = a.paciente?.nickname ? a.paciente.nickname.toLowerCase().includes(rawSearch) : false;
-                    
-                    const cpfClean = a.paciente?.cpf ? a.paciente.cpf.replace(/\D/g, '') : '';
-                    const cpfMatch = cleanNumbers.length > 0 && cpfClean.includes(cleanNumbers);
-                    
-                    const susClean = a.paciente?.sus_number ? a.paciente.sus_number.replace(/\D/g, '') : '';
-                    const susMatch = cleanNumbers.length > 0 && susClean.includes(cleanNumbers);
-                    
-                    const procFormatted = formatProcedimentoLabel(a.procedimento).toLowerCase();
-                    const procNameMatch = procFormatted ? procFormatted.includes(rawSearch) : false;
-                    const procCodeMatch = a.procedimento?.code ? a.procedimento.code.toLowerCase().includes(rawSearch) : false;
+                    // 1. NOME DO PACIENTE (Nome oficial e apelido)
+                    const patientName = a.paciente?.name || '';
+                    const patientNickname = a.paciente?.nickname || '';
+                    const nameNorm = patientName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    const nicknameNorm = patientNickname.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    const nameMatch = nameNorm.includes(searchNorm) || nicknameNorm.includes(searchNorm);
 
-                    return nameMatch || nicknameMatch || cpfMatch || susMatch || procNameMatch || procCodeMatch;
+                    // 2. NÚMERO DO CARTÃO SUS DO PACIENTE
+                    const susRaw = a.paciente?.sus_number || '';
+                    const susClean = susRaw.replace(/\D/g, '');
+                    const susMatch = (cleanDigits.length > 0 && susClean.includes(cleanDigits)) ||
+                                     (susRaw.toLowerCase().includes(searchLower));
+
+                    // 3. CPF DO PACIENTE (limpo ou formatado com pontuação)
+                    const cpfRaw = a.paciente?.cpf || '';
+                    const cpfClean = cpfRaw.replace(/\D/g, '');
+                    const cpfFormatted = cpfClean.length === 11
+                        ? cpfClean.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+                        : cpfRaw;
+                    const cpfMatch = (cleanDigits.length > 0 && cpfClean.includes(cleanDigits)) ||
+                                     (cpfFormatted.toLowerCase().includes(searchLower)) ||
+                                     (cpfRaw.toLowerCase().includes(searchLower));
+
+                    // 4. NOME DO PROCEDIMENTO (nome, label formatada, grupo ou especialidade)
+                    const procName = a.procedimento?.name || '';
+                    const procType = a.procedimento?.type || '';
+                    const procEspName = a.procedimento?.especialista?.nome || '';
+                    const procSpecialty = a.procedimento?.especialista?.especialidade || '';
+                    const procGroup = a.procedimento?.especialista?.grupo || '';
+                    const procFormatted = formatProcedimentoLabel(a.procedimento);
+                    const procCombined = `${procName} ${procType} ${procEspName} ${procSpecialty} ${procGroup} ${procFormatted}`.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    const procNameMatch = procCombined.includes(searchNorm);
+
+                    // 5. PRIORIDADE (Normal, Urgência, Especial, Retorno, etc.)
+                    const priority = (a.priority || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    const retornoLabel = a.is_retorno ? `retorno ${a.retorno_tipo || ''}`.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') : '';
+                    const priorityMatch = priority.includes(searchNorm) || (retornoLabel.length > 0 && retornoLabel.includes(searchNorm));
+
+                    // 6. DATA DA SOLICITAÇÃO (Formatos DD/MM/YYYY, DD/MM, YYYY-MM-DD)
+                    const solRaw = a.solicitation_date || a.created_at || '';
+                    let solPt = '';
+                    let solIso = '';
+                    if (solRaw) {
+                        try {
+                            const dStr = solRaw.includes('T') ? solRaw : `${solRaw}T00:00:00`;
+                            const d = new Date(dStr);
+                            if (!isNaN(d.getTime())) {
+                                const dia = String(d.getDate()).padStart(2, '0');
+                                const mes = String(d.getMonth() + 1).padStart(2, '0');
+                                const ano = String(d.getFullYear());
+                                solPt = `${dia}/${mes}/${ano}`;
+                                solIso = `${ano}-${mes}-${dia}`;
+                            }
+                        } catch {}
+                    }
+                    const dataMatch = (solPt.length > 0 && (solPt.includes(searchLower) || solPt.includes(rawSearch))) ||
+                                      (solIso.length > 0 && solIso.includes(searchLower)) ||
+                                      (solRaw.toLowerCase().includes(searchLower));
+
+                    // 7. CÓDIGO DO EXAME
+                    const procCode = (a.procedimento?.code || '').toLowerCase().trim();
+                    const cleanCode = procCode.replace(/\D/g, '');
+                    const procCodeMatch = (procCode.length > 0 && procCode.includes(searchLower)) ||
+                                          (cleanDigits.length > 0 && cleanCode.length > 0 && (cleanCode.includes(cleanDigits) || cleanDigits.includes(cleanCode)));
+
+                    // 8. PROTOCOLO (Protocolo exibido #12345678 ou ID completo)
+                    const fullId = (a.id || '').toLowerCase();
+                    const protocolShort = (a.id ? a.id.substring(0, 8) : '').toLowerCase();
+                    const searchNoHash = searchLower.replace(/^#/, '');
+                    const protocolMatch = fullId.includes(searchNoHash) ||
+                                          protocolShort.includes(searchNoHash);
+
+                    // 9. RESPONSÁVEL (Responsável pelo agendamento, criador ou Agente de Saúde)
+                    const respName = (a.responsavel?.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    const respCreatedBy = (a.created_by || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    const agenteSaude = (a.paciente?.agente_saude || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    const responsavelMatch = respName.includes(searchNorm) ||
+                                             respCreatedBy.includes(searchNorm) ||
+                                             agenteSaude.includes(searchNorm);
+
+                    return nameMatch ||
+                           susMatch ||
+                           cpfMatch ||
+                           procNameMatch ||
+                           priorityMatch ||
+                           dataMatch ||
+                           procCodeMatch ||
+                           protocolMatch ||
+                           responsavelMatch;
                 });
             }
             if (filterDate) {
@@ -1956,8 +2033,9 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         setEditAppointmentTime(booking.appointment_time || '');
         setEditSolicitationDate(booking.solicitation_date || (booking.created_at ? booking.created_at.split('T')[0] : ''));
         setEditPriority(booking.priority || 'Normal');
-        setEditIsRetorno(booking.is_retorno || !!booking.retorno_tipo || false);
-        setEditRetornoTipo((booking.retorno_tipo as any) || (booking.is_retorno ? '1º Retorno' : '1º Retorno'));
+        const hasRetorno = Boolean(booking.is_retorno || booking.retorno_tipo || booking.status === 'Retorno');
+        setEditIsRetorno(hasRetorno);
+        setEditRetornoTipo((booking.retorno_tipo as any) || (hasRetorno ? '1º Retorno' : ''));
         setEditStatus(booking.status || 'Solicitado');
         setEditQuantity(booking.quantity || 1);
         setEditError('');
@@ -2009,6 +2087,12 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 }
             }
 
+            // Se o retorno foi deixado em branco ou desmarcado, ele deixa de ser retorno e prevalece a Prioridade configurada
+            const isActuallyRetorno = editIsRetorno && Boolean(editRetornoTipo && editRetornoTipo.trim() !== '');
+            const cleanRetornoTipo = isActuallyRetorno ? editRetornoTipo : null;
+            const cleanRetornoGrau = isActuallyRetorno && editRetornoTipo ? Number(editRetornoTipo.charAt(0)) : null;
+            const resolvedStatus = (editStatus === 'Retorno' && !isActuallyRetorno) ? 'Fila de espera' : editStatus;
+
             // 2. Atualizar Agendamento de forma segura
             const updatedBooking = await db.updateAgendamento(editTarget.id, {
                 patient_id: patientId || editTarget.patient_id,
@@ -2017,10 +2101,10 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 appointment_time: editAppointmentTime ? editAppointmentTime : null,
                 solicitation_date: editSolicitationDate ? editSolicitationDate : null,
                 priority: editPriority,
-                is_retorno: editIsRetorno,
-                retorno_tipo: editIsRetorno ? (editRetornoTipo || '1º Retorno') : undefined,
-                retorno_grau: editIsRetorno ? Number((editRetornoTipo || '1º Retorno').charAt(0)) : undefined,
-                status: editStatus,
+                is_retorno: isActuallyRetorno,
+                retorno_tipo: cleanRetornoTipo as any,
+                retorno_grau: cleanRetornoGrau as any,
+                status: resolvedStatus,
                 quantity: editQuantity
             });
 
@@ -2326,7 +2410,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     <div className="relative w-full animate-in fade-in duration-200">
                         <input
                             type="text"
-                            placeholder="Buscar por nome, CPF, SUS ou exame..."
+                            placeholder="Buscar por Paciente, SUS, CPF, Procedimento, Prioridade, Data, Código, Protocolo ou Responsável..."
                             className="w-full bg-slate-50 border border-slate-200/90 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 rounded-2xl pl-9 pr-9 py-2 text-xs font-bold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
                             value={globalSearch}
                             onChange={(e) => setGlobalSearch(e.target.value)}
@@ -2380,7 +2464,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     <div className="relative flex-1 min-w-[200px] max-w-md shrink-0">
                         <input
                             type="text"
-                            placeholder="Buscar por Nome, CPF, Cartão SUS ou Procedimento..."
+                            placeholder="Buscar por Paciente, SUS, CPF, Procedimento, Prioridade, Data, Código, Protocolo ou Responsável..."
                             className="w-full bg-slate-50/90 hover:bg-slate-100/80 focus:bg-white border border-slate-200/90 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 rounded-2xl pl-9 pr-8 py-1.5 text-xs font-semibold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
                             value={globalSearch}
                             onChange={(e) => setGlobalSearch(e.target.value)}
@@ -2483,7 +2567,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 Qual agendamento você procura?
                             </h3>
                             <p className="text-xs sm:text-sm font-semibold text-slate-500 max-w-sm mb-5 leading-relaxed">
-                                Digite o nome do paciente, apelido, CPF, Cartão SUS ou procedimento no campo abaixo para consultar.
+                                Pesquise por nome do paciente, SUS, CPF, procedimento, prioridade, data da solicitação, código do exame, protocolo ou responsável.
                             </p>
 
                             {/* Campo de Pesquisa Maior no Centro da Tela Mobile */}
@@ -2491,7 +2575,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 <input
                                     type="text"
                                     autoFocus
-                                    placeholder="Buscar por nome, CPF, SUS ou exame..."
+                                    placeholder="Buscar por Paciente, SUS, CPF, Procedimento, Prioridade, Data, Código, Protocolo ou Responsável..."
                                     className="w-full bg-white border-2 border-slate-200/90 hover:border-sky-300 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15 rounded-2xl pl-12 pr-11 py-3.5 sm:py-4 text-sm font-extrabold text-slate-900 placeholder:text-slate-400 placeholder:font-medium transition-all shadow-xs"
                                     value={globalSearch}
                                     onChange={(e) => setGlobalSearch(e.target.value)}
@@ -3612,7 +3696,15 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                         </label>
                                         <select
                                             value={editIsRetorno ? 'sim' : 'nao'}
-                                            onChange={(e) => setEditIsRetorno(e.target.value === 'sim')}
+                                            onChange={(e) => {
+                                                const isSim = e.target.value === 'sim';
+                                                setEditIsRetorno(isSim);
+                                                if (!isSim) {
+                                                    setEditRetornoTipo('');
+                                                } else if (!editRetornoTipo) {
+                                                    setEditRetornoTipo('1º Retorno');
+                                                }
+                                            }}
                                             disabled={!isAdmin}
                                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none disabled:opacity-75 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
                                         >
@@ -3623,21 +3715,60 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
 
                                     {editIsRetorno && (
                                         <div>
-                                            <label className="block text-[10px] font-black uppercase text-teal-700 mb-1">
-                                                Etapa de Retorno {!isAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
-                                            </label>
-                                            <select
-                                                value={editRetornoTipo || '1º Retorno'}
-                                                onChange={(e) => setEditRetornoTipo(e.target.value as any)}
-                                                disabled={!isAdmin}
-                                                className="w-full p-3 bg-teal-50/50 border border-teal-200 rounded-xl text-xs font-black text-teal-900 focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none disabled:opacity-75 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
-                                            >
-                                                <option value="1º Retorno">1º Retorno</option>
-                                                <option value="2º Retorno">2º Retorno</option>
-                                                <option value="3º Retorno">3º Retorno</option>
-                                                <option value="4º Retorno">4º Retorno</option>
-                                                <option value="5º Retorno">5º Retorno</option>
-                                            </select>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <label className="block text-[10px] font-black uppercase text-teal-700">
+                                                    Etapa de Retorno {!isAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
+                                                </label>
+                                                {isAdmin && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEditRetornoTipo('')}
+                                                        className="text-[10px] font-black text-rose-600 hover:text-rose-800 flex items-center gap-1 hover:underline transition-colors cursor-pointer"
+                                                        title="Apagar retorno e deixar em branco"
+                                                    >
+                                                        <Trash2 className="w-3 h-3" />
+                                                        Apagar / Deixar em branco
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="relative">
+                                                <select
+                                                    value={editRetornoTipo || ''}
+                                                    onChange={(e) => setEditRetornoTipo(e.target.value as any)}
+                                                    disabled={!isAdmin}
+                                                    className={`w-full p-3 border rounded-xl text-xs font-black outline-none transition-all disabled:opacity-75 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500 ${
+                                                        !editRetornoTipo
+                                                            ? 'bg-amber-50/70 border-amber-300 text-amber-900 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20'
+                                                            : 'bg-teal-50/50 border-teal-200 text-teal-900 focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20'
+                                                    }`}
+                                                >
+                                                    <option value="">(Deixar em branco — Prevalecer Prioridade)</option>
+                                                    <option value="1º Retorno">1º Retorno</option>
+                                                    <option value="2º Retorno">2º Retorno</option>
+                                                    <option value="3º Retorno">3º Retorno</option>
+                                                    <option value="4º Retorno">4º Retorno</option>
+                                                    <option value="5º Retorno">5º Retorno</option>
+                                                </select>
+                                                {editRetornoTipo && isAdmin && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEditRetornoTipo('')}
+                                                        className="absolute right-8 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                                        title="Limpar seleção de retorno"
+                                                    >
+                                                        <X className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                            {!editRetornoTipo ? (
+                                                <p className="text-[10px] font-bold text-amber-700 mt-1 flex items-center gap-1">
+                                                    <span>⚠️</span> Retorno em branco: prevalecerá a prioridade <strong>{editPriority}</strong>.
+                                                </p>
+                                            ) : (
+                                                <p className="text-[10px] font-medium text-teal-700 mt-1">
+                                                    Paciente configurado como retorno ({editRetornoTipo}).
+                                                </p>
+                                            )}
                                         </div>
                                     )}
 

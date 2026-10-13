@@ -2198,10 +2198,15 @@ export const updateAgendamento = async (
     try {
         const { paciente, procedimento, responsavel, ...cleanUpdates } = updates as any;
 
-        // Tratar strings vazias para NULL em campos de data e hora do Postgres
+        // Tratar strings vazias para NULL em campos de data, hora e retorno do Postgres
         if (cleanUpdates.appointment_date === '') cleanUpdates.appointment_date = null;
         if (cleanUpdates.appointment_time === '') cleanUpdates.appointment_time = null;
         if (cleanUpdates.solicitation_date === '') cleanUpdates.solicitation_date = null;
+        if (cleanUpdates.retorno_tipo === '') cleanUpdates.retorno_tipo = null;
+        if (cleanUpdates.is_retorno === false) {
+            cleanUpdates.retorno_tipo = null;
+            cleanUpdates.retorno_grau = null;
+        }
         if (cleanUpdates.cancellation_reason === '') cleanUpdates.cancellation_reason = null;
         if (cleanUpdates.canceled_by === '') cleanUpdates.canceled_by = null;
         if (cleanUpdates.canceled_by_name === '') cleanUpdates.canceled_by_name = null;
