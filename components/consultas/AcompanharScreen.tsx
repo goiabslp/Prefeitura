@@ -1826,7 +1826,12 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 filtered = filtered.filter(a => a.appointment_date === filterDate);
             }
             if (filterStatus) {
-                if (filterStatus === 'Definir Data') {
+                if (filterStatus === 'Urgencias') {
+                    filtered = filtered.filter(a => {
+                        const prio = (a.priority || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                        return prio.includes('urg');
+                    });
+                } else if (filterStatus === 'Definir Data') {
                     filtered = filtered.filter(a => (a.status === 'Fila de espera' || a.status === 'Aguardando Data') && !a.is_paused);
                 } else if (filterStatus === 'Pausada') {
                     filtered = filtered.filter(a => a.is_paused || a.status === 'Pausada');
@@ -2533,12 +2538,13 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         minWidth="w-28 sm:w-36 lg:w-44"
                     />
 
-                    {/* Filter: Status Select (Modern Popover Dropdown) */}
+                    {/* Filter: Select (Modern Popover Dropdown) */}
                     <ModernDropdown
                         value={filterStatus}
                         onChange={setFilterStatus}
                         options={[
                             { value: '', label: 'Todos os Status' },
+                            { value: 'Urgencias', label: '🚨 Urgências' },
                             { value: 'Definir Data', label: 'Definir Data' },
                             { value: 'Fila de espera', label: 'Fila de espera' },
                             { value: 'Pausada', label: '⏸ Pausada' },
@@ -2548,7 +2554,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                             { value: 'Não Realizado', label: 'Não Realizado' },
                             { value: 'Cancelado', label: 'Cancelado' },
                         ]}
-                        placeholder="Status"
+                        placeholder="Filtro"
                         minWidth="w-28 sm:w-36 lg:w-40"
                     />
 
