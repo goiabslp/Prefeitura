@@ -2466,6 +2466,14 @@ const App: React.FC = () => {
         return;
       }
 
+      if (lookupPath.startsWith('/autosenha/pacientes')) {
+        setCurrentView('autosenha');
+        setAppState(prev => ({ ...prev, view: 'pacientes' }));
+        setActiveBlock(null);
+        setIsAdminSidebarOpen(false);
+        return;
+      }
+
       const matchedEntry = Object.entries(PATH_TO_STATE).find(
         ([key]) => {
           let normKey = key;
@@ -6694,6 +6702,9 @@ timestamp: ${new Date().toISOString()}`);
                   } else if (view === 'autosenha:dashboard') {
                     setAppState(prev => ({ ...prev, view: 'dashboard' }));
                     window.history.pushState({}, '', '/AutoSenha/Dashboard');
+                  } else if (view === 'autosenha:pacientes') {
+                    setAppState(prev => ({ ...prev, view: 'pacientes' }));
+                    window.history.pushState({}, '', '/AutoSenha/Pacientes');
                   } else if (view === 'autosenha:psf1') {
                     setAppState(prev => ({ ...prev, view: 'psf1' }));
                     window.history.pushState({}, '', '/AutoSenha/PSF1');

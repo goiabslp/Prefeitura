@@ -1116,6 +1116,8 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
             </div>
           </div>
         </div>
+      )}
+
       {/* MODAL LOCALIZAR PACIENTE */}
       {modalLocalizarAberto && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">

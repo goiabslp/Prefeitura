@@ -305,13 +305,13 @@ export const PacienteRelatorioModal: React.FC<PacienteRelatorioModalProps> = ({
                     const rows = filteredSenhas.map(s => {
                         const dataStr = s.created_at ? new Date(s.created_at).toLocaleDateString('pt-BR') : '-';
                         const horaEmissao = s.created_at ? new Date(s.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-';
-                        const horaChamada = s.called_at ? new Date(s.called_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-';
-                        const horaConclusao = s.completed_at ? new Date(s.completed_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-';
+                        const horaChamada = s.first_called_at ? new Date(s.first_called_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-';
+                        const horaConclusao = s.service_finished_at ? new Date(s.service_finished_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-';
                         const esperaMin = s.wait_time_first_call_seconds ? `${Math.round(s.wait_time_first_call_seconds / 60)} min` : '-';
-                        const duracaoMin = s.service_time_seconds ? `${Math.round(s.service_time_seconds / 60)} min` : '-';
+                        const duracaoMin = s.service_duration_seconds ? `${Math.round(s.service_duration_seconds / 60)} min` : '-';
                         const unidade = s.unidade_id === 'upa' ? 'UPA' : s.unidade_id === 'psf1' ? 'PSF 1' : 'PSF 2';
                         const prioridade = s.prioridade_categoria || s.prioridade_tipo || 'Geral';
-                        const situacao = s.status === 'completed' ? 'Concluído' : s.status === 'no_show' ? 'Não Compareceu' : s.status === 'cancelled' ? 'Cancelado' : s.status;
+                        const situacao = s.status === 'CONCLUIDO' ? 'Concluído' : s.status === 'NAO_COMPARECEU' ? 'Não Compareceu' : s.status === 'CANCELADO' ? 'Cancelado' : s.status === 'EM_ATENDIMENTO' ? 'Em Atendimento' : s.status === 'CHAMANDO' ? 'Chamando' : 'Aguardando';
 
                         return [
                             dataStr,
