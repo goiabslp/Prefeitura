@@ -697,7 +697,7 @@ export const VehicleScheduleDashboard: React.FC<DashboardProps> = ({
             {/* Total de Viagens */}
             <div 
               onClick={() => handleOpenDrillDown('Todas as Viagens do Período', `${totalTrips} solicitações registradas`, () => true)}
-              className="bg-white p-4.5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden"
+              className="bg-white p-4 sm:p-5 pl-5 sm:pl-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden"
             >
               <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-indigo-500 rounded-l-full"></div>
               <div className="flex items-center justify-between mb-2">
@@ -718,7 +718,7 @@ export const VehicleScheduleDashboard: React.FC<DashboardProps> = ({
             {/* Concluídas */}
             <div 
               onClick={() => handleOpenDrillDown('Viagens Concluídas', `${completedTrips} viagens finalizadas com sucesso`, (s) => s.status === 'concluido')}
-              className="bg-white p-4.5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden"
+              className="bg-white p-4 sm:p-5 pl-5 sm:pl-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden"
             >
               <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-emerald-500 rounded-l-full"></div>
               <div className="flex items-center justify-between mb-2">
@@ -739,7 +739,7 @@ export const VehicleScheduleDashboard: React.FC<DashboardProps> = ({
             {/* Em Andamento / Agora */}
             <div 
               onClick={() => handleOpenDrillDown('Viagens em Andamento', `${inProgressTrips} veículos em circulação`, (s) => s.status === 'em_curso' || (s.status === 'confirmado' && new Date(s.departureDateTime) <= now && new Date(s.returnDateTime) >= now))}
-              className="bg-white p-4.5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden"
+              className="bg-white p-4 sm:p-5 pl-5 sm:pl-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden"
             >
               <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-blue-500 rounded-l-full"></div>
               <div className="flex items-center justify-between mb-2">
@@ -760,7 +760,7 @@ export const VehicleScheduleDashboard: React.FC<DashboardProps> = ({
             {/* Passageiros */}
             <div 
               onClick={() => handleOpenDrillDown('Passageiros Transportados', `${totalPassengers} pessoas atendidas no período`, (s) => s.status !== 'cancelado')}
-              className="bg-white p-4.5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden"
+              className="bg-white p-4 sm:p-5 pl-5 sm:pl-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden"
             >
               <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-purple-500 rounded-l-full"></div>
               <div className="flex items-center justify-between mb-2">
@@ -781,7 +781,7 @@ export const VehicleScheduleDashboard: React.FC<DashboardProps> = ({
             {/* Canceladas / Rejeitadas */}
             <div 
               onClick={() => handleOpenDrillDown('Viagens Canceladas e Rejeitadas', `${canceledTrips} solicitações canceladas ou negadas`, (s) => s.status === 'cancelado')}
-              className="bg-white p-4.5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden col-span-2 sm:col-span-1"
+              className="bg-white p-4 sm:p-5 pl-5 sm:pl-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group relative overflow-hidden col-span-2 sm:col-span-1"
             >
               <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-rose-500 rounded-l-full"></div>
               <div className="flex items-center justify-between mb-2">
