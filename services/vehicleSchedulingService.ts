@@ -3,6 +3,13 @@ import { VehicleSchedule, ScheduleStatus } from '../types';
 import { notificationService } from './notificationService';
 import { validateDriverScheduleRules, fetchSystemHolidaysFromDatabase } from './driverRestRulesService';
 
+const LEGACY_SECTOR_MAP: Record<string, string> = {
+    '0655d81b-5eab-4d4b-bf02-79469e7102e3': '7cb6c572-50b8-42ef-bd46-afcab8d56db7', // Secretaria de Saúde
+    'f8347209-fa95-46aa-af74-72cc33544d64': '70af6ee8-c603-4c95-9975-f13e1f017286', // Gabinete
+    '8e780517-7489-408a-b866-932135029a1a': 'da9b19fc-dc15-4df6-a1bf-15ff464e979d', // Departamento de Educação
+    'f299723a-f2b7-4d69-a86d-62140bb0f828': '56d5aa75-4827-4e88-b392-8a913055635a', // Departamento de Turismo
+};
+
 const mapSchedule = (s: any): VehicleSchedule => ({
     id: s.id,
     protocol: s.protocol,
@@ -11,7 +18,7 @@ const mapSchedule = (s: any): VehicleSchedule => ({
     requesterPersonId: s.requester_person_id,
     requesterId: s.requester_id,
     destination: s.destination,
-    serviceSectorId: s.service_sector_id,
+    serviceSectorId: (s.service_sector_id && LEGACY_SECTOR_MAP[s.service_sector_id]) || s.service_sector_id,
     purpose: s.purpose,
     departureDateTime: s.departure_date_time,
     returnDateTime: s.return_date_time,

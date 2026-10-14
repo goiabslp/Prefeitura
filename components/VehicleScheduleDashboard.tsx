@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { 
   Vehicle, 
   VehicleSchedule, 
@@ -210,26 +210,74 @@ export const VehicleScheduleDashboard: React.FC<DashboardProps> = ({
     return { currentSchedules: current, previousSchedules: previous };
   }, [schedules, period, customStartDate, customEndDate]);
 
+  // Resolução inteligente e precisa do setor da viagem (com lookup no solicitante se necessário)
+  const getScheduleSector = useCallback((s: VehicleSchedule) => {
+    if (s.serviceSectorId) {
+      const sec = sectors.find(sect => sect.id === s.serviceSectorId);
+      if (sec) return sec;
+    }
+    // Fallback por pessoa solicitante
+    if (s.requesterPersonId) {
+      const p = persons.find(per => per.id === s.requesterPersonId);
+      if (p?.sectorId) {
+        const sec = sectors.find(sect => sect.id === p.sectorId);
+        if (sec) return sec;
+      }
+    }
+    return null;
+  }, [sectors, persons]);
+
+  // Setores ativos que detêm pelo menos 1 viagem registrada no sistema
+  const sectorsWithTrips = useMemo(() => {
+    const countsBySector: Record<string, number> = {};
+    schedules.forEach(s => {
+      const sec = getScheduleSector(s);
+      if (sec?.id) {
+        countsBySector[sec.id] = (countsBySector[sec.id] || 0) + 1;
+      }
+    });
+
+    return sectors
+      .filter(sec => (countsBySector[sec.id] || 0) > 0)
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  }, [schedules, sectors, getScheduleSector]);
+
+  // Se o setor selecionado não tiver mais viagens, reseta para 'todos'
+  useEffect(() => {
+    if (selectedSector !== 'todos') {
+      const exists = sectorsWithTrips.some(sec => sec.id === selectedSector);
+      if (!exists) {
+        setSelectedSector('todos');
+      }
+    }
+  }, [sectorsWithTrips, selectedSector]);
+
   // Setores ativos no período
   const activeSectors = useMemo(() => {
-    const activeIds = new Set(currentSchedules.map(s => s.serviceSectorId).filter(Boolean));
+    const activeIds = new Set(currentSchedules.map(s => getScheduleSector(s)?.id).filter(Boolean));
     return sectors.filter(sec => activeIds.has(sec.id));
-  }, [currentSchedules, sectors]);
+  }, [currentSchedules, sectors, getScheduleSector]);
 
   // Filtro por Setor
   const filteredSchedules = useMemo(() => {
     return currentSchedules.filter(s => {
-      if (selectedSector !== 'todos' && s.serviceSectorId !== selectedSector) return false;
+      if (selectedSector !== 'todos') {
+        const sec = getScheduleSector(s);
+        if (sec?.id !== selectedSector) return false;
+      }
       return true;
     });
-  }, [currentSchedules, selectedSector]);
+  }, [currentSchedules, selectedSector, getScheduleSector]);
 
   const filteredPreviousSchedules = useMemo(() => {
     return previousSchedules.filter(s => {
-      if (selectedSector !== 'todos' && s.serviceSectorId !== selectedSector) return false;
+      if (selectedSector !== 'todos') {
+        const sec = getScheduleSector(s);
+        if (sec?.id !== selectedSector) return false;
+      }
       return true;
     });
-  }, [previousSchedules, selectedSector]);
+  }, [previousSchedules, selectedSector, getScheduleSector]);
 
   // ==========================================
   // 2. MÉTRICAS E INDICADORES PRINCIPAIS
@@ -497,7 +545,7 @@ export const VehicleScheduleDashboard: React.FC<DashboardProps> = ({
   const sectorsUsage = useMemo(() => {
     const counts: Record<string, { name: string; viagens: number; passageiros: number; canceladas: number }> = {};
     filteredSchedules.forEach(s => {
-      const sec = sectors.find(sect => sect.id === s.serviceSectorId);
+      const sec = getScheduleSector(s);
       const name = sec?.name || 'Setor Geral / Não Informado';
       if (!counts[name]) counts[name] = { name, viagens: 0, passageiros: 0, canceladas: 0 };
       counts[name].viagens += 1;
@@ -505,7 +553,7 @@ export const VehicleScheduleDashboard: React.FC<DashboardProps> = ({
       if (s.status === 'cancelado') counts[name].canceladas += 1;
     });
     return Object.values(counts).sort((a, b) => b.viagens - a.viagens).slice(0, 6);
-  }, [filteredSchedules, sectors]);
+  }, [filteredSchedules, getScheduleSector]);
 
   // Motivos de Cancelamento
   const cancellationReasonsData = useMemo(() => {
@@ -542,7 +590,7 @@ export const VehicleScheduleDashboard: React.FC<DashboardProps> = ({
         const q = drillSearch.toLowerCase();
         const v = vehicles.find(veh => veh.id === s.vehicleId);
         const p = persons.find(per => per.id === s.driverId);
-        const sec = sectors.find(sect => sect.id === s.serviceSectorId);
+        const sec = getScheduleSector(s);
         const matchProt = s.protocol?.toLowerCase().includes(q);
         const matchDest = s.destination?.toLowerCase().includes(q);
         const matchDriver = p?.name?.toLowerCase().includes(q);
@@ -552,7 +600,7 @@ export const VehicleScheduleDashboard: React.FC<DashboardProps> = ({
       }
       return true;
     });
-  }, [drillDownModal, schedules, drillStatusFilter, drillSearch, vehicles, persons, sectors]);
+  }, [drillDownModal, schedules, drillStatusFilter, drillSearch, vehicles, persons, getScheduleSector]);
 
   // Exportação rápida para CSV
   const handleExportDrillCsv = () => {
@@ -561,7 +609,7 @@ export const VehicleScheduleDashboard: React.FC<DashboardProps> = ({
     const rows = drillDownFilteredItems.map(s => {
       const v = vehicles.find(veh => veh.id === s.vehicleId);
       const p = persons.find(per => per.id === s.driverId);
-      const sec = sectors.find(sect => sect.id === s.serviceSectorId);
+      const sec = getScheduleSector(s);
       return [
         s.protocol,
         s.departureDateTime,
@@ -638,7 +686,7 @@ export const VehicleScheduleDashboard: React.FC<DashboardProps> = ({
                   }`}
                 >
                   <option value="todos">Todos os Setores</option>
-                  {sectors.map(sec => (
+                  {sectorsWithTrips.map(sec => (
                     <option key={sec.id} value={sec.id}>{sec.name}</option>
                   ))}
                 </select>
@@ -871,7 +919,7 @@ export const VehicleScheduleDashboard: React.FC<DashboardProps> = ({
                   {upcomingTrips.slice(0, 3).map((trip) => {
                     const v = vehicles.find(veh => veh.id === trip.vehicleId);
                     const p = persons.find(per => per.id === trip.driverId);
-                    const sec = sectors.find(sect => sect.id === trip.serviceSectorId);
+                    const sec = getScheduleSector(trip);
                     const depDate = new Date(trip.departureDateTime);
 
                     return (
@@ -1503,7 +1551,7 @@ export const VehicleScheduleDashboard: React.FC<DashboardProps> = ({
                       {drillDownFilteredItems.map((s) => {
                         const v = vehicles.find(veh => veh.id === s.vehicleId);
                         const p = persons.find(per => per.id === s.driverId);
-                        const sec = sectors.find(sect => sect.id === s.serviceSectorId);
+                        const sec = getScheduleSector(s);
                         const dep = new Date(s.departureDateTime);
 
                         return (
