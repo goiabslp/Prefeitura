@@ -22,16 +22,33 @@ import { supabase } from '../../services/supabaseClient';
 
 interface AutoSenhaDashboardScreenProps {
   currentUser?: User | null;
+  initialAba?: 'operacional' | 'capacidade' | 'auditoria';
+  onChangeAba?: (aba: 'operacional' | 'capacidade' | 'auditoria') => void;
   onNavigateUnidade?: (unidadeId: AutoSenhaUnidadeId, sub: 'controle' | 'tv') => void;
   onBack?: () => void;
 }
 
 export const AutoSenhaDashboardScreen: React.FC<AutoSenhaDashboardScreenProps> = ({
   currentUser,
+  initialAba = 'operacional',
+  onChangeAba,
   onNavigateUnidade,
   onBack
 }) => {
-  const [abaAtiva, setAbaAtiva] = useState<'operacional' | 'capacidade' | 'auditoria'>('operacional');
+  const [abaAtiva, setAbaAtiva] = useState<'operacional' | 'capacidade' | 'auditoria'>(initialAba);
+
+  useEffect(() => {
+    if (initialAba) {
+      setAbaAtiva(initialAba);
+    }
+  }, [initialAba]);
+
+  const handleSelectAba = (aba: 'operacional' | 'capacidade' | 'auditoria') => {
+    setAbaAtiva(aba);
+    if (onChangeAba) {
+      onChangeAba(aba);
+    }
+  };
   const [periodoFiltro, setPeriodoFiltro] = useState<number>(0); // 0 = Hoje, 1 = Ontem, 7 = 7d, 30 = 30d
   const [unidadeFiltro, setUnidadeFiltro] = useState<string>('TODAS');
   const [isLoading, setIsLoading] = useState(true);
@@ -221,11 +238,11 @@ export const AutoSenhaDashboardScreen: React.FC<AutoSenhaDashboardScreenProps> =
             </div>
           </div>
 
-          {/* Centro: Abas de Visualização */}
+          {/* Centro: Abas de Visualização com Rota URL Única */}
           <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs font-bold">
             <button
               type="button"
-              onClick={() => setAbaAtiva('operacional')}
+              onClick={() => handleSelectAba('operacional')}
               className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
                 abaAtiva === 'operacional'
                   ? 'bg-white text-slate-900 shadow-xs font-black'
@@ -238,7 +255,7 @@ export const AutoSenhaDashboardScreen: React.FC<AutoSenhaDashboardScreenProps> =
 
             <button
               type="button"
-              onClick={() => setAbaAtiva('capacidade')}
+              onClick={() => handleSelectAba('capacidade')}
               className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
                 abaAtiva === 'capacidade'
                   ? 'bg-white text-slate-900 shadow-xs font-black'
@@ -251,7 +268,7 @@ export const AutoSenhaDashboardScreen: React.FC<AutoSenhaDashboardScreenProps> =
 
             <button
               type="button"
-              onClick={() => setAbaAtiva('auditoria')}
+              onClick={() => handleSelectAba('auditoria')}
               className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
                 abaAtiva === 'auditoria'
                   ? 'bg-white text-slate-900 shadow-xs font-black'
@@ -296,301 +313,310 @@ export const AutoSenhaDashboardScreen: React.FC<AutoSenhaDashboardScreenProps> =
         </div>
       </header>
 
-      {/* CONTEÚDO PRINCIPAL */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 w-full flex-1 flex flex-col gap-8">
-        {/* SEÇÃO 1: INDICADORES PRINCIPAIS CONSOLIDADOS */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-              <Activity className="w-4 h-4 text-emerald-600" />
-              Indicadores Consolidados de Saúde Municipal
-            </h2>
-            <span className="text-[11px] font-bold text-slate-400">
-              {periodoFiltro === 0 ? 'Estado Operacional de Hoje' : `Histórico de ${periodoFiltro} dias`}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
-            {/* Total Emitidas */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">Total Emitidas</span>
-              <div className="text-2xl font-black text-slate-900 font-mono">{consolidado.totalEmitidas}</div>
-              <span className="text-[11px] text-slate-500 font-semibold">Senhas geradas</span>
-            </div>
-
-            {/* Aguardando Agora */}
-            <div className="bg-emerald-50/70 border border-emerald-200/90 p-4 rounded-2xl shadow-2xs">
-              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 block mb-1">Aguardando Agora</span>
-              <div className="text-2xl font-black text-emerald-900 font-mono">{consolidado.aguardandoAgora}</div>
-              <span className="text-[11px] text-emerald-700 font-bold">Cidadãos na fila</span>
-            </div>
-
-            {/* Em Atendimento */}
-            <div className="bg-sky-50/70 border border-sky-200/90 p-4 rounded-2xl shadow-2xs">
-              <span className="text-[10px] font-black uppercase tracking-wider text-sky-700 block mb-1">Em Atendimento</span>
-              <div className="text-2xl font-black text-sky-900 font-mono">{consolidado.emAtendimentoAgora}</div>
-              <span className="text-[11px] text-sky-700 font-bold">Nos guichês agora</span>
-            </div>
-
-            {/* Concluídos */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">Concluídos</span>
-              <div className="text-2xl font-black text-purple-900 font-mono">{consolidado.concluidos}</div>
-              <span className="text-[11px] text-purple-700 font-semibold">{consolidado.taxaConclusaoPct}% do total</span>
-            </div>
-
-            {/* Tempo Médio Espera */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">Espera Média</span>
-              <div className="text-2xl font-black text-slate-900 font-mono">{formatarDuracaoSegundos(consolidado.esperaMediaSeg)}</div>
-              <span className="text-[11px] text-slate-500 font-semibold">Até 1ª chamada</span>
-            </div>
-
-            {/* Maior Espera Atual */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">Maior Espera Agora</span>
-              <div className={`text-2xl font-black font-mono ${consolidado.maiorEsperaSeg > 1800 ? 'text-rose-600' : 'text-slate-900'}`}>
-                {formatarDuracaoSegundos(consolidado.maiorEsperaSeg)}
+      {/* CONTEÚDO PRINCIPAL COMPACTO E RESPONSIVO */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 w-full flex-1 flex flex-col min-h-0 overflow-y-auto lg:overflow-hidden">
+        {/* ABA 1: VISÃO OPERACIONAL DOS POSTOS */}
+        {abaAtiva === 'operacional' && (
+          <div className="flex-1 flex flex-col gap-3 sm:gap-4 min-h-0">
+            {/* SEÇÃO 1: INDICADORES PRINCIPAIS CONSOLIDADOS */}
+            <section className="shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-emerald-600" />
+                  Indicadores Consolidados de Saúde Municipal
+                </h2>
+                <span className="text-[10px] font-bold text-slate-400">
+                  {periodoFiltro === 0 ? 'Estado Operacional de Hoje' : `Histórico de ${periodoFiltro} dias`}
+                </span>
               </div>
-              <span className="text-[11px] text-slate-500 font-semibold">Mais antiga na fila</span>
-            </div>
-          </div>
-        </section>
 
-        {/* SEÇÃO 2: CARDS DAS 3 UNIDADES DE SAÚDE */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-              <Building2 className="w-4 h-4 text-sky-600" />
-              Situação Operacional Individual dos Postos
-            </h2>
-            <span className="text-[11px] text-slate-400 font-semibold">UPA | PSF 1 | PSF 2</span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {AUTOSENHA_UNIDADES.map((u) => {
-              const m = metricasPorUnidade[u.id];
-              return (
-                <div
-                  key={u.id}
-                  className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow"
-                >
-                  <div>
-                    {/* Cabeçalho do Card */}
-                    <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-100 mb-3">
-                      <div>
-                        <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
-                          {u.tipo}
-                        </span>
-                        <h3 className="text-base font-black text-slate-900 mt-1">
-                          {u.nome}
-                        </h3>
-                      </div>
-                      <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase border ${
-                        m ? getSituacaoColor(m.situacao) : 'bg-slate-100 text-slate-600'
-                      }`}>
-                        {m?.situacao || 'NORMAL'}
-                      </span>
-                    </div>
-
-                    {/* Indicadores do Posto */}
-                    <div className="grid grid-cols-2 gap-3 mb-4">
-                      <div className="p-2.5 rounded-xl bg-slate-50">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Aguardando</span>
-                        <span className="text-xl font-black text-emerald-800 font-mono">{m?.aguardando_qtd || 0}</span>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-slate-50">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Em Atendimento</span>
-                        <span className="text-xl font-black text-sky-800 font-mono">{m?.em_atendimento_qtd || 0}</span>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-slate-50">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Espera Média</span>
-                        <span className="text-sm font-black text-slate-800 font-mono">
-                          {m ? formatarDuracaoSegundos(m.tempo_medio_espera_seg) : '0s'}
-                        </span>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-slate-50">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Atendimentos/Hora</span>
-                        <span className="text-sm font-black text-slate-800 font-mono">
-                          {m?.atendimentos_por_hora || 0}/h
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Senha Chamada Atual */}
-                    <div className="p-3 rounded-2xl bg-slate-900 text-white mb-4 flex items-center justify-between">
-                      <div>
-                        <span className="text-[9px] font-black uppercase tracking-wider text-emerald-400 block">Chamada Atual</span>
-                        <span className="text-lg font-black font-mono">
-                          {m?.senha_atual?.numero || 'Nenhuma'}
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-slate-400 font-bold">
-                        {m?.senha_atual ? `Guichê: ${m.senha_atual.guiche}` : 'Aguardando'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Links Operacionais para a Unidade */}
-                  <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={() => onNavigateUnidade?.(u.id, 'controle')}
-                      className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-colors cursor-pointer text-center"
-                    >
-                      Acessar Controle
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onNavigateUnidade?.(u.id, 'tv')}
-                      className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl transition-colors cursor-pointer"
-                      title="Abrir Painel de TV desta Unidade"
-                    >
-                      Senha TV
-                    </button>
-                  </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
+                {/* Total Emitidas */}
+                <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/90 shadow-2xs">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Total Emitidas</span>
+                  <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono leading-none my-1">{consolidado.totalEmitidas}</div>
+                  <span className="text-[10px] text-slate-500 font-semibold">Senhas geradas</span>
                 </div>
-              );
-            })}
-          </div>
-        </section>
 
-        {/* SEÇÃO 3: PAINEL DE CAPACIDADE DE ATENDIMENTO */}
-        <section className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6 shadow-xs">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
-            <div>
-              <h2 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-emerald-600" />
-                Painel de Capacidade e Ritmo de Atendimento
-              </h2>
-              <p className="text-xs text-slate-500">
-                Comparativo oficial de velocidade, escoamento de fila e produtividade das recepções.
-              </p>
-            </div>
-          </div>
+                {/* Aguardando Agora */}
+                <div className="bg-emerald-50/70 border border-emerald-200/90 p-2.5 sm:p-3 rounded-2xl shadow-2xs">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-emerald-700 block mb-0.5">Aguardando Agora</span>
+                  <div className="text-xl sm:text-2xl font-black text-emerald-900 font-mono leading-none my-1">{consolidado.aguardandoAgora}</div>
+                  <span className="text-[10px] text-emerald-700 font-bold">Cidadãos na fila</span>
+                </div>
 
-          {/* TABELA COMPARATIVA DE CAPACIDADE */}
-          <div className="overflow-x-auto border border-slate-200/70 rounded-2xl">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200/80 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  <th className="py-3 px-4">Unidade</th>
-                  <th className="py-3 px-4">Situação</th>
-                  <th className="py-3 px-4">Aguardando</th>
-                  <th className="py-3 px-4">Em Atendimento</th>
-                  <th className="py-3 px-4">Espera Média</th>
-                  <th className="py-3 px-4">Espera Mediana</th>
-                  <th className="py-3 px-4">Maior Espera</th>
-                  <th className="py-3 px-4">Duração Média</th>
-                  <th className="py-3 px-4">Atendimentos/h</th>
-                  <th className="py-3 px-4">Total Concluídos</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-xs font-semibold">
+                {/* Em Atendimento */}
+                <div className="bg-sky-50/70 border border-sky-200/90 p-2.5 sm:p-3 rounded-2xl shadow-2xs">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-sky-700 block mb-0.5">Em Atendimento</span>
+                  <div className="text-xl sm:text-2xl font-black text-sky-900 font-mono leading-none my-1">{consolidado.emAtendimentoAgora}</div>
+                  <span className="text-[10px] text-sky-700 font-bold">Nos guichês agora</span>
+                </div>
+
+                {/* Concluídos */}
+                <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/90 shadow-2xs">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Concluídos</span>
+                  <div className="text-xl sm:text-2xl font-black text-purple-900 font-mono leading-none my-1">{consolidado.concluidos}</div>
+                  <span className="text-[10px] text-purple-700 font-semibold">{consolidado.taxaConclusaoPct}% do total</span>
+                </div>
+
+                {/* Tempo Médio Espera */}
+                <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/90 shadow-2xs">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Espera Média</span>
+                  <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono leading-none my-1">{formatarDuracaoSegundos(consolidado.esperaMediaSeg)}</div>
+                  <span className="text-[10px] text-slate-500 font-semibold">Até 1ª chamada</span>
+                </div>
+
+                {/* Maior Espera Atual */}
+                <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/90 shadow-2xs">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Maior Espera Agora</span>
+                  <div className={`text-xl sm:text-2xl font-black font-mono leading-none my-1 ${consolidado.maiorEsperaSeg > 1800 ? 'text-rose-600' : 'text-slate-900'}`}>
+                    {formatarDuracaoSegundos(consolidado.maiorEsperaSeg)}
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-semibold">Mais antiga na fila</span>
+                </div>
+              </div>
+            </section>
+
+            {/* SEÇÃO 2: CARDS DAS 3 UNIDADES DE SAÚDE */}
+            <section className="flex-1 flex flex-col min-h-0">
+              <div className="flex items-center justify-between mb-2 shrink-0">
+                <h2 className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-sky-600" />
+                  Situação Operacional Individual dos Postos
+                </h2>
+                <span className="text-[10px] text-slate-400 font-semibold">PSF 1 • PSF 2 • UPA</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 sm:gap-4 flex-1 min-h-0 items-stretch">
                 {AUTOSENHA_UNIDADES.map((u) => {
                   const m = metricasPorUnidade[u.id];
                   return (
-                    <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="py-3 px-4 font-black text-slate-900">{u.nome}</td>
-                      <td className="py-3 px-4">
-                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase border ${
-                          m ? getSituacaoColor(m.situacao) : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          {m?.situacao || 'NORMAL'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 font-mono font-bold text-emerald-700">{m?.aguardando_qtd || 0}</td>
-                      <td className="py-3 px-4 font-mono font-bold text-sky-700">{m?.em_atendimento_qtd || 0}</td>
-                      <td className="py-3 px-4 font-mono">{m ? formatarDuracaoSegundos(m.tempo_medio_espera_seg) : '0s'}</td>
-                      <td className="py-3 px-4 font-mono">{m ? formatarDuracaoSegundos(m.tempo_mediano_espera_seg) : '0s'}</td>
-                      <td className="py-3 px-4 font-mono text-rose-700">{m ? formatarDuracaoSegundos(m.maior_espera_atual_seg) : '0s'}</td>
-                      <td className="py-3 px-4 font-mono">{m ? formatarDuracaoSegundos(m.tempo_medio_atendimento_seg) : '0s'}</td>
-                      <td className="py-3 px-4 font-mono font-bold">{m?.atendimentos_por_hora || 0} /h</td>
-                      <td className="py-3 px-4 font-mono font-black text-purple-900">{m?.concluidos_qtd || 0}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {/* SEÇÃO 4: ALERTAS OPERACIONAIS E ÚLTIMAS MOVIMENTAÇÕES */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* ALERTAS OPERACIONAIS (COL 5) */}
-          <section className="lg:col-span-5 bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs">
-            <h3 className="text-sm font-extrabold text-slate-900 mb-3 uppercase tracking-wider flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-600" />
-              Alertas Operacionais Automáticos
-            </h3>
-
-            <div className="space-y-3">
-              {alertasOperacionais.length > 0 ? (
-                alertasOperacionais.map((alerta, idx) => (
-                  <div
-                    key={idx}
-                    className={`p-3.5 rounded-2xl border text-xs ${
-                      alerta.tipo === 'CRITICO'
-                        ? 'bg-rose-50 border-rose-200 text-rose-900'
-                        : 'bg-amber-50 border-amber-200 text-amber-900'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-black uppercase tracking-wide">{alerta.unidade}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-white/80">
-                        {alerta.tipo}
-                      </span>
-                    </div>
-                    <p className="font-bold text-slate-900">{alerta.mensagem}</p>
-                    <p className="text-[11px] text-slate-600 mt-0.5">{alerta.detalhe}</p>
-                  </div>
-                ))
-              ) : (
-                <div className="p-6 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold text-center flex flex-col items-center gap-1.5">
-                  <CheckCircle2 className="w-6 h-6 text-emerald-600" />
-                  <span>Todos os postos operando dentro dos parâmetros de normalidade.</span>
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* ÚLTIMAS MOVIMENTAÇÕES AUDITADAS (COL 7) */}
-          <section className="lg:col-span-7 bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs">
-            <h3 className="text-sm font-extrabold text-slate-900 mb-3 uppercase tracking-wider flex items-center gap-2">
-              <Clock className="w-4 h-4 text-sky-600" />
-              Últimas Movimentações Auditadas
-            </h3>
-
-            <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
-              {movimentacoes.length > 0 ? (
-                movimentacoes.map((mov) => {
-                  const hora = new Date(mov.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                  return (
                     <div
-                      key={mov.id}
-                      className="p-3 rounded-2xl bg-slate-50 hover:bg-slate-100/80 border border-slate-100 flex items-center justify-between gap-3 text-xs transition-colors"
+                      key={u.id}
+                      className="bg-white rounded-3xl border border-slate-200/90 p-4 sm:p-4.5 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow"
                     >
                       <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-900">{mov.descricao}</span>
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-md font-mono font-bold bg-slate-200 text-slate-700 uppercase">
-                            {mov.unidade_id}
+                        {/* Cabeçalho do Card */}
+                        <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100 mb-2.5">
+                          <div>
+                            <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                              {u.tipo}
+                            </span>
+                            <h3 className="text-sm sm:text-base font-black text-slate-900 mt-1 leading-tight">
+                              {u.nome}
+                            </h3>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase border shrink-0 ${
+                            m ? getSituacaoColor(m.situacao) : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {m?.situacao || 'NORMAL'}
                           </span>
                         </div>
-                        <span className="text-[11px] text-slate-400">Responsável: {mov.usuario_nome}</span>
+
+                        {/* Indicadores do Posto */}
+                        <div className="grid grid-cols-2 gap-2 mb-3">
+                          <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase block">Aguardando</span>
+                            <span className="text-lg font-black text-emerald-800 font-mono">{m?.aguardando_qtd || 0}</span>
+                          </div>
+                          <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase block">Em Atendimento</span>
+                            <span className="text-lg font-black text-sky-800 font-mono">{m?.em_atendimento_qtd || 0}</span>
+                          </div>
+                          <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase block">Espera Média</span>
+                            <span className="text-xs font-black text-slate-800 font-mono">
+                              {m ? formatarDuracaoSegundos(m.tempo_medio_espera_seg) : '0s'}
+                            </span>
+                          </div>
+                          <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase block">Atendimentos/Hora</span>
+                            <span className="text-xs font-black text-slate-800 font-mono">
+                              {m?.atendimentos_por_hora || 0}/h
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Senha Chamada Atual */}
+                        <div className="p-2.5 rounded-2xl bg-slate-900 text-white mb-3 flex items-center justify-between">
+                          <div>
+                            <span className="text-[8px] font-black uppercase tracking-wider text-emerald-400 block leading-tight">Chamada Atual</span>
+                            <span className="text-base sm:text-lg font-black font-mono leading-tight">
+                              {m?.senha_atual?.numero || 'Nenhuma'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-300 font-semibold px-2 py-0.5 rounded-lg bg-white/10">
+                            {m?.senha_atual ? `Guichê: ${m.senha_atual.guiche}` : 'Aguardando'}
+                          </span>
+                        </div>
                       </div>
-                      <span className="font-mono text-slate-400 text-[11px] shrink-0 font-bold">{hora}</span>
+
+                      {/* Links Operacionais para a Unidade */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => onNavigateUnidade?.(u.id, 'controle')}
+                          className="flex-1 py-1.5 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-colors cursor-pointer text-center"
+                        >
+                          Acessar Controle
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onNavigateUnidade?.(u.id, 'tv')}
+                          className="px-3 py-1.5 sm:py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                          title="Abrir Painel de TV desta Unidade"
+                        >
+                          Senha TV
+                        </button>
+                      </div>
                     </div>
                   );
-                })
-              ) : (
-                <div className="py-8 text-center text-xs text-slate-400">
-                  Nenhuma movimentação recente registrada.
-                </div>
-              )}
+                })}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {/* ABA 2: CAPACIDADE & RITMO */}
+        {abaAtiva === 'capacidade' && (
+          <section className="bg-white rounded-3xl border border-slate-200/90 p-4 sm:p-5 shadow-xs flex-1 flex flex-col min-h-0">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-3 shrink-0">
+              <div>
+                <h2 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-emerald-600" />
+                  Painel de Capacidade e Ritmo de Atendimento
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Comparativo de velocidade, escoamento de fila e produtividade das recepções.
+                </p>
+              </div>
+            </div>
+
+            {/* TABELA COMPARATIVA DE CAPACIDADE */}
+            <div className="overflow-x-auto overflow-y-auto flex-1 border border-slate-200/80 rounded-2xl min-h-0">
+              <table className="w-full text-left border-collapse">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-slate-50 border-b border-slate-200/80 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    <th className="py-2.5 px-3">Unidade</th>
+                    <th className="py-2.5 px-3">Situação</th>
+                    <th className="py-2.5 px-3">Aguardando</th>
+                    <th className="py-2.5 px-3">Em Atendimento</th>
+                    <th className="py-2.5 px-3">Espera Média</th>
+                    <th className="py-2.5 px-3">Espera Mediana</th>
+                    <th className="py-2.5 px-3">Maior Espera</th>
+                    <th className="py-2.5 px-3">Duração Média</th>
+                    <th className="py-2.5 px-3">Atendimentos/h</th>
+                    <th className="py-2.5 px-3">Total Concluídos</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs font-semibold">
+                  {AUTOSENHA_UNIDADES.map((u) => {
+                    const m = metricasPorUnidade[u.id];
+                    return (
+                      <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-2.5 px-3 font-black text-slate-900">{u.nome}</td>
+                        <td className="py-2.5 px-3">
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase border ${
+                            m ? getSituacaoColor(m.situacao) : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {m?.situacao || 'NORMAL'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-emerald-700">{m?.aguardando_qtd || 0}</td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-sky-700">{m?.em_atendimento_qtd || 0}</td>
+                        <td className="py-2.5 px-3 font-mono">{m ? formatarDuracaoSegundos(m.tempo_medio_espera_seg) : '0s'}</td>
+                        <td className="py-2.5 px-3 font-mono">{m ? formatarDuracaoSegundos(m.tempo_mediano_espera_seg) : '0s'}</td>
+                        <td className="py-2.5 px-3 font-mono text-rose-700">{m ? formatarDuracaoSegundos(m.maior_espera_atual_seg) : '0s'}</td>
+                        <td className="py-2.5 px-3 font-mono">{m ? formatarDuracaoSegundos(m.tempo_medio_atendimento_seg) : '0s'}</td>
+                        <td className="py-2.5 px-3 font-mono font-bold">{m?.atendimentos_por_hora || 0} /h</td>
+                        <td className="py-2.5 px-3 font-mono font-black text-purple-900">{m?.concluidos_qtd || 0}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </section>
-        </div>
+        )}
+
+        {/* ABA 3: ALERTAS OPERACIONAIS E ÚLTIMAS MOVIMENTAÇÕES */}
+        {abaAtiva === 'auditoria' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch flex-1 min-h-0">
+            {/* ALERTAS OPERACIONAIS (COL 5) */}
+            <section className="lg:col-span-5 bg-white rounded-3xl border border-slate-200/90 p-4 sm:p-5 shadow-xs flex flex-col min-h-0">
+              <h3 className="text-xs font-extrabold text-slate-900 mb-2.5 uppercase tracking-wider flex items-center gap-2 shrink-0">
+                <AlertCircle className="w-4 h-4 text-amber-600" />
+                Alertas Operacionais Automáticos
+              </h3>
+
+              <div className="space-y-2.5 overflow-y-auto flex-1 pr-1">
+                {alertasOperacionais.length > 0 ? (
+                  alertasOperacionais.map((alerta, idx) => (
+                    <div
+                      key={idx}
+                      className={`p-3 rounded-2xl border text-xs ${
+                        alerta.tipo === 'CRITICO'
+                          ? 'bg-rose-50 border-rose-200 text-rose-900'
+                          : 'bg-amber-50 border-amber-200 text-amber-900'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-black uppercase tracking-wide">{alerta.unidade}</span>
+                        <span className="text-[9px] px-2 py-0.5 rounded-full font-bold bg-white/80">
+                          {alerta.tipo}
+                        </span>
+                      </div>
+                      <p className="font-bold text-slate-900">{alerta.mensagem}</p>
+                      <p className="text-[10px] text-slate-600 mt-0.5">{alerta.detalhe}</p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-6 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold text-center flex flex-col items-center justify-center h-full gap-1.5">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+                    <span>Todos os postos operando dentro dos parâmetros de normalidade.</span>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* ÚLTIMAS MOVIMENTAÇÕES AUDITADAS (COL 7) */}
+            <section className="lg:col-span-7 bg-white rounded-3xl border border-slate-200/90 p-4 sm:p-5 shadow-xs flex flex-col min-h-0">
+              <h3 className="text-xs font-extrabold text-slate-900 mb-2.5 uppercase tracking-wider flex items-center gap-2 shrink-0">
+                <Clock className="w-4 h-4 text-sky-600" />
+                Últimas Movimentações Auditadas
+              </h3>
+
+              <div className="space-y-2 overflow-y-auto flex-1 pr-1">
+                {movimentacoes.length > 0 ? (
+                  movimentacoes.map((mov) => {
+                    const hora = new Date(mov.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    return (
+                      <div
+                        key={mov.id}
+                        className="p-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100/80 border border-slate-100 flex items-center justify-between gap-3 text-xs transition-colors"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900">{mov.descricao}</span>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-md font-mono font-bold bg-slate-200 text-slate-700 uppercase">
+                              {mov.unidade_id}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400">Responsável: {mov.usuario_nome}</span>
+                        </div>
+                        <span className="font-mono text-slate-400 text-[10px] shrink-0 font-bold">{hora}</span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="py-8 text-center text-xs text-slate-400 flex items-center justify-center h-full">
+                    Nenhuma movimentação recente registrada.
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
       </main>
     </div>
   );

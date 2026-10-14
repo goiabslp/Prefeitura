@@ -331,6 +331,8 @@ const VIEW_TO_PATH: Record<string, string> = {
   'documentos:visualizar': '/Documentos/Visualizar',
   'autosenha': '/AutoSenha',
   'autosenha:dashboard': '/AutoSenha/Dashboard',
+  'autosenha:dashboard-capacidade': '/AutoSenha/Dashboard/Capacidade',
+  'autosenha:dashboard-auditoria': '/AutoSenha/Dashboard/Auditoria',
   'autosenha:pacientes': '/AutoSenha/Pacientes',
   'autosenha:psf1': '/AutoSenha/PSF1',
   'autosenha:psf1-controle': '/AutoSenha/PSF1/Controle',
@@ -2466,9 +2468,37 @@ const App: React.FC = () => {
         return;
       }
 
-      if (lookupPath.startsWith('/autosenha/pacientes')) {
+      if (lookupPath.startsWith('/autosenha')) {
         setCurrentView('autosenha');
-        setAppState(prev => ({ ...prev, view: 'pacientes' }));
+        if (lookupPath === '/autosenha' || lookupPath === '/autosenha/') {
+          setAppState(prev => ({ ...prev, view: undefined }));
+        } else if (lookupPath === '/autosenha/dashboard/capacidade') {
+          setAppState(prev => ({ ...prev, view: 'dashboard-capacidade' }));
+        } else if (lookupPath === '/autosenha/dashboard/auditoria') {
+          setAppState(prev => ({ ...prev, view: 'dashboard-auditoria' }));
+        } else if (lookupPath === '/autosenha/dashboard' || lookupPath.startsWith('/autosenha/dashboard')) {
+          setAppState(prev => ({ ...prev, view: 'dashboard' }));
+        } else if (lookupPath.startsWith('/autosenha/pacientes')) {
+          setAppState(prev => ({ ...prev, view: 'pacientes' }));
+        } else if (lookupPath === '/autosenha/psf1/controle') {
+          setAppState(prev => ({ ...prev, view: 'psf1-controle' }));
+        } else if (lookupPath === '/autosenha/psf1/senhatv') {
+          setAppState(prev => ({ ...prev, view: 'psf1-senhatv' }));
+        } else if (lookupPath === '/autosenha/psf1') {
+          setAppState(prev => ({ ...prev, view: 'psf1' }));
+        } else if (lookupPath === '/autosenha/psf2/controle') {
+          setAppState(prev => ({ ...prev, view: 'psf2-controle' }));
+        } else if (lookupPath === '/autosenha/psf2/senhatv') {
+          setAppState(prev => ({ ...prev, view: 'psf2-senhatv' }));
+        } else if (lookupPath === '/autosenha/psf2') {
+          setAppState(prev => ({ ...prev, view: 'psf2' }));
+        } else if (lookupPath === '/autosenha/upa/controle') {
+          setAppState(prev => ({ ...prev, view: 'upa-controle' }));
+        } else if (lookupPath === '/autosenha/upa/senhatv') {
+          setAppState(prev => ({ ...prev, view: 'upa-senhatv' }));
+        } else if (lookupPath === '/autosenha/upa') {
+          setAppState(prev => ({ ...prev, view: 'upa' }));
+        }
         setActiveBlock(null);
         setIsAdminSidebarOpen(false);
         return;
@@ -2708,6 +2738,8 @@ const App: React.FC = () => {
         stateKey = appState.view ? `consultas:${appState.view}` : 'consultas';
       } else if (currentView === 'farmacia') {
         stateKey = appState.view ? `farmacia:${appState.view}` : 'farmacia';
+      } else if (currentView === 'autosenha') {
+        stateKey = appState.view ? `autosenha:${appState.view}` : 'autosenha';
       } else if (currentView === 'home' && !activeBlock) {
         stateKey = 'home';
       }
@@ -2753,6 +2785,8 @@ const App: React.FC = () => {
         // Preserva a URL individual do usuário em edição (/Admin/Usuarios/Editar/:id ou /Admin/Usuarios/Novo)
       } else if (stateKey === 'diarias-editar-evento' && currentPath.toLowerCase().startsWith('/diarias/editar')) {
         // Preserva a URL individual do evento em edição (/Diarias/Editar/:id ou /Diarias/Editar?id=:id)
+      } else if (stateKey === 'autosenha:pacientes' && currentPath.toLowerCase().startsWith('/autosenha/pacientes')) {
+        // Preserva as sub-rotas da Central de Pacientes no AutoSenha
       } else if (currentPath.replace(/\/$/, '').toLowerCase() !== targetPath.replace(/\/$/, '').toLowerCase()) {
         window.history.pushState(null, '', expectedPath);
       }
@@ -6702,6 +6736,12 @@ timestamp: ${new Date().toISOString()}`);
                   } else if (view === 'autosenha:dashboard') {
                     setAppState(prev => ({ ...prev, view: 'dashboard' }));
                     window.history.pushState({}, '', '/AutoSenha/Dashboard');
+                  } else if (view === 'autosenha:dashboard-capacidade') {
+                    setAppState(prev => ({ ...prev, view: 'dashboard-capacidade' }));
+                    window.history.pushState({}, '', '/AutoSenha/Dashboard/Capacidade');
+                  } else if (view === 'autosenha:dashboard-auditoria') {
+                    setAppState(prev => ({ ...prev, view: 'dashboard-auditoria' }));
+                    window.history.pushState({}, '', '/AutoSenha/Dashboard/Auditoria');
                   } else if (view === 'autosenha:pacientes') {
                     setAppState(prev => ({ ...prev, view: 'pacientes' }));
                     window.history.pushState({}, '', '/AutoSenha/Pacientes');

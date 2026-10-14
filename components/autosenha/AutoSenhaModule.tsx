@@ -46,11 +46,23 @@ export const AutoSenhaModule: React.FC<AutoSenhaModuleProps> = ({
     );
   }
 
-  // 2. Dashboard Administrativo Centralizado
-  if (subView === 'dashboard') {
+  // 2. Dashboard Administrativo Centralizado (/AutoSenha/Dashboard, /AutoSenha/Dashboard/Capacidade, /AutoSenha/Dashboard/Auditoria)
+  if (subView === 'dashboard' || subView === 'dashboard-capacidade' || subView === 'dashboard-auditoria') {
     return (
       <AutoSenhaDashboardScreen
         currentUser={currentUser}
+        initialAba={
+          subView === 'dashboard-capacidade'
+            ? 'capacidade'
+            : subView === 'dashboard-auditoria'
+            ? 'auditoria'
+            : 'operacional'
+        }
+        onChangeAba={(aba) => {
+          if (aba === 'capacidade') onNavigate('autosenha:dashboard-capacidade');
+          else if (aba === 'auditoria') onNavigate('autosenha:dashboard-auditoria');
+          else onNavigate('autosenha:dashboard');
+        }}
         onNavigateUnidade={(unidadeId, sub) => {
           onNavigate(`autosenha:${unidadeId}-${sub}`);
         }}

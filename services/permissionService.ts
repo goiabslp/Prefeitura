@@ -797,7 +797,11 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
         legacyKeys: ['parent_autosenha_dashboard'],
         label: 'Dashboard Administrativo',
         description: 'Central consolidada de monitoramento das unidades, ritmo e capacidade',
-        routes: ['/AutoSenha/Dashboard']
+        routes: [
+          '/AutoSenha/Dashboard',
+          '/AutoSenha/Dashboard/Capacidade',
+          '/AutoSenha/Dashboard/Auditoria'
+        ]
       },
       {
         key: 'sub_autosenha_pacientes',
