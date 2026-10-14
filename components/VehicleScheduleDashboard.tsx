@@ -956,9 +956,9 @@ export const VehicleScheduleDashboard: React.FC<DashboardProps> = ({
           </div>
 
           {/* ==================================================== */}
-          {/* BLOCO 3 & 4: FROTA, OCUPAÇÃO E MOTORISTAS             */}
+          {/* BLOCO 3: FROTA E MOTORISTAS                         */}
           {/* ==================================================== */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
             {/* Painel da Frota */}
             <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between">
@@ -1017,58 +1017,6 @@ export const VehicleScheduleDashboard: React.FC<DashboardProps> = ({
                   </span>
                 </div>
               )}
-            </div>
-
-            {/* Ocupação e Compartilhamento */}
-            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-purple-50 text-purple-600 rounded-xl">
-                      <Share2 className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm sm:text-base font-black text-slate-800">Ocupação & Caronas</h3>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">Eficiência de Vagas</p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-black text-purple-600 bg-purple-50 px-2.5 py-1 rounded-xl">
-                    {averageCapacityOccupancy.toFixed(0)}% Ocupado
-                  </span>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">Capacidade Oferecida</span>
-                      <div className="text-lg font-black text-slate-800">{totalCapacityOffered} assentos</div>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">Vagas Ociosas</span>
-                      <div className="text-lg font-black text-slate-500">{idleCapacity} vagas</div>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-purple-50/50 rounded-2xl border border-purple-100 space-y-1.5">
-                    <div className="flex items-center justify-between text-xs font-bold text-purple-900">
-                      <span>Viagens Compartilhadas</span>
-                      <span>{sharedTripsCount} viagens ({((sharedTripsCount / Math.max(1, totalTrips)) * 100).toFixed(0)}%)</span>
-                    </div>
-                    <div className="flex items-center justify-between text-[11px] text-slate-600">
-                      <span>Vagas Extras Aproveitadas</span>
-                      <span className="font-bold text-purple-700">+{extraPassengersAccommodated} passageiros</span>
-                    </div>
-                    <div className="flex items-center justify-between text-[11px] text-slate-600">
-                      <span>Viagens Evitadas (Economia)</span>
-                      <span className="font-bold text-emerald-600">~{estimatedAvoidedTrips} saídas a menos</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <p className="text-[10px] text-slate-400 mt-3 italic">
-                * O compartilhamento otimiza custos com combustível, motoristas e manutenção da frota.
-              </p>
             </div>
 
             {/* Presença de Motoristas */}
