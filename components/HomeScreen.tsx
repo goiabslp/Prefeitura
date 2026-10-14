@@ -262,17 +262,133 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         }
     };
 
+    // --- Helper de Paleta de Cores para Submódulos ---
+    const getSubmoduleColorTheme = (color: string) => {
+        switch (color) {
+            case 'amber':
+                return {
+                    iconBg: 'bg-gradient-to-br from-amber-500 to-amber-600',
+                    iconShadow: 'shadow-amber-500/30',
+                    hoverBorder: 'hover:border-amber-300',
+                    hoverShadow: 'hover:shadow-amber-500/20',
+                    hoverBgTo: 'hover:to-amber-50/60',
+                    accentText: 'text-amber-600',
+                    badgeText: 'text-amber-600',
+                    cornerGlow: 'bg-amber-500/5'
+                };
+            case 'emerald':
+                return {
+                    iconBg: 'bg-gradient-to-br from-emerald-500 to-emerald-600',
+                    iconShadow: 'shadow-emerald-500/30',
+                    hoverBorder: 'hover:border-emerald-300',
+                    hoverShadow: 'hover:shadow-emerald-500/20',
+                    hoverBgTo: 'hover:to-emerald-50/60',
+                    accentText: 'text-emerald-600',
+                    badgeText: 'text-emerald-600',
+                    cornerGlow: 'bg-emerald-500/5'
+                };
+            case 'indigo':
+                return {
+                    iconBg: 'bg-gradient-to-br from-indigo-500 to-indigo-600',
+                    iconShadow: 'shadow-indigo-500/30',
+                    hoverBorder: 'hover:border-indigo-300',
+                    hoverShadow: 'hover:shadow-indigo-500/20',
+                    hoverBgTo: 'hover:to-indigo-50/60',
+                    accentText: 'text-indigo-600',
+                    badgeText: 'text-indigo-600',
+                    cornerGlow: 'bg-indigo-500/5'
+                };
+            case 'blue':
+                return {
+                    iconBg: 'bg-gradient-to-br from-blue-500 to-blue-600',
+                    iconShadow: 'shadow-blue-500/30',
+                    hoverBorder: 'hover:border-blue-300',
+                    hoverShadow: 'hover:shadow-blue-500/20',
+                    hoverBgTo: 'hover:to-blue-50/60',
+                    accentText: 'text-blue-600',
+                    badgeText: 'text-blue-600',
+                    cornerGlow: 'bg-blue-500/5'
+                };
+            case 'violet':
+                return {
+                    iconBg: 'bg-gradient-to-br from-violet-500 to-violet-600',
+                    iconShadow: 'shadow-violet-500/30',
+                    hoverBorder: 'hover:border-violet-300',
+                    hoverShadow: 'hover:shadow-violet-500/20',
+                    hoverBgTo: 'hover:to-violet-50/60',
+                    accentText: 'text-violet-600',
+                    badgeText: 'text-violet-600',
+                    cornerGlow: 'bg-violet-500/5'
+                };
+            case 'purple':
+                return {
+                    iconBg: 'bg-gradient-to-br from-purple-500 to-purple-600',
+                    iconShadow: 'shadow-purple-500/30',
+                    hoverBorder: 'hover:border-purple-300',
+                    hoverShadow: 'hover:shadow-purple-500/20',
+                    hoverBgTo: 'hover:to-purple-50/60',
+                    accentText: 'text-purple-600',
+                    badgeText: 'text-purple-600',
+                    cornerGlow: 'bg-purple-500/5'
+                };
+            case 'cyan':
+                return {
+                    iconBg: 'bg-gradient-to-br from-cyan-500 to-cyan-600',
+                    iconShadow: 'shadow-cyan-500/30',
+                    hoverBorder: 'hover:border-cyan-300',
+                    hoverShadow: 'hover:shadow-cyan-500/20',
+                    hoverBgTo: 'hover:to-cyan-50/60',
+                    accentText: 'text-cyan-600',
+                    badgeText: 'text-cyan-600',
+                    cornerGlow: 'bg-cyan-500/5'
+                };
+            case 'teal':
+                return {
+                    iconBg: 'bg-gradient-to-br from-teal-500 to-teal-600',
+                    iconShadow: 'shadow-teal-500/30',
+                    hoverBorder: 'hover:border-teal-300',
+                    hoverShadow: 'hover:shadow-teal-500/20',
+                    hoverBgTo: 'hover:to-teal-50/60',
+                    accentText: 'text-teal-600',
+                    badgeText: 'text-teal-600',
+                    cornerGlow: 'bg-teal-500/5'
+                };
+            case 'sky':
+                return {
+                    iconBg: 'bg-gradient-to-br from-sky-500 to-sky-600',
+                    iconShadow: 'shadow-sky-500/30',
+                    hoverBorder: 'hover:border-sky-300',
+                    hoverShadow: 'hover:shadow-sky-500/20',
+                    hoverBgTo: 'hover:to-sky-50/60',
+                    accentText: 'text-sky-600',
+                    badgeText: 'text-sky-600',
+                    cornerGlow: 'bg-sky-500/5'
+                };
+            default:
+                return {
+                    iconBg: 'bg-gradient-to-br from-slate-600 to-slate-700',
+                    iconShadow: 'shadow-slate-500/30',
+                    hoverBorder: 'hover:border-slate-300',
+                    hoverShadow: 'hover:shadow-slate-500/20',
+                    hoverBgTo: 'hover:to-slate-50/60',
+                    accentText: 'text-slate-600',
+                    badgeText: 'text-slate-600',
+                    cornerGlow: 'bg-slate-500/5'
+                };
+        }
+    };
+
     // --- Active Block Rendering Logic ---
     const renderActiveBlock = () => {
         const getBlockConfig = () => {
             switch (activeBlock) {
-                case 'oficio': return { name: "Módulo de Ofícios", color: 'indigo', icon: FileText };
-                case 'compras': return { name: "Módulo de Compras", color: 'emerald', icon: ShoppingCart };
-                case 'licitacao': return { name: "Módulo de Licitação", color: 'blue', icon: Gavel };
-                case 'diarias': return { name: "Diárias e Custeio", color: 'amber', icon: Wallet };
-                case 'agendamento': return { name: "Agendamento", color: 'indigo', icon: CalendarRange };
-                case 'abastecimento': return { name: "Abastecimento", color: 'cyan', icon: Fuel };
-                default: return { name: "", color: 'slate', icon: Package };
+                case 'oficio': return { name: "Módulo de Ofícios", color: 'indigo', icon: FileText, desc: "Geração, acompanhamento e histórico de ofícios oficiais" };
+                case 'compras': return { name: "Módulo de Compras", color: 'emerald', icon: ShoppingCart, desc: "Abertura de pedidos, catálogo e controle de inventário" };
+                case 'licitacao': return { name: "Módulo de Licitação", color: 'blue', icon: Gavel, desc: "Abertura e tramitação de processos licitatórios" };
+                case 'diarias': return { name: "Módulo de Diárias", color: 'amber', icon: Wallet, desc: "Gestão completa de viagens, diárias, adiantamentos e prestações de contas" };
+                case 'agendamento': return { name: "Agendamento", color: 'indigo', icon: CalendarRange, desc: "Agendamento de veículos e controle de motoristas" };
+                case 'abastecimento': return { name: "Módulo de Abastecimento", color: 'cyan', icon: Fuel, desc: "Controle de abastecimentos, gestão e indicadores da frota" };
+                default: return { name: "Módulo", color: 'slate', icon: Package, desc: "Selecione uma ação para continuar" };
             }
         };
 
@@ -347,36 +463,31 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             }
         }
 
-        // Diárias Specific Buttons
+        // Diárias Specific Buttons: Organização padronizada por fluxo operacional e financeiro
         if (activeBlock === 'diarias') {
-            if (canAccessSub('parent_diarias', 'sub_diarias_editor')) {
-                actionButtons.push({
-                    label: 'Nova Solicitação',
-                    desc: 'Criar novo registro',
-                    icon: FilePlus,
-                    onClick: () => onNewOrder('diarias', true),
-                    color: config.color
-                });
-            }
-            if (canAccessSub('parent_diarias', 'sub_diarias_historico')) {
-                actionButtons.push({
-                    label: 'Histórico',
-                    desc: 'Consulte registros de Diárias',
-                    icon: History,
-                    onClick: onTrackOrder,
-                    color: 'purple'
-                });
-            }
+            // 1. Operacional de Viagens
             if (canAccessSub('parent_diarias', 'sub_diarias_novo_evento')) {
                 actionButtons.push({
                     label: 'Nova Viagem',
-                    desc: 'Informar nova viagem',
+                    desc: 'Cadastrar nova viagem',
                     icon: CalendarRange,
                     onClick: () => {
                         window.history.pushState({}, '', '/Diarias/NovoEvento');
                         window.dispatchEvent(new Event('popstate'));
                     },
                     color: 'amber'
+                });
+            }
+            if (canAccessSub('parent_diarias', 'sub_diarias_viajar')) {
+                actionButtons.push({
+                    label: 'Viajar',
+                    desc: 'Iniciar / Finalizar Viagens',
+                    icon: Car,
+                    onClick: () => {
+                        window.history.pushState({}, '', '/Diarias/Viajar');
+                        window.dispatchEvent(new Event('popstate'));
+                    },
+                    color: 'emerald'
                 });
             }
             if (canAccessSub('parent_diarias', 'sub_diarias_lancamentos')) {
@@ -391,6 +502,34 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: 'blue'
                 });
             }
+
+            // 2. Financeiro / Custeio
+            if (canAccessSub('parent_diarias', 'sub_diarias_adiantamento')) {
+                actionButtons.push({
+                    label: 'Adiantamento',
+                    desc: 'Solicitar Adiantamento',
+                    icon: Banknote,
+                    onClick: () => {
+                        window.history.pushState({}, '', '/Diarias/Adiantamento');
+                        window.dispatchEvent(new Event('popstate'));
+                    },
+                    color: 'violet'
+                });
+            }
+            if (canAccessSub('parent_diarias', 'sub_diarias_reembolso')) {
+                actionButtons.push({
+                    label: 'Reembolso',
+                    desc: 'Prestação de Contas',
+                    icon: Wallet,
+                    onClick: () => {
+                        window.history.pushState({}, '', '/Diarias/Reembolso');
+                        window.dispatchEvent(new Event('popstate'));
+                    },
+                    color: 'teal'
+                });
+            }
+
+            // 3. Gestão e Registros
             if (canAccessSub('parent_diarias', 'sub_diarias_gestores')) {
                 actionButtons.push({
                     label: 'Gestores',
@@ -403,40 +542,22 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: 'indigo'
                 });
             }
-            if (canAccessSub('parent_diarias', 'sub_diarias_viajar')) {
+            if (canAccessSub('parent_diarias', 'sub_diarias_historico')) {
                 actionButtons.push({
-                    label: 'Viajar',
-                    desc: 'Iniciar/Finalizar Viagens',
-                    icon: Car,
-                    onClick: () => {
-                        window.history.pushState({}, '', '/Diarias/Viajar');
-                        window.dispatchEvent(new Event('popstate'));
-                    },
-                    color: 'emerald'
+                    label: 'Histórico',
+                    desc: 'Consultar Registros',
+                    icon: History,
+                    onClick: onTrackOrder,
+                    color: 'purple'
                 });
             }
-            if (canAccessSub('parent_diarias', 'sub_diarias_adiantamento')) {
+            if (canAccessSub('parent_diarias', 'sub_diarias_editor')) {
                 actionButtons.push({
-                    label: 'Adiantamento',
-                    desc: 'Solicitar Adiantamento',
-                    icon: Banknote,
-                    onClick: () => {
-                        window.history.pushState({}, '', '/Diarias/Adiantamento');
-                        window.dispatchEvent(new Event('popstate'));
-                    },
-                    color: 'amber'
-                });
-            }
-            if (canAccessSub('parent_diarias', 'sub_diarias_reembolso')) {
-                actionButtons.push({
-                    label: 'Reembolso',
-                    desc: 'Reembolso de Despesas',
-                    icon: Wallet,
-                    onClick: () => {
-                        window.history.pushState({}, '', '/Diarias/Reembolso');
-                        window.dispatchEvent(new Event('popstate'));
-                    },
-                    color: 'indigo'
+                    label: 'Nova Solicitação',
+                    desc: 'Formulário Avulso',
+                    icon: FilePlus,
+                    onClick: () => onNewOrder('diarias', true),
+                    color: 'slate'
                 });
             }
         }
@@ -477,47 +598,99 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         }
 
         const getGridContainerClass = (count: number) => {
-            if (count === 5) {
-                return "w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 desktop:gap-4 max-w-6xl";
+            switch (count) {
+                case 1:
+                    return "w-full grid grid-cols-1 max-w-sm mx-auto gap-4";
+                case 2:
+                    return "w-full grid grid-cols-1 sm:grid-cols-2 max-w-2xl mx-auto gap-4 md:gap-6";
+                case 3:
+                    return "w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 max-w-4xl mx-auto gap-4 md:gap-6";
+                case 4:
+                    return "w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 max-w-5xl mx-auto gap-4 md:gap-5";
+                case 5:
+                    return "w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 max-w-6xl mx-auto gap-3.5 md:gap-4";
+                case 6:
+                    return "w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto gap-4 md:gap-6";
+                case 7:
+                case 8:
+                    return "w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 max-w-5xl mx-auto gap-4 md:gap-5";
+                default:
+                    return "w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 max-w-6xl mx-auto gap-4 md:gap-5";
             }
-            if (count === 4) {
-                return "w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 desktop:gap-4 max-w-5xl";
-            }
-            if (count === 3) {
-                return "w-full grid grid-cols-1 sm:grid-cols-3 gap-3 desktop:gap-4 max-w-4xl";
-            }
-            if (count === 2) {
-                return "w-full grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl";
-            }
-            return "w-full flex flex-wrap justify-center items-stretch gap-3 desktop:gap-4 max-w-6xl";
         };
+
+        const headerTheme = getSubmoduleColorTheme(config.color);
 
         return (
             <>
-                {/* Fixed Back Button */}
+                {/* Botão Voltar Padronizado com Rota URL */}
                 <button
-                    onClick={() => setActiveBlock(null)}
-                    className="fixed top-20 left-4 desktop:top-24 desktop:left-8 z-[999] group flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold transition-all p-2 pr-4 rounded-full bg-white/90 backdrop-blur-md border border-slate-200/60 shadow-lg hover:shadow-xl hover:bg-white hover:-translate-y-0.5 hover:border-indigo-100"
-                    title="Voltar ao Menu"
+                    onClick={() => {
+                        setActiveBlock(null);
+                        window.history.pushState({}, '', '/PaginaInicial');
+                        window.dispatchEvent(new Event('popstate'));
+                    }}
+                    className="fixed top-20 left-4 desktop:top-24 desktop:left-8 z-[999] group flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold transition-all p-2 pr-4 rounded-full bg-white/95 backdrop-blur-md border border-slate-200/80 shadow-md hover:shadow-xl hover:bg-white hover:-translate-y-0.5 hover:border-indigo-100 cursor-pointer"
+                    title="Voltar ao Menu Principal"
                 >
-                    <div className="w-8 h-8 rounded-full bg-white border border-slate-100 flex items-center justify-center group-hover:bg-indigo-50 group-hover:border-indigo-100 transition-colors">
-                        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform text-slate-400 group-hover:text-indigo-600" />
+                    <div className="w-8 h-8 rounded-full bg-slate-50 border border-slate-200/60 flex items-center justify-center group-hover:bg-indigo-50 group-hover:border-indigo-100 transition-colors">
+                        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform text-slate-500 group-hover:text-indigo-600" />
                     </div>
                     <span className="text-[10px] uppercase tracking-widest font-extrabold group-hover:text-indigo-700">Voltar</span>
                 </button>
 
-                <div className="w-full h-full flex flex-col relative animate-fade-in z-0 overflow-hidden">
-                    <div className="flex-1 w-full p-4 md:p-6 overflow-y-auto lg:overflow-hidden flex flex-col justify-center items-center">
-                        <div className="w-full max-h-full flex flex-col items-center justify-center container mx-auto">
-                            <div className="flex flex-col items-center mb-5 md:mb-7 shrink-0 animation-delay-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                <div className={`p-3 md:p-3.5 rounded-2xl bg-gradient-to-br from-${config.color}-50 to-${config.color}-100/50 mb-2.5 shadow-xs ring-4 ring-white/60`}>
-                                    <config.icon className={`w-8 h-8 md:w-9 md:h-9 text-${config.color}-600 drop-shadow-sm`} />
+                <div className="w-full h-full flex flex-col relative animate-fade-in z-0 overflow-hidden bg-[#FAFAFA]">
+                    <div className="flex-1 w-full p-4 md:p-8 overflow-y-auto custom-scrollbar flex flex-col items-center">
+                        <div className="w-full my-auto flex flex-col items-center max-w-6xl py-8 md:py-12">
+                            {/* Cabeçalho do Módulo */}
+                            <div className="flex flex-col items-center mb-6 md:mb-8 shrink-0 text-center animation-delay-100 animate-in fade-in slide-in-from-bottom-3 duration-500">
+                                <div className={`w-14 h-14 md:w-16 md:h-16 rounded-2xl ${headerTheme.iconBg} flex items-center justify-center mb-3 shadow-lg ${headerTheme.iconShadow} ring-4 ring-white`}>
+                                    <config.icon className="w-7 h-7 md:w-8 md:h-8 text-white drop-shadow-sm" />
                                 </div>
-                                <h2 className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800 tracking-tight text-center drop-shadow-sm">{config.name}</h2>
-                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">Selecione uma ação para continuar</p>
+                                <h2 className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight drop-shadow-xs">{config.name}</h2>
+                                <p className="text-xs md:text-sm font-medium text-slate-500 max-w-md mt-1">{config.desc}</p>
                             </div>
 
-                            <div className={`${getGridContainerClass(actionButtons.length)} animate-in zoom-in duration-500 fill-mode-backwards p-2`}>
+                            {/* Banner de Viagem Ativa (se aplicável ao Módulo de Diárias) */}
+                            {activeBlock === 'diarias' && activeTrip && (
+                                <div
+                                    onClick={() => {
+                                        window.history.pushState({}, '', `/Diarias/Viajar/Detalhes?id=${activeTrip.id}`);
+                                        window.dispatchEvent(new Event('popstate'));
+                                    }}
+                                    className="w-full max-w-4xl mb-6 bg-gradient-to-r from-amber-500 via-emerald-600 to-indigo-600 p-0.5 rounded-3xl shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer group"
+                                >
+                                    <div className="bg-white rounded-[1.4rem] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                        <div className="flex items-center gap-3.5">
+                                            <div className="w-11 h-11 rounded-2xl bg-amber-500/10 text-amber-600 border border-amber-500/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                                                <Car className="w-5 h-5 animate-pulse" />
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-0.5">
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200 animate-pulse">
+                                                        <Timer className="w-3 h-3 text-amber-600" />
+                                                        <span>Você está em Viagem</span>
+                                                    </span>
+                                                </div>
+                                                <h3 className="text-sm sm:text-base font-black text-slate-900 tracking-tight group-hover:text-indigo-600 transition-colors">
+                                                    {activeTrip.destino}
+                                                </h3>
+                                                <p className="text-slate-500 text-xs font-medium">
+                                                    Clique para abrir o painel de bordo da viagem ativa em tempo real.
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-2 text-indigo-600 font-extrabold text-xs uppercase tracking-wider shrink-0 self-end sm:self-auto bg-indigo-50 px-3.5 py-2 rounded-xl border border-indigo-100 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                                            <span>Ir para a Viagem</span>
+                                            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Grade Padronizada de Ações */}
+                            <div className={`${getGridContainerClass(actionButtons.length)} animate-in zoom-in duration-500 fill-mode-backwards p-1`}>
                                 {actionButtons.length === 0 ? (
                                     <div className="col-span-full text-center p-8 bg-white/90 backdrop-blur-md rounded-3xl border border-slate-200 max-w-md shadow-sm animate-fade-in mx-auto">
                                         <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto mb-3 text-amber-600">
@@ -527,31 +700,54 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                         <p className="text-xs text-slate-500 mb-4 leading-relaxed">Seu usuário não possui permissão ativa para as funcionalidades deste módulo.</p>
                                         <button
                                             type="button"
-                                            onClick={() => setActiveBlock(null)}
+                                            onClick={() => {
+                                                setActiveBlock(null);
+                                                window.history.pushState({}, '', '/PaginaInicial');
+                                                window.dispatchEvent(new Event('popstate'));
+                                            }}
                                             className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
                                         >
                                             Voltar à Página Inicial
                                         </button>
                                     </div>
                                 ) : (
-                                    actionButtons.map((btn, idx) => (
-                                    <button
-                                        key={idx}
-                                        onClick={btn.onClick}
-                                        className={`group relative w-full min-h-[110px] md:min-h-[135px] py-4 md:py-5 px-3 md:px-4 rounded-[2rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-${btn.color}-500/30 hover:border-${btn.color}-200 hover:from-white hover:to-${btn.color}-50/30 transition-all duration-300 ease-spring hover:-translate-y-1.5 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0 ${btn.hideOnMobile ? 'hidden desktop:flex' : 'flex'}`}
-                                        style={{ animationDelay: `${idx * 100}ms` }}
-                                    >
-                                        <div className={`absolute top-0 right-0 w-32 h-32 bg-${btn.color}-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150`}></div>
-                                        <div className={`absolute bottom-0 left-0 w-24 h-24 bg-${btn.color}-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100`}></div>
- 
-                                        <div className={`relative w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-${btn.color}-500 to-${btn.color}-600 flex items-center justify-center mb-2.5 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-md shadow-${btn.color}-500/30 ring-4 ring-white`}>
-                                            <btn.icon className="w-5 h-5 md:w-6 md:h-6 drop-shadow-md" />
-                                        </div>
- 
-                                        <h3 className="text-base md:text-lg lg:text-xl font-bold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight text-center">{btn.label}</h3>
-                                        <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-${btn.color}-600 transition-colors uppercase tracking-wider text-center">{btn.desc}</p>
-                                    </button>
-                                ))
+                                    actionButtons.map((btn, idx) => {
+                                        const theme = getSubmoduleColorTheme(btn.color);
+                                        return (
+                                            <button
+                                                key={idx}
+                                                type="button"
+                                                onClick={btn.onClick}
+                                                className={`group relative w-full min-h-[145px] md:min-h-[165px] p-5 md:p-6 rounded-[2rem] bg-gradient-to-br from-white via-white to-slate-50/60 border border-slate-200/80 shadow-[0_4px_20px_rgb(0,0,0,0.03)] hover:shadow-[0_20px_45px_rgb(0,0,0,0.08)] ${theme.hoverShadow} ${theme.hoverBorder} hover:from-white ${theme.hoverBgTo} transition-all duration-300 ease-spring hover:-translate-y-1.5 active:scale-95 flex flex-col items-center justify-between text-center overflow-hidden shrink-0 cursor-pointer ${btn.hideOnMobile ? 'hidden desktop:flex' : 'flex'}`}
+                                                style={{ animationDelay: `${idx * 70}ms` }}
+                                            >
+                                                {/* Brilhos sutis nos cantos */}
+                                                <div className={`absolute top-0 right-0 w-32 h-32 ${theme.cornerGlow} rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150`}></div>
+                                                <div className={`absolute bottom-0 left-0 w-24 h-24 ${theme.cornerGlow} rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100`}></div>
+
+                                                {/* Ícone */}
+                                                <div className={`relative w-12 h-12 md:w-14 md:h-14 rounded-2xl ${theme.iconBg} flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300 shadow-md ${theme.iconShadow} ring-4 ring-white shrink-0`}>
+                                                    <btn.icon className="w-6 h-6 md:w-7 md:h-7 drop-shadow-xs" />
+                                                </div>
+
+                                                {/* Textos */}
+                                                <div className="flex-1 flex flex-col items-center justify-center w-full">
+                                                    <h3 className="text-base md:text-lg font-bold text-slate-800 tracking-tight leading-snug group-hover:text-slate-950 transition-colors">
+                                                        {btn.label}
+                                                    </h3>
+                                                    <p className={`text-[10px] md:text-xs font-semibold text-slate-400 mt-1 uppercase tracking-wider leading-relaxed transition-colors group-hover:${theme.accentText}`}>
+                                                        {btn.desc}
+                                                    </p>
+                                                </div>
+
+                                                {/* Indicador de Ação no Hover */}
+                                                <div className={`mt-3 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-1.5 group-hover:translate-y-0 ${theme.badgeText} font-extrabold text-[10px] uppercase tracking-widest flex items-center gap-1`}>
+                                                    <span>Acessar</span>
+                                                    <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                                                </div>
+                                            </button>
+                                        );
+                                    })
                                 )}
                             </div>
                         </div>

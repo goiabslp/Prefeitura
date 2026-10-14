@@ -897,10 +897,10 @@ export const ReembolsoScreen: React.FC<ReembolsoScreenProps> = ({
   const isAdminOrGestor = currentUser?.role === 'admin' || (currentUser as any)?.role === 'gestor' || currentUser?.role === 'contabilidade';
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 pb-16">
-      {/* CABEÇALHO SUPERIOR */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <div className="w-full h-full flex-1 flex flex-col overflow-y-auto custom-scrollbar bg-slate-50 text-slate-800 pb-12">
+      {/* CABEÇALHO SUPERIOR - 100% DA LARGURA */}
+      <div className="w-full bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs shrink-0">
+        <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               onClick={() => {
@@ -950,7 +950,7 @@ export const ReembolsoScreen: React.FC<ReembolsoScreenProps> = ({
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+      <div className="w-full flex-1 px-4 sm:px-6 lg:px-8 xl:px-10 mt-5">
         {mode === 'lista' ? (
           /* ========================================================================= */
           /* MODO LISTA: DASHBOARD COM INDICADORES CONSOLIDADOS E TABELA DE HISTÓRICO   */
