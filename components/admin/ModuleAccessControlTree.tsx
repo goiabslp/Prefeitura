@@ -4,7 +4,7 @@ import {
   Power, Settings2, Monitor, Smartphone, ShoppingCart, Briefcase,
   Gavel, Calendar, Users, HeartPulse, Pill, Newspaper, Car, Fuel,
   Truck, FileText, CheckSquare, ShieldAlert, Sparkles, Layers, Check,
-  AlertTriangle, Upload, UserCheck, UserX, Loader2, Palette, ArrowLeft, FolderCheck
+  AlertTriangle, Upload, UserCheck, UserX, Loader2, Palette, ArrowLeft, FolderCheck, Ticket
 } from 'lucide-react';
 import { MODULE_ACCESS_TREE, ModuleItemDefinition } from '../../services/permissionService';
 import { User } from '../../types';
@@ -89,6 +89,7 @@ export const ModuleAccessControlTree: React.FC<ModuleAccessControlTreeProps> = (
       case 'parent_upload': return <Upload className={iconClass} />;
       case 'parent_art': return <Palette className={iconClass} />;
       case 'parent_documentos': return <FolderCheck className={iconClass} />;
+      case 'parent_autosenha': return <Ticket className={iconClass} />;
       default: return <Layers className={iconClass} />;
     }
   };

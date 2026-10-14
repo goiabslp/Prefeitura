@@ -15,11 +15,14 @@ export const PacientesHubScreen: React.FC<PacientesHubScreenProps> = ({
     currentUser,
     baseRoute
 }) => {
-    // Determina a rota base ativa (ex: /Regulacao/Pacientes ou /FarmaciaPopular/Pacientes)
+    // Determina a rota base ativa (/Regulacao/Pacientes, /FarmaciaPopular/Pacientes ou /AutoSenha/Pacientes)
     const resolveBaseRoute = useCallback((): string => {
         if (baseRoute) return baseRoute;
         if (typeof window !== 'undefined') {
             const raw = window.location.pathname.toLowerCase();
+            if (raw.startsWith('/autosenha')) {
+                return '/AutoSenha/Pacientes';
+            }
             if (raw.startsWith('/farmaciapopular')) {
                 return '/FarmaciaPopular/Pacientes';
             }
@@ -35,8 +38,8 @@ export const PacientesHubScreen: React.FC<PacientesHubScreenProps> = ({
         }
 
         const rawPath = window.location.pathname;
-        // Padrão: /Regulacao/Pacientes/:id ou /FarmaciaPopular/Pacientes/:id ou /.../pagina/:num e opcionais /solicitacoes, etc.
-        const regex = /\/(?:regulacao|consultas|farmaciapopular)\/pacientes(?:\/([^/]+)(?:\/([^/]+))?)?/i;
+        // Padrão: /Regulacao/Pacientes/:id, /FarmaciaPopular/Pacientes/:id ou /AutoSenha/Pacientes/:id
+        const regex = /\/(?:regulacao|consultas|farmaciapopular|autosenha)\/pacientes(?:\/([^/]+)(?:\/([^/]+))?)?/i;
         const match = rawPath.match(regex);
 
         if (match && match[1]) {
@@ -59,6 +62,7 @@ export const PacientesHubScreen: React.FC<PacientesHubScreenProps> = ({
                 const rawAba = (match[2] || '').toLowerCase();
                 if (rawAba === 'solicitacoes') subAba = 'solicitacoes';
                 else if (rawAba === 'medicamentos') subAba = 'medicamentos';
+                else if (rawAba === 'atendimentos') subAba = 'atendimentos';
                 else if (rawAba === 'linha-do-tempo') subAba = 'linha-do-tempo';
                 else if (rawAba === 'analise') subAba = 'analise';
 

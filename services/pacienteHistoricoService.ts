@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { ConsultaPaciente, ConsultaAgendamento, FarmaciaMovimentacao } from '../types';
+import { ConsultaPaciente, ConsultaAgendamento, FarmaciaMovimentacao, AutoSenhaItem } from '../types';
 import { getPacienteById, getPacienteByCpf, getEspecialistas } from './consultasService';
 
 export interface IndicadorTempoEspera {
@@ -37,14 +37,14 @@ export interface IndicadoresPaciente {
 
 export interface ItemLinhaDoTempo {
     id: string;
-    tipo: 'solicitacao' | 'agendamento' | 'realizacao' | 'cancelamento' | 'pausa' | 'retomada' | 'medicamento';
+    tipo: 'solicitacao' | 'agendamento' | 'realizacao' | 'cancelamento' | 'pausa' | 'retomada' | 'medicamento' | 'atendimento_autosenha';
     titulo: string;
     subtitulo: string;
     detalhes?: string;
     dataHora: string;
     badge: string;
     badgeColor: string;
-    origem: 'Regulação' | 'Consultas' | 'Farmácia Popular';
+    origem: 'Regulação' | 'Consultas' | 'Farmácia Popular' | 'AutoSenha';
     dadosOriginais?: any;
 }
 
@@ -405,7 +405,8 @@ export const calcularIndicadoresConsolidados = (
  */
 export const construirLinhaDoTempo = (
     solicitacoes: ConsultaAgendamento[],
-    medicamentos: FarmaciaMovimentacao[]
+    medicamentos: FarmaciaMovimentacao[],
+    atendimentosAutoSenha?: AutoSenhaItem[]
 ): ItemLinhaDoTempo[] => {
     const itens: ItemLinhaDoTempo[] = [];
 
@@ -526,6 +527,25 @@ export const construirLinhaDoTempo = (
             dadosOriginais: m
         });
     });
+
+    // Adiciona atendimentos do AutoSenha (UPA, PSF 1, PSF 2)
+    if (atendimentosAutoSenha && atendimentosAutoSenha.length > 0) {
+        atendimentosAutoSenha.forEach(a => {
+            const uNome = a.unidade_id === 'upa' ? 'UPA' : a.unidade_id === 'psf1' ? 'PSF 1' : 'PSF 2';
+            itens.push({
+                id: `autosenha-${a.id}`,
+                tipo: 'atendimento_autosenha',
+                titulo: `Passagem pela ${uNome} — Senha ${a.numero}`,
+                subtitulo: `Prioridade: ${a.prioridade_categoria || a.prioridade_tipo} • Guichê: ${a.guiche || 'Recepção'}`,
+                detalhes: `Status: ${a.status}. Atendente: ${a.atendente_nome || 'Recepção'}. Espera até chamada: ${a.wait_time_first_call_seconds ? `${Math.round(a.wait_time_first_call_seconds / 60)} min` : 'Em andamento'}.`,
+                dataHora: a.created_at,
+                badge: `AutoSenha • ${uNome}`,
+                badgeColor: a.unidade_id === 'upa' ? 'rose' : 'emerald',
+                origem: 'AutoSenha',
+                dadosOriginais: a
+            });
+        });
+    }
 
     // Ordenação estrita decrescente (mais recente ao mais antigo)
     return itens.sort((a, b) => {

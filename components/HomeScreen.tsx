@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill, Timer, Upload, Banknote, Newspaper, Sparkles, Star, AlertTriangle, Palette, FolderCheck } from 'lucide-react';
+import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill, Timer, Upload, Banknote, Newspaper, Sparkles, Star, AlertTriangle, Palette, FolderCheck, Ticket } from 'lucide-react';
 import { UserRole, UIConfig, AppPermission, BlockType, DiariaEvento, Order, User } from '../types';
 import { UpcomingEventsNotification } from './calendario/UpcomingEventsNotification';
 import { useSystemSettings } from '../contexts/SystemSettingsContext';
@@ -22,6 +22,7 @@ interface HomeScreenProps {
     onMarketing?: () => void;
     onConsultas?: () => void;
     onFarmacia?: () => void;
+    onAutoSenha?: () => void;
     onNoticias?: () => void;
     onArt?: () => void;
     currentUser?: User | null;
@@ -68,6 +69,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     onMarketing,
     onConsultas,
     onFarmacia,
+    onAutoSenha,
     onNoticias,
     onArt,
     onLogout,
@@ -150,6 +152,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const canAccessMarketing = checkModuleAccess('parent_marketing');
     const canAccessConsultas = checkModuleAccess('parent_consultas');
     const canAccessFarmacia = checkModuleAccess('parent_farmacia');
+    const canAccessAutoSenha = checkModuleAccess('parent_autosenha');
     const canAccessNoticias = checkModuleAccess('parent_noticias');
     const canAccessUpload = checkModuleAccess('parent_upload');
     const canAccessArt = checkModuleAccess('parent_art');
@@ -844,6 +847,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                 {canAccessMarketing && renderModuleButton(() => onMarketing?.(), 'teal', Megaphone, 'Marketing', 'Criativo', '248ms', false, getPendingCount('marketing'))}
                                 {canAccessConsultas && renderModuleButton(() => onConsultas?.(), 'sky', Activity, 'Regulação', 'Regulação e exames', '249ms', false, getPendingCount('consultas'))}
                                 {canAccessFarmacia && renderModuleButton(() => onFarmacia?.(), 'pink', Pill, 'Farmácia Popular', 'Medicamentos', '252ms', false, getPendingCount('farmacia'))}
+                                {canAccessAutoSenha && renderModuleButton(() => {
+                                    if (onAutoSenha) onAutoSenha();
+                                    else {
+                                        window.history.pushState({}, '', '/AutoSenha');
+                                        window.dispatchEvent(new Event('popstate'));
+                                    }
+                                }, 'emerald', Ticket, 'AutoSenha', 'Filas & Senhas TV', '254ms', false, 0)}
                                 {canAccessNoticias && renderModuleButton(() => onNoticias?.(), 'indigo', Newspaper, 'Notícias', 'Boletim & métricas', '255ms', false, 0, true)}
                                 {canAccessArt && renderModuleButton(() => {
                                     if (onArt) onArt();

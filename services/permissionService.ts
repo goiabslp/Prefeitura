@@ -770,6 +770,77 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
     routes: ['/AssistenteIA', '/Chat'],
     iconName: 'Bot',
     submodules: []
+  },
+  {
+    key: 'parent_autosenha',
+    legacyKeys: ['autosenha'],
+    label: 'AutoSenha — Gestão de Filas & Senhas',
+    description: 'Central Inteligente de Gestão de Senhas, Filas, Prioridades e Chamada TV das Unidades de Saúde Municipais (PSF 1, PSF 2 e UPA)',
+    routes: [
+      '/AutoSenha',
+      '/AutoSenha/Dashboard',
+      '/AutoSenha/PSF1',
+      '/AutoSenha/PSF1/Controle',
+      '/AutoSenha/PSF1/SenhaTV',
+      '/AutoSenha/PSF2',
+      '/AutoSenha/PSF2/Controle',
+      '/AutoSenha/PSF2/SenhaTV',
+      '/AutoSenha/UPA',
+      '/AutoSenha/UPA/Controle',
+      '/AutoSenha/UPA/SenhaTV'
+    ],
+    iconName: 'Ticket',
+    submodules: [
+      {
+        key: 'sub_autosenha_dashboard',
+        legacyKeys: ['parent_autosenha_dashboard'],
+        label: 'Dashboard Administrativo',
+        description: 'Central consolidada de monitoramento das unidades, ritmo e capacidade',
+        routes: ['/AutoSenha/Dashboard']
+      },
+      {
+        key: 'sub_autosenha_psf1_controle',
+        legacyKeys: ['parent_autosenha_psf1_controle'],
+        label: 'PSF 1 — Controle Operacional',
+        description: 'Recepção, emissão de senhas e chamada do PSF 1',
+        routes: ['/AutoSenha/PSF1', '/AutoSenha/PSF1/Controle']
+      },
+      {
+        key: 'sub_autosenha_psf1_senhatv',
+        legacyKeys: ['parent_autosenha_psf1_senhatv'],
+        label: 'PSF 1 — Senha TV',
+        description: 'Painel público de televisão de chamadas do PSF 1',
+        routes: ['/AutoSenha/PSF1/SenhaTV']
+      },
+      {
+        key: 'sub_autosenha_psf2_controle',
+        legacyKeys: ['parent_autosenha_psf2_controle'],
+        label: 'PSF 2 — Controle Operacional',
+        description: 'Recepção, emissão de senhas e chamada do PSF 2',
+        routes: ['/AutoSenha/PSF2', '/AutoSenha/PSF2/Controle']
+      },
+      {
+        key: 'sub_autosenha_psf2_senhatv',
+        legacyKeys: ['parent_autosenha_psf2_senhatv'],
+        label: 'PSF 2 — Senha TV',
+        description: 'Painel público de televisão de chamadas do PSF 2',
+        routes: ['/AutoSenha/PSF2/SenhaTV']
+      },
+      {
+        key: 'sub_autosenha_upa_controle',
+        legacyKeys: ['parent_autosenha_upa_controle'],
+        label: 'UPA — Controle Operacional',
+        description: 'Recepção, emissão de senhas administrativas e chamada da UPA',
+        routes: ['/AutoSenha/UPA', '/AutoSenha/UPA/Controle']
+      },
+      {
+        key: 'sub_autosenha_upa_senhatv',
+        legacyKeys: ['parent_autosenha_upa_senhatv'],
+        label: 'UPA — Senha TV',
+        description: 'Painel público de televisão de chamadas da recepção da UPA',
+        routes: ['/AutoSenha/UPA/SenhaTV']
+      }
+    ]
   }
 ];
 

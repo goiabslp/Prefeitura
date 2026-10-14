@@ -39,11 +39,14 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
     initialPagina = 1,
     baseRoute
 }) => {
-    // Rota base canônica ativa (/FarmaciaPopular/Pacientes ou /Regulacao/Pacientes)
+    // Rota base canônica ativa (/FarmaciaPopular/Pacientes, /Regulacao/Pacientes ou /AutoSenha/Pacientes)
     const resolvedBaseRoute = useMemo(() => {
         if (baseRoute) return baseRoute;
         if (typeof window !== 'undefined') {
             const raw = window.location.pathname.toLowerCase();
+            if (raw.startsWith('/autosenha')) {
+                return '/AutoSenha/Pacientes';
+            }
             if (raw.startsWith('/farmaciapopular')) {
                 return '/FarmaciaPopular/Pacientes';
             }

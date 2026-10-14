@@ -1023,5 +1023,165 @@ export interface DocumentoMovimentacao {
   created_at?: string;
 }
 
+// ==============================================================================
+// TIPOS DO MÓDULO AUTOSENHA (GESTÃO DE SENHAS, FILAS E ATENDIMENTOS)
+// ==============================================================================
+
+export type AutoSenhaUnidadeId = 'psf1' | 'psf2' | 'upa';
+
+export type AutoSenhaPrioridadeTipo = 'NORMAL' | 'PRIORITARIO' | 'ESPECIAL';
+
+export type AutoSenhaPrioridadeCategoria =
+  | 'Geral'
+  | 'Idoso (60 a 79 anos)'
+  | 'Idoso 80+ (Prioridade Especial)'
+  | 'Gestante'
+  | 'Lactante'
+  | 'Pessoa com Deficiência (PCD)'
+  | 'Pessoa com TEA (Autismo)'
+  | 'Criança de Colo'
+  | 'Outra Prioridade Legal';
+
+export type AutoSenhaStatus =
+  | 'AGUARDANDO'
+  | 'CHAMANDO'
+  | 'EM_ATENDIMENTO'
+  | 'CONCLUIDO'
+  | 'NAO_COMPARECEU'
+  | 'CANCELADO';
+
+export type AutoSenhaRegraAlternancia =
+  | '1_P_1_N'
+  | '2_P_1_N'
+  | '3_P_1_N'
+  | 'APENAS_PRIORIDADE';
+
+export type AutoSenhaSituacaoOperacional = 'NORMAL' | 'ATENCAO' | 'ALTA_DEMANDA';
+
+export interface AutoSenhaUnidade {
+  id: AutoSenhaUnidadeId;
+  nome: string;
+  sigla: string;
+  tipo: 'PSF' | 'UPA';
+  ativo: boolean;
+  horario_inicio: string;
+  horario_fim: string;
+  created_at?: string;
+}
+
+export interface AutoSenhaConfiguracao {
+  id: string;
+  unidade_id: AutoSenhaUnidadeId;
+  regra_alternancia: AutoSenhaRegraAlternancia;
+  proporcao_prioridade: number;
+  proporcao_normal: number;
+  contador_prioridade_atual: number;
+  contador_normal_atual: number;
+  limite_espera_atencao_min: number;
+  limite_espera_critico_min: number;
+  limite_fila_atencao_qtd: number;
+  limite_fila_critico_qtd: number;
+  som_habilitado: boolean;
+  ocultar_sobrenome_tv: boolean;
+  mensagem_rodape_tv?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AutoSenhaItem {
+  id: string;
+  unidade_id: AutoSenhaUnidadeId;
+  numero: string; // 'N001', 'P001', 'E001'
+  numero_sequencial: number;
+  data_operacional: string; // YYYY-MM-DD
+  paciente_id?: string;
+  paciente_cpf?: string;
+  paciente_cartao_sus?: string;
+  cidadao_nome: string;
+  prioridade_tipo: AutoSenhaPrioridadeTipo;
+  prioridade_categoria?: AutoSenhaPrioridadeCategoria | string;
+  status: AutoSenhaStatus;
+  guiche: string;
+  atendente_id?: string;
+  atendente_nome?: string;
+  created_at: string;
+  first_called_at?: string;
+  last_called_at?: string;
+  call_count: number;
+  service_started_at?: string;
+  service_finished_at?: string;
+  wait_time_first_call_seconds?: number;
+  wait_time_total_seconds?: number;
+  service_duration_seconds?: number;
+  motivo_encerramento?: string;
+}
+
+export interface AutoSenhaChamadaHistorico {
+  id: string;
+  senha_id: string;
+  unidade_id: AutoSenhaUnidadeId;
+  numero_chamada: number;
+  tipo_evento: 'CHAMADA_INICIAL' | 'RECHAMADA';
+  guiche: string;
+  operador_id?: string;
+  operador_nome: string;
+  timestamp_chamada: string;
+}
+
+export interface AutoSenhaAuditoria {
+  id: string;
+  unidade_id: AutoSenhaUnidadeId;
+  senha_id?: string;
+  senha_numero?: string;
+  acao: string;
+  descricao: string;
+  detalhes?: any;
+  usuario_id?: string;
+  usuario_nome: string;
+  created_at: string;
+}
+
+export interface AutoSenhaAvaliacaoUrgente {
+  id: string;
+  unidade_id: AutoSenhaUnidadeId;
+  senha_id?: string;
+  senha_numero?: string;
+  cidadao_nome: string;
+  motivo_queixa: string;
+  status: 'PENDENTE' | 'ENCAMINHADO_PRESENCIAL' | 'ATENDIDO';
+  solicitante_id?: string;
+  solicitante_nome: string;
+  created_at: string;
+  atendido_em?: string;
+  observacoes_desfecho?: string;
+}
+
+export interface AutoSenhaCapacidadeMetricas {
+  unidade_id: AutoSenhaUnidadeId;
+  unidade_nome: string;
+  unidade_sigla: string;
+  situacao: AutoSenhaSituacaoOperacional;
+  aguardando_qtd: number;
+  em_atendimento_qtd: number;
+  concluidos_qtd: number;
+  total_emitidas_qtd: number;
+  normais_qtd: number;
+  prioritarios_qtd: number;
+  especiais_qtd: number;
+  nao_compareceu_qtd: number;
+  cancelados_qtd: number;
+  tempo_medio_espera_seg: number;
+  tempo_mediano_espera_seg: number;
+  tempo_p90_espera_seg: number;
+  maior_espera_atual_seg: number;
+  tempo_medio_atendimento_seg: number;
+  taxa_conclusao_pct: number;
+  atendimentos_por_hora: number;
+  ritmo_descricao: string;
+  projecao_escoamento_min?: number;
+  ultima_chamada_hora?: string;
+  senha_atual?: AutoSenhaItem;
+}
+
 declare const __LATEST_COMMIT__: string;
 
