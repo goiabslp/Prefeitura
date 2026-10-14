@@ -779,6 +779,7 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
     routes: [
       '/AutoSenha',
       '/AutoSenha/Dashboard',
+      '/AutoSenha/Pacientes',
       '/AutoSenha/PSF1',
       '/AutoSenha/PSF1/Controle',
       '/AutoSenha/PSF1/SenhaTV',
@@ -797,6 +798,12 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
         label: 'Dashboard Administrativo',
         description: 'Central consolidada de monitoramento das unidades, ritmo e capacidade',
         routes: ['/AutoSenha/Dashboard']
+      },
+      {
+        key: 'sub_autosenha_pacientes',
+        label: 'Pacientes — Central Única',
+        description: 'Localização, cadastro compartilhado e histórico integrado de atendimentos',
+        routes: ['/AutoSenha/Pacientes']
       },
       {
         key: 'sub_autosenha_psf1_controle',

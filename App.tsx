@@ -331,6 +331,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'documentos:visualizar': '/Documentos/Visualizar',
   'autosenha': '/AutoSenha',
   'autosenha:dashboard': '/AutoSenha/Dashboard',
+  'autosenha:pacientes': '/AutoSenha/Pacientes',
   'autosenha:psf1': '/AutoSenha/PSF1',
   'autosenha:psf1-controle': '/AutoSenha/PSF1/Controle',
   'autosenha:psf1-senhatv': '/AutoSenha/PSF1/SenhaTV',

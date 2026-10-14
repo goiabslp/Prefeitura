@@ -1,10 +1,11 @@
 import React from 'react';
-import { ArrowLeft, LayoutDashboard, Building2, Shield, ArrowRight, Ticket, Activity, Stethoscope } from 'lucide-react';
+import { ArrowLeft, LayoutDashboard, Building2, Shield, ArrowRight, Ticket, Activity, Stethoscope, Users } from 'lucide-react';
 import { User } from '../../types';
 
 interface AutoSenhaHomeScreenProps {
   currentUser?: User | null;
   onNavigateDashboard: () => void;
+  onNavigatePacientes: () => void;
   onNavigatePSF1: () => void;
   onNavigatePSF2: () => void;
   onNavigateUPA: () => void;
@@ -14,6 +15,7 @@ interface AutoSenhaHomeScreenProps {
 export const AutoSenhaHomeScreen: React.FC<AutoSenhaHomeScreenProps> = ({
   currentUser,
   onNavigateDashboard,
+  onNavigatePacientes,
   onNavigatePSF1,
   onNavigatePSF2,
   onNavigateUPA,
@@ -24,6 +26,11 @@ export const AutoSenhaHomeScreen: React.FC<AutoSenhaHomeScreenProps> = ({
     currentUser?.permissions?.includes('parent_autosenha') ||
     currentUser?.permissions?.includes('sub_autosenha_dashboard') ||
     currentUser?.permissions?.includes('parent_admin');
+
+  const canAccessPacientes = isGestorOrAdmin ||
+    currentUser?.permissions?.includes('sub_autosenha_pacientes') ||
+    currentUser?.permissions?.includes('sub_regulacao_pacientes') ||
+    currentUser?.permissions?.includes('sub_farmacia_pacientes');
 
   const canAccessPSF1 = isGestorOrAdmin ||
     currentUser?.permissions?.includes('sub_autosenha_psf1_controle') ||
@@ -66,23 +73,23 @@ export const AutoSenhaHomeScreen: React.FC<AutoSenhaHomeScreenProps> = ({
         </div>
       </header>
 
-      {/* ÁREA DOS 4 CARDS PRINCIPAIS */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-10 w-full flex-1 flex flex-col justify-center">
+      {/* ÁREA DOS CARDS PRINCIPAIS */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-10 w-full flex-1 flex flex-col justify-center">
         <div className="text-center mb-10">
           <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-            Selecione a Unidade de Atendimento
+            Selecione a Unidade de Atendimento ou Gestão
           </h2>
-          <p className="text-sm text-slate-500 mt-2 max-w-lg mx-auto">
-            Cada posto funciona de forma autônoma e independente. A Administração Municipal possui visão gerencial consolidada.
+          <p className="text-sm text-slate-500 mt-2 max-w-xl mx-auto">
+            Cada posto funciona de forma autônoma e independente. A Central Única de Pacientes integra o histórico de atendimentos e a Administração Municipal possui visão consolidada.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
           {/* CARD 1: DASHBOARD ADMINISTRATIVO */}
           {isGestorOrAdmin && (
             <div
               onClick={onNavigateDashboard}
-              className="group relative bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 text-white rounded-3xl p-6 shadow-xl hover:shadow-2xl border border-white/10 transition-all duration-300 cursor-pointer flex flex-col justify-between hover:-translate-y-1.5"
+              className="group relative bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 text-white rounded-3xl p-5 sm:p-6 shadow-xl hover:shadow-2xl border border-white/10 transition-all duration-300 cursor-pointer flex flex-col justify-between hover:-translate-y-1.5"
             >
               <div>
                 <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white flex items-center justify-center mb-5 shadow-lg shadow-purple-500/25 group-hover:scale-110 transition-transform">
@@ -91,16 +98,44 @@ export const AutoSenhaHomeScreen: React.FC<AutoSenhaHomeScreenProps> = ({
                 <span className="text-[10px] font-black uppercase tracking-widest text-purple-300 block mb-1">
                   Gestão Consolidada
                 </span>
-                <h3 className="text-xl font-black text-white mb-2">
+                <h3 className="text-lg sm:text-xl font-black text-white mb-2">
                   Dashboard
                 </h3>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  Monitoramento executivo das três unidades em tempo real, capacidade de atendimento, ritmo e relatórios.
+                  Monitoramento executivo das três unidades em tempo real, capacidade de atendimento e relatórios.
                 </p>
               </div>
 
               <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-between text-xs font-black text-purple-300 uppercase tracking-wider">
                 <span>Acessar Central</span>
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
+              </div>
+            </div>
+          )}
+
+          {/* CARD 2: CENTRAL INTEGRADA DE PACIENTES */}
+          {canAccessPacientes && (
+            <div
+              onClick={onNavigatePacientes}
+              className="group relative bg-white border border-slate-200/90 rounded-3xl p-5 sm:p-6 shadow-xs hover:shadow-xl hover:border-sky-500/50 transition-all duration-300 cursor-pointer flex flex-col justify-between hover:-translate-y-1.5"
+            >
+              <div>
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-500 to-blue-600 text-white flex items-center justify-center mb-5 shadow-md shadow-sky-500/25 group-hover:scale-110 transition-transform">
+                  <Users className="w-6 h-6" />
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-sky-700 block mb-1">
+                  Central Integrada
+                </span>
+                <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-2">
+                  Pacientes
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Localizar paciente, novo cadastro oficial e dashboard com histórico consolidado de atendimentos.
+                </p>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs font-black text-sky-700 uppercase tracking-wider">
+                <span>Abrir Pacientes</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
               </div>
             </div>

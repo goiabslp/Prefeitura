@@ -5,6 +5,7 @@ import { AutoSenhaPostoScreen } from './AutoSenhaPostoScreen';
 import { AutoSenhaControleScreen } from './AutoSenhaControleScreen';
 import { SenhaTVScreen } from './SenhaTVScreen';
 import { AutoSenhaDashboardScreen } from './AutoSenhaDashboardScreen';
+import { PacientesHubScreen } from '../consultas/pacientes/PacientesHubScreen';
 
 interface AutoSenhaModuleProps {
   currentView: string;
@@ -23,6 +24,7 @@ export const AutoSenhaModule: React.FC<AutoSenhaModuleProps> = ({
   // subView pode ser:
   // undefined | 'home' -> /AutoSenha
   // 'dashboard' -> /AutoSenha/Dashboard
+  // 'pacientes' -> /AutoSenha/Pacientes
   // 'psf1' -> /AutoSenha/PSF1
   // 'psf1-controle' -> /AutoSenha/PSF1/Controle
   // 'psf1-senhatv' -> /AutoSenha/PSF1/SenhaTV
@@ -33,7 +35,18 @@ export const AutoSenhaModule: React.FC<AutoSenhaModuleProps> = ({
   // 'upa-controle' -> /AutoSenha/UPA/Controle
   // 'upa-senhatv' -> /AutoSenha/UPA/SenhaTV
 
-  // 1. Dashboard Administrativo Centralizado
+  // 1. Central Integrada de Pacientes (/AutoSenha/Pacientes)
+  if (subView === 'pacientes') {
+    return (
+      <PacientesHubScreen
+        currentUser={currentUser}
+        onBack={() => onNavigate('autosenha')}
+        baseRoute="/AutoSenha/Pacientes"
+      />
+    );
+  }
+
+  // 2. Dashboard Administrativo Centralizado
   if (subView === 'dashboard') {
     return (
       <AutoSenhaDashboardScreen
@@ -121,11 +134,12 @@ export const AutoSenhaModule: React.FC<AutoSenhaModuleProps> = ({
     );
   }
 
-  // 5. Página Inicial do Módulo (/AutoSenha) com os 4 Cards
+  // 5. Página Inicial do Módulo (/AutoSenha) com os Cards Principais
   return (
     <AutoSenhaHomeScreen
       currentUser={currentUser}
       onNavigateDashboard={() => onNavigate('autosenha:dashboard')}
+      onNavigatePacientes={() => onNavigate('autosenha:pacientes')}
       onNavigatePSF1={() => onNavigate('autosenha:psf1')}
       onNavigatePSF2={() => onNavigate('autosenha:psf2')}
       onNavigateUPA={() => onNavigate('autosenha:upa')}

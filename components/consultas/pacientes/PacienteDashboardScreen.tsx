@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { ConsultaPaciente, ConsultaAgendamento, FarmaciaMovimentacao, User } from '../../../types';
+import { ConsultaPaciente, ConsultaAgendamento, FarmaciaMovimentacao, User, AutoSenhaItem } from '../../../types';
 import {
     getSolicitacoesDoPaciente,
     getDispensacoesDoPaciente,
@@ -13,8 +13,10 @@ import {
     calcularDiasEntre
 } from '../../../services/pacienteHistoricoService';
 import * as db from '../../../services/consultasService';
+import { getSenhasDoPaciente } from '../../../services/autoSenhaService';
 import { PacienteSolicitacoesTab } from './PacienteSolicitacoesTab';
 import { PacienteMedicamentosTab } from './PacienteMedicamentosTab';
+import { PacienteAtendimentosTab } from './PacienteAtendimentosTab';
 import { PacienteLinhaDoTempoTab } from './PacienteLinhaDoTempoTab';
 import { PacienteAnaliseTab } from './PacienteAnaliseTab';
 import { PacienteRelatorioModal } from './PacienteRelatorioModal';
@@ -48,7 +50,7 @@ import {
     ChevronUp
 } from 'lucide-react';
 
-export type AbaPaciente = 'visao-geral' | 'solicitacoes' | 'medicamentos' | 'linha-do-tempo' | 'analise';
+export type AbaPaciente = 'visao-geral' | 'solicitacoes' | 'medicamentos' | 'atendimentos' | 'linha-do-tempo' | 'analise';
 
 interface PacienteDashboardScreenProps {
     pacienteId: string;
@@ -65,11 +67,14 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
     initialAba = 'visao-geral',
     baseRoute
 }) => {
-    // Rota base canônica ativa (/FarmaciaPopular/Pacientes ou /Regulacao/Pacientes)
+    // Rota base canônica ativa (/FarmaciaPopular/Pacientes, /Regulacao/Pacientes ou /AutoSenha/Pacientes)
     const resolvedBaseRoute = useMemo(() => {
         if (baseRoute) return baseRoute;
         if (typeof window !== 'undefined') {
             const raw = window.location.pathname.toLowerCase();
+            if (raw.startsWith('/autosenha')) {
+                return '/AutoSenha/Pacientes';
+            }
             if (raw.startsWith('/farmaciapopular')) {
                 return '/FarmaciaPopular/Pacientes';
             }
@@ -80,6 +85,7 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
     const [paciente, setPaciente] = useState<ConsultaPaciente | null>(null);
     const [solicitacoes, setSolicitacoes] = useState<ConsultaAgendamento[]>([]);
     const [medicamentos, setMedicamentos] = useState<FarmaciaMovimentacao[]>([]);
+    const [senhasAutoSenha, setSenhasAutoSenha] = useState<AutoSenhaItem[]>([]);
     const [loading, setLoading] = useState(true);
 
     // Estado da Aba Ativa sincronizada com a URL
@@ -101,12 +107,14 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
             setPaciente(p);
 
             if (p) {
-                const [sols, meds] = await Promise.all([
+                const [sols, meds, senhas] = await Promise.all([
                     getSolicitacoesDoPaciente(p.id),
-                    getDispensacoesDoPaciente(p.cpf, p.name)
+                    getDispensacoesDoPaciente(p.cpf, p.name),
+                    getSenhasDoPaciente(p.id, p.cpf, p.name)
                 ]);
                 setSolicitacoes(sols);
                 setMedicamentos(meds);
+                setSenhasAutoSenha(senhas);
             }
         } catch (err) {
             console.error('[PacienteDashboard] Erro ao carregar dados do paciente:', err);
@@ -120,19 +128,23 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
     }, [carregarDados]);
 
     // Sincronização imediata em tempo real: qualquer alteração de cadastro,
-    // solicitação na regulação ou dispensação de medicamento na farmácia atualiza o dashboard
+    // solicitação na regulação, dispensação de medicamento na farmácia ou atendimento no AutoSenha atualiza o dashboard
     useEffect(() => {
         const handleSync = () => carregarDados();
         window.addEventListener('consultas-pacientes-changed', handleSync);
         window.addEventListener('paciente-alterado', handleSync);
         window.addEventListener('consultas-agendamentos-changed', handleSync);
         window.addEventListener('farmacia-movimentacoes-changed', handleSync);
+        window.addEventListener('autosenha-senhas-changed', handleSync);
+        window.addEventListener('autosenha-status-changed', handleSync);
 
         return () => {
             window.removeEventListener('consultas-pacientes-changed', handleSync);
             window.removeEventListener('paciente-alterado', handleSync);
             window.removeEventListener('consultas-agendamentos-changed', handleSync);
             window.removeEventListener('farmacia-movimentacoes-changed', handleSync);
+            window.removeEventListener('autosenha-senhas-changed', handleSync);
+            window.removeEventListener('autosenha-status-changed', handleSync);
         };
     }, [carregarDados]);
 
@@ -155,6 +167,7 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
             const path = window.location.pathname.toLowerCase();
             if (path.includes('/solicitacoes')) setAbaAtiva('solicitacoes');
             else if (path.includes('/medicamentos')) setAbaAtiva('medicamentos');
+            else if (path.includes('/atendimentos')) setAbaAtiva('atendimentos');
             else if (path.includes('/linha-do-tempo')) setAbaAtiva('linha-do-tempo');
             else if (path.includes('/analise')) setAbaAtiva('analise');
             else setAbaAtiva('visao-geral');
@@ -199,6 +212,23 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
         });
     }, [medicamentos, periodoFiltro]);
 
+    const senhasFiltradasPorPeriodo = useMemo(() => {
+        if (periodoFiltro === 'tudo') return senhasAutoSenha;
+        const agora = Date.now();
+        let limiteMs = 30 * 24 * 60 * 60 * 1000;
+        if (periodoFiltro === 'hoje') limiteMs = 1 * 24 * 60 * 60 * 1000;
+        if (periodoFiltro === '7dias') limiteMs = 7 * 24 * 60 * 60 * 1000;
+        if (periodoFiltro === '90dias') limiteMs = 90 * 24 * 60 * 60 * 1000;
+        if (periodoFiltro === '1ano') limiteMs = 365 * 24 * 60 * 60 * 1000;
+
+        return senhasAutoSenha.filter(s => {
+            const dt = s.created_at;
+            if (!dt) return false;
+            const t = new Date(dt).getTime();
+            return !isNaN(t) && (agora - t) <= limiteMs;
+        });
+    }, [senhasAutoSenha, periodoFiltro]);
+
     // Indicadores consolidados
     const indicadores: IndicadoresPaciente = useMemo(() => {
         return calcularIndicadoresConsolidados(solicitacoesFiltradasPorPeriodo, medicamentosFiltradosPorPeriodo);
@@ -206,8 +236,8 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
 
     // Linha do Tempo
     const linhaDoTempo: ItemLinhaDoTempo[] = useMemo(() => {
-        return construirLinhaDoTempo(solicitacoesFiltradasPorPeriodo, medicamentosFiltradosPorPeriodo);
-    }, [solicitacoesFiltradasPorPeriodo, medicamentosFiltradosPorPeriodo]);
+        return construirLinhaDoTempo(solicitacoesFiltradasPorPeriodo, medicamentosFiltradosPorPeriodo, senhasFiltradasPorPeriodo);
+    }, [solicitacoesFiltradasPorPeriodo, medicamentosFiltradosPorPeriodo, senhasFiltradasPorPeriodo]);
 
     // Alertas do Gestor
     const alertas: AlertaGestor[] = useMemo(() => {
@@ -364,7 +394,8 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
                         { key: 'visao-geral', label: 'Visão Geral', icon: Layers },
                         { key: 'solicitacoes', label: `Solicitações (${indicadores.totalSolicitacoes})`, icon: Clock },
                         { key: 'medicamentos', label: `Medicamentos (${indicadores.totalRetiradasMedicamentos})`, icon: Pill },
-                        { key: 'linha-do-tempo', label: 'Linha do Tempo', icon: Activity },
+                        { key: 'atendimentos', label: `Atendimentos (${senhasFiltradasPorPeriodo.length})`, icon: Activity },
+                        { key: 'linha-do-tempo', label: 'Linha do Tempo', icon: Calendar },
                         { key: 'analise', label: 'Análise', icon: BarChart2 }
                     ].map(tab => {
                         const Icon = tab.icon;
@@ -655,6 +686,14 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
                     </div>
                 )}
 
+                {abaAtiva === 'atendimentos' && (
+                    <div className="animate-in fade-in duration-150">
+                        <PacienteAtendimentosTab
+                            senhas={senhasFiltradasPorPeriodo}
+                        />
+                    </div>
+                )}
+
                 {abaAtiva === 'linha-do-tempo' && (
                     <div className="animate-in fade-in duration-150">
                         <PacienteLinhaDoTempoTab
@@ -683,6 +722,7 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
                     paciente={paciente}
                     solicitacoes={solicitacoes}
                     medicamentos={medicamentos}
+                    senhasAutoSenha={senhasFiltradasPorPeriodo}
                     indicadores={indicadores}
                     linhaDoTempo={linhaDoTempo}
                     currentUser={currentUser}

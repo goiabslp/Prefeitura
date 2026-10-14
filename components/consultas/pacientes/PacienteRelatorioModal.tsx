@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { ConsultaPaciente, ConsultaAgendamento, FarmaciaMovimentacao, User } from '../../../types';
+import { ConsultaPaciente, ConsultaAgendamento, FarmaciaMovimentacao, User, AutoSenhaItem } from '../../../types';
 import { IndicadoresPaciente, IndicadorTempoEspera, calcularIndicadorTempoEspera, ItemLinhaDoTempo } from '../../../services/pacienteHistoricoService';
 import { auditLogService } from '../../../services/auditLogService';
 import { X, FileText, CheckCircle, Download, Loader2, Calendar, CheckSquare, Square, Shield } from 'lucide-react';
@@ -12,6 +12,7 @@ interface PacienteRelatorioModalProps {
     paciente: ConsultaPaciente;
     solicitacoes: ConsultaAgendamento[];
     medicamentos: FarmaciaMovimentacao[];
+    senhasAutoSenha?: AutoSenhaItem[];
     indicadores: IndicadoresPaciente;
     linhaDoTempo: ItemLinhaDoTempo[];
     currentUser?: User | null;
@@ -23,6 +24,7 @@ export const PacienteRelatorioModal: React.FC<PacienteRelatorioModalProps> = ({
     paciente,
     solicitacoes,
     medicamentos,
+    senhasAutoSenha = [],
     indicadores,
     linhaDoTempo,
     currentUser
@@ -32,6 +34,7 @@ export const PacienteRelatorioModal: React.FC<PacienteRelatorioModalProps> = ({
     const [incluirIndicadores, setIncluirIndicadores] = useState(true);
     const [incluirSolicitacoes, setIncluirSolicitacoes] = useState(true);
     const [incluirMedicamentos, setIncluirMedicamentos] = useState(true);
+    const [incluirAtendimentosAutoSenha, setIncluirAtendimentosAutoSenha] = useState(true);
     const [incluirLinhaDoTempo, setIncluirLinhaDoTempo] = useState(true);
     const [incluirAlertas, setIncluirAlertas] = useState(true);
 
@@ -279,6 +282,77 @@ export const PacienteRelatorioModal: React.FC<PacienteRelatorioModalProps> = ({
                 }
             }
 
+            setProgress(90);
+
+            // 5. Histórico de Atendimentos — UPA, PSF 1 e PSF 2 (AutoSenha)
+            if (incluirAtendimentosAutoSenha && senhasAutoSenha && senhasAutoSenha.length > 0) {
+                if (currentY > 660) { doc.addPage(); currentY = 40; }
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(10);
+                doc.setTextColor(225, 29, 72);
+                doc.text('5. HISTÓRICO DE ATENDIMENTOS — UPA, PSF 1 E PSF 2 (AUTOSENHA)', 40, currentY);
+                currentY += 8;
+
+                const filteredSenhas = filtrarPorPeriodo(senhasAutoSenha, s => s.created_at);
+
+                if (filteredSenhas.length === 0) {
+                    doc.setFont('helvetica', 'italic');
+                    doc.setFontSize(8);
+                    doc.setTextColor(148, 163, 184);
+                    doc.text('Nenhum atendimento presencial no período selecionado.', 40, currentY + 10);
+                    currentY += 25;
+                } else {
+                    const rows = filteredSenhas.map(s => {
+                        const dataStr = s.created_at ? new Date(s.created_at).toLocaleDateString('pt-BR') : '-';
+                        const horaEmissao = s.created_at ? new Date(s.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-';
+                        const horaChamada = s.called_at ? new Date(s.called_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-';
+                        const horaConclusao = s.completed_at ? new Date(s.completed_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-';
+                        const esperaMin = s.wait_time_first_call_seconds ? `${Math.round(s.wait_time_first_call_seconds / 60)} min` : '-';
+                        const duracaoMin = s.service_time_seconds ? `${Math.round(s.service_time_seconds / 60)} min` : '-';
+                        const unidade = s.unidade_id === 'upa' ? 'UPA' : s.unidade_id === 'psf1' ? 'PSF 1' : 'PSF 2';
+                        const prioridade = s.prioridade_categoria || s.prioridade_tipo || 'Geral';
+                        const situacao = s.status === 'completed' ? 'Concluído' : s.status === 'no_show' ? 'Não Compareceu' : s.status === 'cancelled' ? 'Cancelado' : s.status;
+
+                        return [
+                            dataStr,
+                            unidade,
+                            s.numero,
+                            prioridade,
+                            horaEmissao,
+                            horaChamada,
+                            horaConclusao,
+                            esperaMin,
+                            duracaoMin,
+                            situacao
+                        ];
+                    });
+
+                    autoTable(doc, {
+                        startY: currentY,
+                        head: [['Data', 'Unidade', 'Senha', 'Prioridade', 'Emissão', 'Chamada', 'Conclusão', 'Espera', 'Duração', 'Situação']],
+                        body: rows,
+                        theme: 'striped',
+                        headStyles: { fillColor: [225, 29, 72], textColor: 255, fontSize: 7.5, fontStyle: 'bold' },
+                        styles: { fontSize: 7, cellPadding: 2.5, font: 'helvetica' },
+                        columnStyles: {
+                            0: { cellWidth: 48, halign: 'center' },
+                            1: { cellWidth: 42, halign: 'center' },
+                            2: { cellWidth: 42, halign: 'center' },
+                            3: { cellWidth: 60 },
+                            4: { cellWidth: 42, halign: 'center' },
+                            5: { cellWidth: 42, halign: 'center' },
+                            6: { cellWidth: 46, halign: 'center' },
+                            7: { cellWidth: 42, halign: 'center' },
+                            8: { cellWidth: 42, halign: 'center' },
+                            9: { cellWidth: 62 }
+                        },
+                        margin: { left: 40, right: 40 }
+                    });
+
+                    currentY = (doc as any).lastAutoTable.finalY + 18;
+                }
+            }
+
             setProgress(95);
 
             // 6. Linha do Tempo Unificada
@@ -287,7 +361,7 @@ export const PacienteRelatorioModal: React.FC<PacienteRelatorioModalProps> = ({
                 doc.setFont('helvetica', 'bold');
                 doc.setFontSize(10);
                 doc.setTextColor(14, 116, 144);
-                doc.text('5. LINHA DO TEMPO CRONOLÓGICA DE MOVIMENTAÇÕES', 40, currentY);
+                doc.text('6. LINHA DO TEMPO CRONOLÓGICA DE MOVIMENTAÇÕES', 40, currentY);
                 currentY += 8;
 
                 const filteredTimeline = filtrarPorPeriodo(linhaDoTempo, l => l.dataHora);
@@ -462,6 +536,7 @@ export const PacienteRelatorioModal: React.FC<PacienteRelatorioModalProps> = ({
                                 { label: 'Resumo de Indicadores Gerais', state: incluirIndicadores, set: setIncluirIndicadores },
                                 { label: 'Histórico de Solicitações e Procedimentos', state: incluirSolicitacoes, set: setIncluirSolicitacoes },
                                 { label: 'Retiradas de Medicamentos (Farmácia)', state: incluirMedicamentos, set: setIncluirMedicamentos },
+                                { label: 'Histórico de Atendimentos (UPA, PSF 1 e PSF 2)', state: incluirAtendimentosAutoSenha, set: setIncluirAtendimentosAutoSenha },
                                 { label: 'Linha do Tempo Cronológica', state: incluirLinhaDoTempo, set: setIncluirLinhaDoTempo }
                             ].map((sec, idx) => (
                                 <button

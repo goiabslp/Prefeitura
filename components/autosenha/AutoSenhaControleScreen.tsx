@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   ArrowLeft, PlusCircle, Bell, RotateCcw, Play, CheckCircle2,
   UserX, XCircle, Settings, ShieldAlert, Sparkles, Clock, AlertTriangle,
-  Search, Sliders, Volume2, Tv, Users, Activity, FileText
+  Search, Sliders, Volume2, Tv, Users, Activity, FileText, UserCheck, UserPlus, User as UserIcon
 } from 'lucide-react';
 import {
   AutoSenhaUnidadeId,
@@ -10,7 +10,8 @@ import {
   AutoSenhaPrioridadeCategoria,
   AutoSenhaItem,
   AutoSenhaConfiguracao,
-  User
+  User,
+  ConsultaPaciente
 } from '../../types';
 import {
   AUTOSENHA_UNIDADES,
@@ -29,6 +30,9 @@ import {
   getDataOperacionalHoje,
   inicializarSeedSeVazio
 } from '../../services/autoSenhaService';
+import * as db from '../../services/consultasService';
+import { normalizarNumeros, correspondeSequencialNome } from '../../services/pacienteHistoricoService';
+import { PacienteFormModal } from '../consultas/pacientes/PacienteFormModal';
 import { supabase } from '../../services/supabaseClient';
 
 interface AutoSenhaControleScreenProps {
@@ -53,6 +57,14 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
   const [guicheAtual, setGuicheAtual] = useState('Recepção 1');
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroStatus, setFiltroStatus] = useState<string>('TODOS');
+
+  // Paciente Vinculado para Emissão
+  const [pacienteSelecionado, setPacienteSelecionado] = useState<ConsultaPaciente | null>(null);
+  const [modalLocalizarAberto, setModalLocalizarAberto] = useState(false);
+  const [modalNovoPacienteAberto, setModalNovoPacienteAberto] = useState(false);
+  const [buscaPacienteTermo, setBuscaPacienteTermo] = useState('');
+  const [buscaPacienteLoading, setBuscaPacienteLoading] = useState(false);
+  const [pacientesEncontrados, setPacientesEncontrados] = useState<ConsultaPaciente[]>([]);
 
   // Form de Nova Senha
   const [novoNome, setNovoNome] = useState('');
@@ -111,16 +123,97 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
     };
   }, [unidadeId]);
 
-  // Ação: Gerar Senha
+  // Funções de formatação e busca de pacientes vinculados
+  const mascararCpf = (cpf?: string | null): string => {
+    if (!cpf) return 'Não informado';
+    const limpo = normalizarNumeros(cpf);
+    if (limpo.length === 11) {
+      return `***.${limpo.substring(3, 6)}.${limpo.substring(6, 9)}-**`;
+    }
+    return cpf;
+  };
+
+  const mascararSus = (sus?: string | null): string => {
+    if (!sus) return 'Não informado';
+    const limpo = normalizarNumeros(sus);
+    if (limpo.length >= 10) {
+      return `${limpo.substring(0, 3)}•••••${limpo.substring(limpo.length - 4)}`;
+    }
+    return sus;
+  };
+
+  const calcularIdadeAnos = (nascimentoStr?: string | null): number | null => {
+    if (!nascimentoStr) return null;
+    const nasc = new Date(nascimentoStr);
+    if (isNaN(nasc.getTime())) return null;
+    const hoje = new Date();
+    let anos = hoje.getFullYear() - nasc.getFullYear();
+    const m = hoje.getMonth() - nasc.getMonth();
+    if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) anos--;
+    return Math.max(0, anos);
+  };
+
+  const handleBuscarPacientes = async (termo: string) => {
+    setBuscaPacienteTermo(termo);
+    const t = termo.trim();
+    if (!t) {
+      setPacientesEncontrados([]);
+      return;
+    }
+    setBuscaPacienteLoading(true);
+    try {
+      const todos = await db.getPacientes();
+      const termoNumeros = normalizarNumeros(t);
+      const termoIsNum = termoNumeros.length >= 3;
+
+      const filtrados = todos.filter(p => {
+        if (termoIsNum) {
+          const cpfLimpo = normalizarNumeros(p.cpf);
+          const susLimpo = normalizarNumeros(p.sus_number);
+          if (cpfLimpo === termoNumeros || (termoNumeros.length >= 6 && cpfLimpo.includes(termoNumeros))) return true;
+          if (susLimpo === termoNumeros || (termoNumeros.length >= 6 && susLimpo.includes(termoNumeros))) return true;
+        }
+        return correspondeSequencialNome(p.name, t);
+      });
+
+      setPacientesEncontrados(filtrados.slice(0, 10));
+    } catch (err) {
+      console.error('Erro ao buscar pacientes:', err);
+    } finally {
+      setBuscaPacienteLoading(false);
+    }
+  };
+
+  const handleSelecionarPaciente = (p: ConsultaPaciente) => {
+    setPacienteSelecionado(p);
+    setNovoNome(p.name);
+    setModalLocalizarAberto(false);
+    const idade = calcularIdadeAnos(p.birth_date);
+    if (idade !== null && idade >= 80) {
+      setNovaPrioridade('ESPECIAL');
+      setNovaCategoria('Idoso 80+ (Prioridade Especial)');
+    } else if (idade !== null && idade >= 60) {
+      setNovaPrioridade('PRIORITARIO');
+      setNovaCategoria('Idoso (60 a 79 anos)');
+    }
+  };
+
+  // Ação: Gerar Senha Vinculada ao Paciente
   const handleGerarSenha = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!novoNome.trim()) return;
+    if (!pacienteSelecionado) {
+      setModalLocalizarAberto(true);
+      return;
+    }
 
     setIsGerando(true);
     try {
       const senhaCriada = await gerarSenha({
         unidade_id: unidadeId,
-        cidadao_nome: novoNome.trim(),
+        paciente_id: pacienteSelecionado.id,
+        paciente_cpf: pacienteSelecionado.cpf,
+        paciente_cartao_sus: pacienteSelecionado.sus_number,
+        cidadao_nome: pacienteSelecionado.name,
         prioridade_tipo: novaPrioridade,
         prioridade_categoria: novaCategoria,
         guiche: guicheAtual,
@@ -128,10 +221,11 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
         atendente_nome: currentUser?.name || 'Recepção'
       });
 
+      setPacienteSelecionado(null);
       setNovoNome('');
       setNovaPrioridade('NORMAL');
       setNovaCategoria('Geral');
-      setFeedbackSuccess(`Senha ${senhaCriada.numero} gerada com sucesso!`);
+      setFeedbackSuccess(`Senha ${senhaCriada.numero} gerada com sucesso para ${senhaCriada.cidadao_nome}!`);
       setTimeout(() => setFeedbackSuccess(null), 4000);
       await carregarDados();
     } catch (err) {
@@ -361,20 +455,93 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
               </div>
 
               <form onSubmit={handleGerarSenha} className="space-y-4">
-                {/* Nome do Cidadão */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
-                    Nome Completo do Cidadão *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={novoNome}
-                    onChange={(e) => setNovoNome(e.target.value)}
-                    placeholder="Ex: Maria das Graças Silva"
-                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 rounded-2xl px-3.5 py-2.5 text-xs font-bold text-slate-900 transition-all placeholder:text-slate-400"
-                  />
-                </div>
+                {/* Vínculo Obrigatório de Paciente */}
+                {!pacienteSelecionado ? (
+                  <div className="p-4 rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50/50 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black shadow-md shadow-emerald-600/20 shrink-0">
+                        <UserIcon className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-black uppercase text-slate-900 leading-tight">
+                          Paciente Obrigatório
+                        </h3>
+                        <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                          Toda senha deve estar vinculada a um paciente do Cadastro Único.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBuscaPacienteTermo('');
+                          setPacientesEncontrados([]);
+                          setModalLocalizarAberto(true);
+                        }}
+                        className="flex-1 sm:flex-none px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Search className="w-4 h-4" />
+                        Localizar Paciente
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setModalNovoPacienteAberto(true)}
+                        className="px-3 py-2.5 bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100/60 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <PlusCircle className="w-4 h-4 text-emerald-600" />
+                        Novo
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200/90 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black shadow-md shadow-emerald-600/20 shrink-0">
+                        <UserCheck className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black uppercase text-slate-900 truncate">
+                            {pacienteSelecionado.name}
+                          </span>
+                          {pacienteSelecionado.nickname && (
+                            <span className="text-[9px] text-emerald-700 font-bold px-1.5 py-0.2 rounded bg-emerald-100 shrink-0">
+                              "{pacienteSelecionado.nickname}"
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-600 font-medium mt-0.5">
+                          <span>CPF: {mascararCpf(pacienteSelecionado.cpf)}</span>
+                          <span>•</span>
+                          <span>SUS: {mascararSus(pacienteSelecionado.sus_number)}</span>
+                          {calcularIdadeAnos(pacienteSelecionado.birth_date) !== null && (
+                            <>
+                              <span>•</span>
+                              <strong className="text-emerald-800 font-black">
+                                {calcularIdadeAnos(pacienteSelecionado.birth_date)} anos
+                              </strong>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPacienteSelecionado(null);
+                        setBuscaPacienteTermo('');
+                        setPacientesEncontrados([]);
+                        setModalLocalizarAberto(true);
+                      }}
+                      className="px-3 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-[10px] font-black text-slate-700 uppercase tracking-wider shrink-0 cursor-pointer self-end sm:self-center"
+                    >
+                      Trocar Paciente
+                    </button>
+                  </div>
+                )}
 
                 {/* Seleção de Prioridade Legal */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -471,11 +638,15 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
                 <div className="pt-2">
                   <button
                     type="submit"
-                    disabled={isGerando || !novoNome.trim()}
+                    disabled={isGerando || !pacienteSelecionado}
                     className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-md shadow-emerald-600/20 active:scale-95 transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
                   >
                     <PlusCircle className="w-4 h-4" />
-                    {isGerando ? 'Registrando Senha...' : 'Gerar Senha e Inserir na Fila'}
+                    {isGerando
+                      ? 'Registrando Senha...'
+                      : pacienteSelecionado
+                      ? `Gerar Senha para ${pacienteSelecionado.name.split(' ')[0]} e Inserir na Fila`
+                      : 'Localize ou Cadastre um Paciente para Emitir'}
                   </button>
                 </div>
               </form>
@@ -945,6 +1116,190 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
             </div>
           </div>
         </div>
+      {/* MODAL LOCALIZAR PACIENTE */}
+      {modalLocalizarAberto && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-5 sm:p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
+            {/* Cabeçalho */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
+                  <Search className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                    Localizar Paciente
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Pesquise por CPF, Cartão SUS ou Nome Completo.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalLocalizarAberto(false)}
+                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition-colors"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Input de Busca */}
+            <div className="space-y-3 mb-4">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  autoFocus
+                  value={buscaPacienteTermo}
+                  onChange={(e) => handleBuscarPacientes(e.target.value)}
+                  placeholder="Digite CPF (11 dígitos), Cartão SUS ou Nome..."
+                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 rounded-2xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-900 placeholder:text-slate-400 transition-all"
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-slate-500 px-1">
+                <span>Correspondência exata para CPF/SUS e sequencial por nome.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalLocalizarAberto(false);
+                    setModalNovoPacienteAberto(true);
+                  }}
+                  className="text-emerald-700 hover:text-emerald-900 font-black uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  + Cadastrar Novo Paciente
+                </button>
+              </div>
+            </div>
+
+            {/* Lista de Resultados */}
+            <div className="flex-1 overflow-y-auto no-scrollbar space-y-2 min-h-[220px]">
+              {buscaPacienteLoading && (
+                <div className="py-12 text-center text-xs text-slate-400 font-bold">
+                  Buscando na base oficial de pacientes...
+                </div>
+              )}
+
+              {!buscaPacienteLoading && pacientesEncontrados.length > 0 && (
+                pacientesEncontrados.map((p) => {
+                  const idade = calcularIdadeAnos(p.birth_date);
+                  return (
+                    <div
+                      key={p.id}
+                      className="p-3 rounded-2xl border border-slate-200/90 hover:border-emerald-500/80 hover:bg-emerald-50/30 transition-all flex items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <strong className="text-xs font-black text-slate-900 uppercase truncate">
+                            {p.name}
+                          </strong>
+                          {p.nickname && (
+                            <span className="text-[9px] text-slate-500 font-bold px-1.5 py-0.2 rounded bg-slate-100 truncate">
+                              "{p.nickname}"
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-500 mt-1">
+                          <span>CPF: {mascararCpf(p.cpf)}</span>
+                          <span>•</span>
+                          <span>SUS: {mascararSus(p.sus_number)}</span>
+                          {idade !== null && (
+                            <>
+                              <span>•</span>
+                              <span className="font-bold text-slate-700">{idade} anos</span>
+                              {idade >= 80 && (
+                                <span className="text-[9px] bg-amber-100 text-amber-800 font-black px-1.5 py-0.2 rounded">
+                                  80+ Especial
+                                </span>
+                              )}
+                              {idade >= 60 && idade < 80 && (
+                                <span className="text-[9px] bg-emerald-100 text-emerald-800 font-black px-1.5 py-0.2 rounded">
+                                  60+ Prioritário
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSelecionarPaciente(p)}
+                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shrink-0 shadow-sm cursor-pointer"
+                      >
+                        Selecionar
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+
+              {!buscaPacienteLoading && buscaPacienteTermo.trim() && pacientesEncontrados.length === 0 && (
+                <div className="py-10 text-center space-y-2">
+                  <p className="text-xs font-bold text-slate-600">
+                    Nenhum paciente localizado com o termo informado.
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    Cadastre o cidadão no Cadastro Único sem sair da tela.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalLocalizarAberto(false);
+                      setModalNovoPacienteAberto(true);
+                    }}
+                    className="mt-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-emerald-700 cursor-pointer shadow-sm inline-flex items-center gap-1.5"
+                  >
+                    <PlusCircle className="w-4 h-4" />
+                    + Cadastrar Novo Paciente Agora
+                  </button>
+                </div>
+              )}
+
+              {!buscaPacienteLoading && !buscaPacienteTermo.trim() && (
+                <div className="py-12 text-center text-xs text-slate-400 font-medium">
+                  Digite para localizar pelo CPF, Cartão SUS ou início do nome.
+                </div>
+              )}
+            </div>
+
+            {/* Rodapé */}
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setModalLocalizarAberto(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CADASTRO DE NOVO PACIENTE (INTEGRADO À CENTRAL ÚNICA) */}
+      {modalNovoPacienteAberto && (
+        <PacienteFormModal
+          isOpen={modalNovoPacienteAberto}
+          onClose={() => setModalNovoPacienteAberto(false)}
+          onSuccess={(novoPaciente) => {
+            setPacienteSelecionado(novoPaciente);
+            setModalNovoPacienteAberto(false);
+            setModalLocalizarAberto(false);
+            const idade = calcularIdadeAnos(novoPaciente.birth_date);
+            if (idade !== null && idade >= 80) {
+              setNovaPrioridade('ESPECIAL');
+              setNovaCategoria('Idoso 80+ (Prioridade Especial)');
+            } else if (idade !== null && idade >= 60) {
+              setNovaPrioridade('PRIORITARIO');
+              setNovaCategoria('Idoso (60 a 79 anos)');
+            }
+            setFeedbackSuccess(`Paciente ${novoPaciente.name} cadastrado com sucesso! Prossiga com a emissão da senha.`);
+            setTimeout(() => setFeedbackSuccess(null), 5000);
+          }}
+        />
       )}
     </div>
   );
