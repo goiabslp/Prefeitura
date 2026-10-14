@@ -1539,12 +1539,13 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         fetchGestores();
     }, []);
 
-    // Regra de 2 Níveis: Administradores e Gestores autorizados possuem privilégios executivos exclusivos como Pausar/Retomar e Marcar como Realizado
+    // Regra de 2 Níveis: Administradores e Gestores autorizados possuem privilégios executivos exclusivos como Pausar/Retomar, Marcar como Realizado e Editar Solicitações
     const isAdmin = currentUser.role === 'admin';
     const isGestor = gestorUserIds.includes(currentUser.id) || !!currentUser.permissions?.includes('parent_consultas_gestor') || !!currentUser.permissions?.includes('sub_consultas_gestor');
-    const canPause = isAdmin || isGestor;
+    const isGestorOrAdmin = isAdmin || isGestor;
+    const canPause = isGestorOrAdmin;
     const canCancel = true;
-    const canComplete = isAdmin || isGestor;
+    const canComplete = isGestorOrAdmin;
     const canEdit = true;
     const canDelete = true;
 
@@ -2139,8 +2140,12 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 setBookings(prev => prev.map(b => b.id === updatedBooking.id ? updatedBooking : b));
             }
 
+            // Recalcular e sincronizar posições da fila após atualização
+            await db.recalculateAndPersistQueuePositions();
+
             // Disparar eventos para sincronização em tempo real entre abas e módulos
             window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
             window.dispatchEvent(new CustomEvent('consultas-pacientes-changed'));
 
             setIsEditModalOpen(false);
@@ -3635,9 +3640,9 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                         <Calendar className="w-4 h-4 text-sky-600" />
                                         <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Detalhes do Agendamento</h4>
                                     </div>
-                                    {!isAdmin && (
+                                    {!isGestorOrAdmin && (
                                         <span className="text-[10px] font-extrabold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 flex items-center gap-1">
-                                            <Lock className="w-3 h-3 text-amber-600" /> Edição Restrita a Administradores
+                                            <Lock className="w-3 h-3 text-amber-600" /> Edição Restrita a Gestores e Administradores
                                         </span>
                                     )}
                                 </div>
@@ -3645,12 +3650,12 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="md:col-span-2">
                                         <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
-                                            Exame / Consulta * {!isAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
+                                            Exame / Consulta * {!isGestorOrAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
                                         </label>
                                         <select
                                             value={editProcedimentoId}
                                             onChange={(e) => setEditProcedimentoId(e.target.value)}
-                                            disabled={!isAdmin}
+                                            disabled={!isGestorOrAdmin}
                                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none uppercase disabled:opacity-75 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
                                             required
                                         >
@@ -3667,25 +3672,25 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
 
                                     <div>
                                         <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
-                                            Data de Solicitação {!isAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
+                                            Data de Solicitação {!isGestorOrAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
                                         </label>
                                         <input
                                             type="date"
                                             value={editSolicitationDate}
                                             onChange={(e) => setEditSolicitationDate(e.target.value)}
-                                            disabled={!isAdmin}
+                                            disabled={!isGestorOrAdmin}
                                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none disabled:opacity-75 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
                                         />
                                     </div>
 
                                     <div>
                                         <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
-                                            Prioridade {!isAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
+                                            Prioridade {!isGestorOrAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
                                         </label>
                                         <select
                                             value={editPriority}
                                             onChange={(e) => setEditPriority(e.target.value as 'Normal' | 'Urgência' | 'Especial')}
-                                            disabled={!isAdmin}
+                                            disabled={!isGestorOrAdmin}
                                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none disabled:opacity-75 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
                                         >
                                             <option value="Normal">Normal</option>
@@ -3696,12 +3701,12 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
 
                                     <div>
                                         <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
-                                            Status {!isAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
+                                            Status {!isGestorOrAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
                                         </label>
                                         <select
                                             value={editStatus}
                                             onChange={(e) => setEditStatus(e.target.value as ConsultaAgendamento['status'])}
-                                            disabled={!isAdmin}
+                                            disabled={!isGestorOrAdmin}
                                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none disabled:opacity-75 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
                                         >
                                             <option value="Solicitado">Solicitado</option>
@@ -3717,7 +3722,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
 
                                     <div>
                                         <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
-                                            É Retorno? {!isAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
+                                            É Retorno? {!isGestorOrAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
                                         </label>
                                         <select
                                             value={editIsRetorno ? 'sim' : 'nao'}
@@ -3730,7 +3735,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                     setEditRetornoTipo('1º Retorno');
                                                 }
                                             }}
-                                            disabled={!isAdmin}
+                                            disabled={!isGestorOrAdmin}
                                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none disabled:opacity-75 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
                                         >
                                             <option value="nao">Não (Primeiro Atendimento)</option>
@@ -3742,9 +3747,9 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                         <div>
                                             <div className="flex items-center justify-between mb-1">
                                                 <label className="block text-[10px] font-black uppercase text-teal-700">
-                                                    Etapa de Retorno {!isAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
+                                                    Etapa de Retorno {!isGestorOrAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
                                                 </label>
-                                                {isAdmin && (
+                                                {isGestorOrAdmin && (
                                                     <button
                                                         type="button"
                                                         onClick={() => setEditRetornoTipo('')}
@@ -3760,7 +3765,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                 <select
                                                     value={editRetornoTipo || ''}
                                                     onChange={(e) => setEditRetornoTipo(e.target.value as any)}
-                                                    disabled={!isAdmin}
+                                                    disabled={!isGestorOrAdmin}
                                                     className={`w-full p-3 border rounded-xl text-xs font-black outline-none transition-all disabled:opacity-75 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500 ${
                                                         !editRetornoTipo
                                                             ? 'bg-amber-50/70 border-amber-300 text-amber-900 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20'
@@ -3774,7 +3779,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                     <option value="4º Retorno">4º Retorno</option>
                                                     <option value="5º Retorno">5º Retorno</option>
                                                 </select>
-                                                {editRetornoTipo && isAdmin && (
+                                                {editRetornoTipo && isGestorOrAdmin && (
                                                     <button
                                                         type="button"
                                                         onClick={() => setEditRetornoTipo('')}
@@ -3799,14 +3804,14 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
 
                                     <div>
                                         <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
-                                            Quantidade de Vagas {!isAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
+                                            Quantidade de Vagas {!isGestorOrAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
                                         </label>
                                         <input
                                             type="number"
                                             min={1}
                                             value={editQuantity}
                                             onChange={(e) => setEditQuantity(parseInt(e.target.value) || 1)}
-                                            disabled={!isAdmin}
+                                            disabled={!isGestorOrAdmin}
                                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none disabled:opacity-75 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
                                         />
                                     </div>
