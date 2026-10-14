@@ -303,6 +303,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'admin:fleet:historico': '/Frota/Historico',
   'admin:fleet:relatorios': '/Frota/Relatorios',
   'admin:fleet:configuracoes': '/Frota/Configuracoes',
+  'admin:fleet:multas': '/Frota/Multas',
   'admin:fleet:leve': '/Frota/Leve',
   'admin:fleet:pesada': '/Frota/Pesada',
   'admin:fleet:acessorios': '/Frota/Acessorios',

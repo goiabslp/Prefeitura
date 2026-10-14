@@ -504,6 +504,7 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
       '/Frota/Historico',
       '/Frota/Relatorios',
       '/Frota/Configuracoes',
+      '/Frota/Multas',
       '/Frota/Novo',
       '/Frota/Novo/Geral',
       '/Frota/Novo/Tecnico',

@@ -54,6 +54,9 @@ import {
     FleetSettings 
 } from './FleetSettings';
 import { 
+    FleetFines 
+} from './FleetFines';
+import { 
     VehicleHealthModal, 
     NewMaintenanceModal, 
     NewPartModal,
@@ -73,7 +76,8 @@ import {
     Layers, 
     ArrowLeft, 
     Sparkles, 
-    Loader2 
+    Loader2,
+    ShieldAlert
 } from 'lucide-react';
 import { supabase } from '../../services/supabaseClient';
 
@@ -100,11 +104,13 @@ export type FleetTab =
     | 'fornecedores' 
     | 'historico' 
     | 'relatorios' 
-    | 'configuracoes';
+    | 'configuracoes'
+    | 'multas';
 
 const TABS: Array<{ id: FleetTab; label: string; icon: any; path: string }> = [
     { id: 'dashboard', label: 'Dashboard & Saúde', icon: LayoutDashboard, path: '/Frota' },
     { id: 'veiculos', label: 'Veículos', icon: Car, path: '/Frota/Veiculos' },
+    { id: 'multas', label: 'Multas', icon: ShieldAlert, path: '/Frota/Multas' },
     { id: 'manutencoes', label: 'Manutenções', icon: Wrench, path: '/Frota/Manutencoes' },
     { id: 'pecas', label: 'Peças', icon: Package, path: '/Frota/Pecas' },
     { id: 'estoque', label: 'Estoque', icon: Layers, path: '/Frota/Estoque' },
@@ -262,6 +268,7 @@ export const FleetModule: React.FC<FleetModuleProps> = ({
         }
 
         if (path === '/frota/veiculos') setCurrentTab('veiculos');
+        else if (path === '/frota/multas') setCurrentTab('multas');
         else if (path === '/frota/manutencoes') setCurrentTab('manutencoes');
         else if (path === '/frota/pecas') setCurrentTab('pecas');
         else if (path === '/frota/estoque') setCurrentTab('estoque');
@@ -563,6 +570,15 @@ export const FleetModule: React.FC<FleetModuleProps> = ({
                 {currentTab === 'configuracoes' && (
                     <FleetSettings
                         onSettingsSaved={() => loadAllFleetData()}
+                    />
+                )}
+
+                {currentTab === 'multas' && (
+                    <FleetFines
+                        vehicles={vehicles}
+                        sectors={sectors}
+                        persons={persons}
+                        onNavigate={handleNavigate}
                     />
                 )}
             </div>
