@@ -45,27 +45,27 @@ export const AutoSenhaHomeScreen: React.FC<AutoSenhaHomeScreenProps> = ({
     currentUser?.permissions?.includes('sub_autosenha_upa_senhatv');
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col pb-16">
-      {/* CABEÇALHO */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+    <div className="h-[calc(100vh-68px)] max-h-[calc(100vh-68px)] bg-slate-50 text-slate-800 flex flex-col justify-between overflow-hidden">
+      {/* CABEÇALHO COMPACTO E ELEGANTE */}
+      <header className="bg-white border-b border-slate-200 shrink-0 z-20 shadow-2xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={onBack}
-              className="p-2 rounded-xl hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
+              className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
               title="Voltar à Página Inicial"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
                   SAÚDE MUNICIPAL
                 </span>
                 <span className="text-xs text-slate-400 font-semibold">São José do Goiabal — MG</span>
               </div>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight leading-tight">
                 AutoSenha — Gestão de Filas & Senhas
               </h1>
             </div>
@@ -73,40 +73,40 @@ export const AutoSenhaHomeScreen: React.FC<AutoSenhaHomeScreenProps> = ({
         </div>
       </header>
 
-      {/* ÁREA DOS CARDS PRINCIPAIS */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-10 w-full flex-1 flex flex-col justify-center">
-        <div className="text-center mb-10">
-          <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+      {/* ÁREA CENTRALIZADA DOS 5 CARDS PRINCIPAIS */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 w-full flex-1 flex flex-col justify-center items-center min-h-0 overflow-y-auto lg:overflow-hidden">
+        <div className="text-center mb-4 sm:mb-6 shrink-0">
+          <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 tracking-tight">
             Selecione a Unidade de Atendimento ou Gestão
           </h2>
-          <p className="text-sm text-slate-500 mt-2 max-w-xl mx-auto">
+          <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-xl mx-auto leading-relaxed">
             Cada posto funciona de forma autônoma e independente. A Central Única de Pacientes integra o histórico de atendimentos e a Administração Municipal possui visão consolidada.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 sm:gap-4 lg:gap-5 w-full items-stretch">
           {/* CARD 1: DASHBOARD ADMINISTRATIVO */}
           {isGestorOrAdmin && (
             <div
               onClick={onNavigateDashboard}
-              className="group relative bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 text-white rounded-3xl p-5 sm:p-6 shadow-xl hover:shadow-2xl border border-white/10 transition-all duration-300 cursor-pointer flex flex-col justify-between hover:-translate-y-1.5"
+              className="group relative bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 text-white rounded-3xl p-5 sm:p-6 shadow-xl hover:shadow-2xl border border-white/10 transition-all duration-300 cursor-pointer flex flex-col justify-between hover:-translate-y-1"
             >
               <div>
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white flex items-center justify-center mb-5 shadow-lg shadow-purple-500/25 group-hover:scale-110 transition-transform">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white flex items-center justify-center mb-4 shadow-lg shadow-purple-500/25 group-hover:scale-110 transition-transform">
                   <LayoutDashboard className="w-6 h-6" />
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-purple-300 block mb-1">
+                <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-purple-300 block mb-0.5">
                   Gestão Consolidada
                 </span>
-                <h3 className="text-lg sm:text-xl font-black text-white mb-2">
+                <h3 className="text-lg sm:text-xl font-black text-white mb-1.5">
                   Dashboard
                 </h3>
-                <p className="text-xs text-slate-300 leading-relaxed">
+                <p className="text-xs text-slate-300 leading-relaxed line-clamp-4">
                   Monitoramento executivo das três unidades em tempo real, capacidade de atendimento e relatórios.
                 </p>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-between text-xs font-black text-purple-300 uppercase tracking-wider">
+              <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs font-black text-purple-300 uppercase tracking-wider">
                 <span>Acessar Central</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
               </div>
@@ -117,108 +117,108 @@ export const AutoSenhaHomeScreen: React.FC<AutoSenhaHomeScreenProps> = ({
           {canAccessPacientes && (
             <div
               onClick={onNavigatePacientes}
-              className="group relative bg-white border border-slate-200/90 rounded-3xl p-5 sm:p-6 shadow-xs hover:shadow-xl hover:border-sky-500/50 transition-all duration-300 cursor-pointer flex flex-col justify-between hover:-translate-y-1.5"
+              className="group relative bg-white border border-slate-200/90 rounded-3xl p-5 sm:p-6 shadow-xs hover:shadow-xl hover:border-sky-500/50 transition-all duration-300 cursor-pointer flex flex-col justify-between hover:-translate-y-1"
             >
               <div>
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-500 to-blue-600 text-white flex items-center justify-center mb-5 shadow-md shadow-sky-500/25 group-hover:scale-110 transition-transform">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-sky-500 to-blue-600 text-white flex items-center justify-center mb-4 shadow-md shadow-sky-500/25 group-hover:scale-110 transition-transform">
                   <Users className="w-6 h-6" />
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-sky-700 block mb-1">
+                <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-sky-700 block mb-0.5">
                   Central Integrada
                 </span>
-                <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-2">
+                <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-1.5">
                   Pacientes
                 </h3>
-                <p className="text-xs text-slate-500 leading-relaxed">
+                <p className="text-xs text-slate-500 leading-relaxed line-clamp-4">
                   Localizar paciente, novo cadastro oficial e dashboard com histórico consolidado de atendimentos.
                 </p>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs font-black text-sky-700 uppercase tracking-wider">
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-black text-sky-700 uppercase tracking-wider">
                 <span>Abrir Pacientes</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
               </div>
             </div>
           )}
 
-          {/* CARD 2: PSF 1 */}
+          {/* CARD 3: PSF 1 */}
           {canAccessPSF1 && (
             <div
               onClick={onNavigatePSF1}
-              className="group relative bg-white border border-slate-200/90 rounded-3xl p-6 shadow-xs hover:shadow-xl hover:border-emerald-500/50 transition-all duration-300 cursor-pointer flex flex-col justify-between hover:-translate-y-1.5"
+              className="group relative bg-white border border-slate-200/90 rounded-3xl p-5 sm:p-6 shadow-xs hover:shadow-xl hover:border-emerald-500/50 transition-all duration-300 cursor-pointer flex flex-col justify-between hover:-translate-y-1"
             >
               <div>
-                <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center mb-5 shadow-md shadow-emerald-500/25 group-hover:scale-110 transition-transform">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center mb-4 shadow-md shadow-emerald-500/25 group-hover:scale-110 transition-transform">
                   <Building2 className="w-6 h-6" />
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700 block mb-1">
+                <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-emerald-700 block mb-0.5">
                   Atenção Primária
                 </span>
-                <h3 className="text-xl font-black text-slate-900 mb-2">
+                <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-1.5">
                   PSF 1
                 </h3>
-                <p className="text-xs text-slate-500 leading-relaxed">
+                <p className="text-xs text-slate-500 leading-relaxed line-clamp-4">
                   Dr. José Maria de Carvalho. Acesso rápido ao Controle da recepção e Senha TV da unidade.
                 </p>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs font-black text-emerald-700 uppercase tracking-wider">
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-black text-emerald-700 uppercase tracking-wider">
                 <span>Abrir PSF 1</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
               </div>
             </div>
           )}
 
-          {/* CARD 3: PSF 2 */}
+          {/* CARD 4: PSF 2 */}
           {canAccessPSF2 && (
             <div
               onClick={onNavigatePSF2}
-              className="group relative bg-white border border-slate-200/90 rounded-3xl p-6 shadow-xs hover:shadow-xl hover:border-emerald-500/50 transition-all duration-300 cursor-pointer flex flex-col justify-between hover:-translate-y-1.5"
+              className="group relative bg-white border border-slate-200/90 rounded-3xl p-5 sm:p-6 shadow-xs hover:shadow-xl hover:border-emerald-500/50 transition-all duration-300 cursor-pointer flex flex-col justify-between hover:-translate-y-1"
             >
               <div>
-                <div className="w-12 h-12 rounded-2xl bg-teal-600 text-white flex items-center justify-center mb-5 shadow-md shadow-teal-600/25 group-hover:scale-110 transition-transform">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-teal-600 text-white flex items-center justify-center mb-4 shadow-md shadow-teal-600/25 group-hover:scale-110 transition-transform">
                   <Building2 className="w-6 h-6" />
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-teal-700 block mb-1">
+                <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-teal-700 block mb-0.5">
                   Atenção Primária
                 </span>
-                <h3 className="text-xl font-black text-slate-900 mb-2">
+                <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-1.5">
                   PSF 2
                 </h3>
-                <p className="text-xs text-slate-500 leading-relaxed">
+                <p className="text-xs text-slate-500 leading-relaxed line-clamp-4">
                   Maria das Graças Silva. Central de emissão, fila de espera e transmissão na televisão.
                 </p>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs font-black text-teal-700 uppercase tracking-wider">
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-black text-teal-700 uppercase tracking-wider">
                 <span>Abrir PSF 2</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
               </div>
             </div>
           )}
 
-          {/* CARD 4: UPA */}
+          {/* CARD 5: UPA */}
           {canAccessUPA && (
             <div
               onClick={onNavigateUPA}
-              className="group relative bg-white border border-slate-200/90 rounded-3xl p-6 shadow-xs hover:shadow-xl hover:border-rose-500/50 transition-all duration-300 cursor-pointer flex flex-col justify-between hover:-translate-y-1.5"
+              className="group relative bg-white border border-slate-200/90 rounded-3xl p-5 sm:p-6 shadow-xs hover:shadow-xl hover:border-rose-500/50 transition-all duration-300 cursor-pointer flex flex-col justify-between hover:-translate-y-1"
             >
               <div>
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 text-white flex items-center justify-center mb-5 shadow-md shadow-rose-500/25 group-hover:scale-110 transition-transform">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 text-white flex items-center justify-center mb-4 shadow-md shadow-rose-500/25 group-hover:scale-110 transition-transform">
                   <Activity className="w-6 h-6" />
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-rose-700 block mb-1">
+                <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-rose-700 block mb-0.5">
                   Pronto Atendimento
                 </span>
-                <h3 className="text-xl font-black text-slate-900 mb-2">
+                <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-1.5">
                   UPA
                 </h3>
-                <p className="text-xs text-slate-500 leading-relaxed">
+                <p className="text-xs text-slate-500 leading-relaxed line-clamp-4">
                   Recepção Administrativa da UPA e alerta de encaminhamento imediato para avaliação clínica presencial.
                 </p>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs font-black text-rose-700 uppercase tracking-wider">
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-black text-rose-700 uppercase tracking-wider">
                 <span>Abrir UPA</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
               </div>

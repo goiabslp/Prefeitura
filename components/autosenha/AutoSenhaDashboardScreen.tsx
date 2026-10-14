@@ -31,6 +31,7 @@ export const AutoSenhaDashboardScreen: React.FC<AutoSenhaDashboardScreenProps> =
   onNavigateUnidade,
   onBack
 }) => {
+  const [abaAtiva, setAbaAtiva] = useState<'operacional' | 'capacidade' | 'auditoria'>('operacional');
   const [periodoFiltro, setPeriodoFiltro] = useState<number>(0); // 0 = Hoje, 1 = Ontem, 7 = 7d, 30 = 30d
   const [unidadeFiltro, setUnidadeFiltro] = useState<string>('TODAS');
   const [isLoading, setIsLoading] = useState(true);
@@ -191,16 +192,17 @@ export const AutoSenhaDashboardScreen: React.FC<AutoSenhaDashboardScreenProps> =
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col pb-20">
-      {/* CABEÇALHO */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs print:hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+    <div className="h-[calc(100vh-68px)] max-h-[calc(100vh-68px)] bg-slate-50 text-slate-800 flex flex-col overflow-hidden">
+      {/* CABEÇALHO COMPACTO E RESPONSIVO */}
+      <header className="bg-white border-b border-slate-200 shrink-0 z-20 shadow-2xs print:hidden">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3">
+          {/* Lado Esquerdo: Voltar e Título */}
           <div className="flex items-center gap-3">
             {onBack && (
               <button
                 type="button"
                 onClick={onBack}
-                className="p-2 rounded-xl hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
+                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
                 title="Voltar ao AutoSenha"
               >
                 <ArrowLeft className="w-5 h-5" />
@@ -208,20 +210,67 @@ export const AutoSenhaDashboardScreen: React.FC<AutoSenhaDashboardScreenProps> =
             )}
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-purple-100 text-purple-900">
+                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-purple-100 text-purple-900">
                   ADMINISTRAÇÃO MUNICIPAL
                 </span>
-                <span className="text-xs text-slate-400 font-semibold">São José do Goiabal — MG</span>
+                <span className="text-xs text-slate-400 font-semibold hidden sm:inline">São José do Goiabal — MG</span>
               </div>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                Dashboard Central de Gestão de Filas & Senhas
+              <h1 className="text-base sm:text-lg lg:text-xl font-black text-slate-900 tracking-tight leading-tight">
+                Dashboard Central de Filas & Senhas
               </h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Filtro de Período */}
-            <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+          {/* Centro: Abas de Visualização */}
+          <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setAbaAtiva('operacional')}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                abaAtiva === 'operacional'
+                  ? 'bg-white text-slate-900 shadow-xs font-black'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Visão Operacional</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setAbaAtiva('capacidade')}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                abaAtiva === 'capacidade'
+                  ? 'bg-white text-slate-900 shadow-xs font-black'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5 text-sky-600" />
+              <span>Capacidade & Ritmo</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setAbaAtiva('auditoria')}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                abaAtiva === 'auditoria'
+                  ? 'bg-white text-slate-900 shadow-xs font-black'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5 text-purple-600" />
+              <span>Alertas & Auditoria</span>
+              {alertasOperacionais.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-rose-500 text-white">
+                  {alertasOperacionais.length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Lado Direito: Filtro de Período e Relatório */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs">
               <Calendar className="w-3.5 h-3.5 text-slate-500" />
               <select
                 value={periodoFiltro}
@@ -235,14 +284,13 @@ export const AutoSenhaDashboardScreen: React.FC<AutoSenhaDashboardScreenProps> =
               </select>
             </div>
 
-            {/* Botão Gerar Relatório PDF */}
             <button
               type="button"
               onClick={handleGerarRelatorioPDF}
-              className="px-3.5 py-2 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md shadow-sky-600/20 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+              className="px-3 py-1.5 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
             >
-              <FileDown className="w-4 h-4" />
-              <span>Gerar Relatório</span>
+              <FileDown className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Gerar Relatório</span>
             </button>
           </div>
         </div>
