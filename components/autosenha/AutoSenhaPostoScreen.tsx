@@ -33,12 +33,12 @@ export const AutoSenhaPostoScreen: React.FC<AutoSenhaPostoScreenProps> = ({
         <span className="text-[10px] uppercase tracking-widest font-extrabold group-hover:text-emerald-700">Voltar</span>
       </button>
 
-      {/* Estrutura Padronizada Centralizada do Sistema */}
-      <div className="w-full h-full flex-1 flex flex-col relative animate-fade-in z-0 overflow-y-auto lg:overflow-hidden bg-[#FAFAFA] justify-center items-center p-4 md:p-6 min-h-[calc(100vh-68px)]">
-        <div className="w-full my-auto flex flex-col items-center justify-center max-w-4xl py-4 md:py-6">
+      {/* Estrutura Padronizada Centralizada do Sistema (100% Viewport) */}
+      <div className="w-full h-full flex-1 min-w-0 flex flex-col relative animate-fade-in z-0 overflow-y-auto lg:overflow-hidden bg-[#FAFAFA] justify-center items-center p-3 sm:p-5 lg:p-6">
+        <div className="w-full my-auto flex flex-col items-center justify-center max-w-4xl py-2 sm:py-4">
           {/* Cabeçalho Oficial do Posto */}
-          <div className="flex flex-col items-center mb-6 md:mb-8 shrink-0 text-center animation-delay-100 animate-in fade-in slide-in-from-bottom-3 duration-500">
-            <div className="p-3 md:p-3.5 rounded-2xl bg-gradient-to-br from-emerald-50 to-emerald-100/50 mb-2.5 shadow-xs ring-4 ring-white/60">
+          <div className="flex flex-col items-center mb-5 md:mb-7 shrink-0 text-center animation-delay-100 animate-in fade-in slide-in-from-bottom-3 duration-500">
+            <div className="p-3 md:p-3.5 rounded-2xl bg-gradient-to-br from-emerald-50 to-emerald-100/50 mb-2 shadow-xs ring-4 ring-white/60">
               <Building2 className="w-8 h-8 md:w-9 md:h-9 text-emerald-600 drop-shadow-sm" />
             </div>
             <h1 className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800 tracking-tight text-center drop-shadow-sm uppercase">
@@ -50,7 +50,7 @@ export const AutoSenhaPostoScreen: React.FC<AutoSenhaPostoScreenProps> = ({
           </div>
 
           {/* Grade de 2 Cards: Recepção/Controle e Painel Senha TV */}
-          <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 max-w-2xl mx-auto items-stretch animate-in zoom-in duration-500 fill-mode-backwards p-1">
+          <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 max-w-3xl mx-auto items-stretch animate-in zoom-in duration-500 fill-mode-backwards p-1">
             {/* CARD 1: CONTROLE */}
             <button
               type="button"

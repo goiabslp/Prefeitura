@@ -28,12 +28,14 @@ import {
   solicitarAvaliacaoImediataUPA,
   formatarDuracaoSegundos,
   getDataOperacionalHoje,
-  inicializarSeedSeVazio
+  inicializarSeedSeVazio,
+  zerarTodosDadosAutoSenha
 } from '../../services/autoSenhaService';
 import * as db from '../../services/consultasService';
 import { normalizarNumeros, correspondeSequencialNome } from '../../services/pacienteHistoricoService';
 import { PacienteFormModal } from '../consultas/pacientes/PacienteFormModal';
 import { supabase } from '../../services/supabaseClient';
+import { Trash2 } from 'lucide-react';
 
 interface AutoSenhaControleScreenProps {
   unidadeId: AutoSenhaUnidadeId;
@@ -113,6 +115,7 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
       .on('broadcast', { event: 'atendimento_concluido' }, () => carregarDados())
       .on('broadcast', { event: 'senha_cancelada' }, () => carregarDados())
       .on('broadcast', { event: 'nao_compareceu' }, () => carregarDados())
+      .on('broadcast', { event: 'dados_zerados' }, () => carregarDados())
       .subscribe();
 
     const interval = setInterval(carregarDados, 10000);
@@ -334,40 +337,40 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
   }, [senhas]);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col pb-16">
-      {/* CABEÇALHO */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+    <div className="w-full flex-1 min-w-0 h-full max-h-full bg-slate-50 text-slate-800 flex flex-col overflow-hidden">
+      {/* CABEÇALHO (100% VIEWPORT LARGURA TOTAL) */}
+      <header className="bg-white border-b border-slate-200 shrink-0 z-20 shadow-2xs w-full">
+        <div className="w-full px-3 sm:px-4 lg:px-6 py-2 flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5">
             {onBack && (
               <button
                 type="button"
                 onClick={onBack}
-                className="p-2 rounded-xl hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
-                title="Voltar"
+                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
+                title="Voltar ao Posto"
               >
-                <ArrowLeft className="w-5 h-5" />
+                <ArrowLeft className="w-4 h-4" />
               </button>
             )}
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
                   {unidade.sigla} — CONTROLE OPERACIONAL
                 </span>
                 <span className="text-xs text-slate-400 font-semibold hidden sm:inline">
                   {unidade.tipo === 'UPA' ? 'Recepção Administrativa' : 'Acolhimento & Triagem'}
                 </span>
               </div>
-              <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+              <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight leading-tight">
                 {unidade.nome}
               </h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             {/* Seletor de Guichê */}
-            <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
-              <span className="text-[10px] font-extrabold uppercase text-slate-500">Meu Guichê:</span>
+            <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200">
+              <span className="text-[9px] font-extrabold uppercase text-slate-500">Meu Guichê:</span>
               <input
                 type="text"
                 value={guicheAtual}
@@ -380,7 +383,7 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
             <button
               type="button"
               onClick={() => setModalConfigAberto(true)}
-              className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+              className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
               title="Configurar Prioridades e Alternância"
             >
               <Settings className="w-4 h-4" />
@@ -391,10 +394,10 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
               <button
                 type="button"
                 onClick={onNavigateTV}
-                className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
                 title="Abrir Painel de TV"
               >
-                <Tv className="w-4 h-4 text-emerald-400" />
+                <Tv className="w-3.5 h-3.5 text-emerald-400" />
                 <span className="hidden sm:inline">Senha TV</span>
               </button>
             )}
@@ -402,30 +405,28 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
         </div>
       </header>
 
-      {/* CONTEÚDO PRINCIPAL */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 w-full flex-1 flex flex-col gap-6">
-        {/* BANNER INFORMATIVO ESPECÍFICO DA UPA */}
+      {/* CONTEÚDO PRINCIPAL (100% DO VIEWPORT SEM CORTES) */}
+      <main className="w-full px-3 sm:px-4 lg:px-6 py-2 sm:py-2.5 flex-1 flex flex-col gap-2 overflow-hidden min-h-0">
+        {/* BANNER INFORMATIVO ESPECÍFICO DA UPA COMPACTO */}
         {unidade.tipo === 'UPA' && (
-          <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-amber-500 text-white shrink-0">
-                <AlertTriangle className="w-5 h-5" />
+          <div className="bg-amber-50 border border-amber-200/90 rounded-xl p-1.5 px-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 shadow-2xs shrink-0 text-xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="p-1 rounded-lg bg-amber-500 text-white shrink-0">
+                <AlertTriangle className="w-3 h-3" />
               </div>
-              <div>
-                <h4 className="text-xs font-extrabold text-amber-950 uppercase tracking-wide">
-                  Recepção Administrativa da UPA — Distinção da Triagem Clínica
-                </h4>
-                <p className="text-xs text-amber-900 mt-0.5">
-                  As senhas organizam o atendimento administrativo na recepção. Casos graves devem ser acolhidos presencialmente de imediato.
+              <div className="min-w-0">
+                <p className="text-[11px] text-amber-950 font-bold leading-tight">
+                  <span className="font-black uppercase mr-1">Recepção Administrativa da UPA:</span>
+                  As senhas organizam o atendimento no guichê. Casos graves têm acolhimento presencial imediato.
                 </p>
               </div>
             </div>
             <button
               type="button"
               onClick={() => setModalUpaUrgenciaAberto(true)}
-              className="px-4 py-2 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md shadow-rose-600/20 active:scale-95 transition-all shrink-0 cursor-pointer flex items-center gap-1.5"
+              className="px-2.5 py-1 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-xs active:scale-95 transition-all shrink-0 cursor-pointer flex items-center gap-1"
             >
-              <ShieldAlert className="w-4 h-4" />
+              <ShieldAlert className="w-3 h-3" />
               Solicitar Avaliação Imediata
             </button>
           </div>
@@ -433,46 +434,46 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
 
         {/* FEEDBACK DE AÇÃO */}
         {feedbackSuccess && (
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-sm animate-in fade-in duration-200">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs shrink-0 animate-in fade-in duration-200">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
             <span>{feedbackSuccess}</span>
           </div>
         )}
 
-        {/* GRID SUPERIOR: CADASTRO DE SENHA + AÇÃO PRINCIPAL CHAMAR */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* GRID SUPERIOR: CADASTRO DE SENHA + AÇÃO PRINCIPAL CHAMAR (COMPACTO) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 sm:gap-3 items-stretch shrink-0">
           {/* CARD DE CADASTRO E EMISSÃO DE SENHA (COL 7) */}
-          <section className="lg:col-span-7 bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6 shadow-xs flex flex-col justify-between">
+          <section className="lg:col-span-7 bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-3.5 shadow-xs flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <PlusCircle className="w-4 h-4 text-emerald-600" />
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <PlusCircle className="w-3.5 h-3.5 text-emerald-600" />
                   Emitir Nova Senha
                 </h2>
-                <span className="text-xs font-bold text-slate-400">
+                <span className="text-[10px] font-bold text-slate-400">
                   Data: {getDataOperacionalHoje()}
                 </span>
               </div>
 
-              <form onSubmit={handleGerarSenha} className="space-y-4">
+              <form onSubmit={handleGerarSenha} className="space-y-2">
                 {/* Vínculo Obrigatório de Paciente */}
                 {!pacienteSelecionado ? (
-                  <div className="p-4 rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50/50 flex flex-col sm:flex-row items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black shadow-md shadow-emerald-600/20 shrink-0">
-                        <UserIcon className="w-5 h-5" />
+                  <div className="p-2 sm:p-2.5 rounded-xl border border-dashed border-emerald-300 bg-emerald-50/50 flex flex-col sm:flex-row items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black shadow-xs shrink-0">
+                        <UserIcon className="w-3.5 h-3.5" />
                       </div>
-                      <div>
-                        <h3 className="text-xs font-black uppercase text-slate-900 leading-tight">
+                      <div className="min-w-0">
+                        <span className="text-[11px] font-black uppercase text-slate-900 block leading-tight">
                           Paciente Obrigatório
-                        </h3>
-                        <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                          Toda senha deve estar vinculada a um paciente do Cadastro Único.
-                        </p>
+                        </span>
+                        <span className="text-[10px] text-slate-500 leading-none">
+                          Vincule um munícipe para gerar a senha.
+                        </span>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                    <div className="flex items-center gap-1.5 w-full sm:w-auto shrink-0">
                       <button
                         type="button"
                         onClick={() => {
@@ -480,39 +481,39 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
                           setPacientesEncontrados([]);
                           setModalLocalizarAberto(true);
                         }}
-                        className="flex-1 sm:flex-none px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                        className="flex-1 sm:flex-none px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-xs flex items-center justify-center gap-1 cursor-pointer"
                       >
-                        <Search className="w-4 h-4" />
+                        <Search className="w-3 h-3" />
                         Localizar Paciente
                       </button>
                       <button
                         type="button"
                         onClick={() => setModalNovoPacienteAberto(true)}
-                        className="px-3 py-2.5 bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100/60 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer"
+                        className="px-2.5 py-1.5 bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100/60 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer"
                       >
-                        <PlusCircle className="w-4 h-4 text-emerald-600" />
+                        <PlusCircle className="w-3 h-3 text-emerald-600" />
                         Novo
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200/90 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black shadow-md shadow-emerald-600/20 shrink-0">
-                        <UserCheck className="w-4 h-4" />
+                  <div className="p-2 sm:p-2.5 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200/90 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black shadow-xs shrink-0">
+                        <UserCheck className="w-3.5 h-3.5" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <span className="text-xs font-black uppercase text-slate-900 truncate">
                             {pacienteSelecionado.name}
                           </span>
                           {pacienteSelecionado.nickname && (
-                            <span className="text-[9px] text-emerald-700 font-bold px-1.5 py-0.2 rounded bg-emerald-100 shrink-0">
+                            <span className="text-[8px] text-emerald-700 font-bold px-1 rounded bg-emerald-100 shrink-0">
                               "{pacienteSelecionado.nickname}"
                             </span>
                           )}
                         </div>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-600 font-medium mt-0.5">
+                        <div className="flex flex-wrap items-center gap-x-1.5 text-[9px] text-slate-600 font-medium">
                           <span>CPF: {mascararCpf(pacienteSelecionado.cpf)}</span>
                           <span>•</span>
                           <span>SUS: {mascararSus(pacienteSelecionado.sus_number)}</span>
@@ -536,32 +537,32 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
                         setPacientesEncontrados([]);
                         setModalLocalizarAberto(true);
                       }}
-                      className="px-3 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-[10px] font-black text-slate-700 uppercase tracking-wider shrink-0 cursor-pointer self-end sm:self-center"
+                      className="px-2 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-[9px] font-black text-slate-700 uppercase tracking-wider shrink-0 cursor-pointer self-end sm:self-center"
                     >
-                      Trocar Paciente
+                      Trocar
                     </button>
                   </div>
                 )}
 
                 {/* Seleção de Prioridade Legal */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => {
                       setNovaPrioridade('NORMAL');
                       setNovaCategoria('Geral');
                     }}
-                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                    className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
                       novaPrioridade === 'NORMAL'
                         ? 'border-sky-500 bg-sky-50/80 ring-2 ring-sky-500/20'
                         : 'border-slate-200 hover:bg-slate-50'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-black text-slate-900 uppercase">Normal</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md font-mono font-bold bg-sky-100 text-sky-800">N000</span>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[10px] font-black text-slate-900 uppercase">Normal</span>
+                      <span className="text-[9px] px-1 py-0.2 rounded font-mono font-bold bg-sky-100 text-sky-800">N000</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 leading-tight">Fila geral sem preferência legal.</p>
+                    <p className="text-[9px] text-slate-500 leading-tight">Fila geral.</p>
                   </button>
 
                   <button
@@ -570,17 +571,17 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
                       setNovaPrioridade('PRIORITARIO');
                       setNovaCategoria('Idoso (60 a 79 anos)');
                     }}
-                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                    className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
                       novaPrioridade === 'PRIORITARIO'
                         ? 'border-emerald-500 bg-emerald-50/80 ring-2 ring-emerald-500/20'
                         : 'border-slate-200 hover:bg-slate-50'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-black text-slate-900 uppercase">Prioritário</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md font-mono font-bold bg-emerald-100 text-emerald-800">P000</span>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[10px] font-black text-slate-900 uppercase">Prioritário</span>
+                      <span className="text-[9px] px-1 py-0.2 rounded font-mono font-bold bg-emerald-100 text-emerald-800">P000</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 leading-tight">Idoso 60-79, PCD, Gestante, TEA.</p>
+                    <p className="text-[9px] text-slate-500 leading-tight">Idoso 60-79, PCD.</p>
                   </button>
 
                   <button
@@ -589,30 +590,27 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
                       setNovaPrioridade('ESPECIAL');
                       setNovaCategoria('Idoso 80+ (Prioridade Especial)');
                     }}
-                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                    className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
                       novaPrioridade === 'ESPECIAL'
                         ? 'border-amber-500 bg-amber-50/80 ring-2 ring-amber-500/20'
                         : 'border-slate-200 hover:bg-slate-50'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-black text-slate-900 uppercase">Especial</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md font-mono font-bold bg-amber-100 text-amber-800">E000</span>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[10px] font-black text-slate-900 uppercase">Especial</span>
+                      <span className="text-[9px] px-1 py-0.2 rounded font-mono font-bold bg-amber-100 text-amber-800">E000</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 leading-tight">Idoso 80+ (Lei 13.466/17).</p>
+                    <p className="text-[9px] text-slate-500 leading-tight">Idoso 80+.</p>
                   </button>
                 </div>
 
                 {/* Subcategoria legal caso prioritário ou especial */}
                 {novaPrioridade !== 'NORMAL' && (
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1 uppercase tracking-wide">
-                      Categoria Legal Assegurada
-                    </label>
                     <select
                       value={novaCategoria}
                       onChange={(e) => setNovaCategoria(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:border-emerald-500 rounded-2xl px-3.5 py-2 text-xs font-bold text-slate-800"
+                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:border-emerald-500 rounded-xl px-2.5 py-1 text-[10px] font-bold text-slate-800"
                     >
                       {novaPrioridade === 'ESPECIAL' ? (
                         <>
@@ -635,13 +633,13 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
                   </div>
                 )}
 
-                <div className="pt-2">
+                <div className="pt-0.5">
                   <button
                     type="submit"
                     disabled={isGerando || !pacienteSelecionado}
-                    className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-md shadow-emerald-600/20 active:scale-95 transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+                    className="w-full py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl font-black text-xs uppercase tracking-wider shadow-sm active:scale-95 transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
                   >
-                    <PlusCircle className="w-4 h-4" />
+                    <PlusCircle className="w-3.5 h-3.5" />
                     {isGerando
                       ? 'Registrando Senha...'
                       : pacienteSelecionado
@@ -654,89 +652,93 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
           </section>
 
           {/* CARD DE CHAMADA DO PRÓXIMO + RESUMO RÁPIDO (COL 5) */}
-          <section className="lg:col-span-5 bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-3xl p-6 shadow-xl flex flex-col justify-between">
+          <section className="lg:col-span-5 bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-2xl p-3 sm:p-3.5 shadow-xl flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
-                <span className="text-xs font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                  <Bell className="w-3.5 h-3.5" />
+              <div className="flex items-center justify-between pb-2 border-b border-white/10 mb-2">
+                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                  <Bell className="w-3 h-3" />
                   Chamada Automática
                 </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-slate-300 font-bold">
+                <span className="text-[9px] px-2 py-0.5 rounded-full bg-white/10 text-slate-300 font-bold">
                   {contadores.aguardando} na espera
                 </span>
               </div>
 
-              <div className="text-center py-4">
-                <p className="text-xs text-slate-400 font-medium mb-1">Regra de Seleção Vigente:</p>
-                <div className="inline-block px-3 py-1 rounded-xl bg-white/10 text-emerald-300 font-extrabold text-xs uppercase tracking-wider mb-4">
+              <div className="text-center py-2">
+                <div className="inline-block px-2.5 py-0.5 rounded-lg bg-white/10 text-emerald-300 font-extrabold text-[10px] uppercase tracking-wider mb-2">
                   {config?.regra_alternancia === '1_P_1_N' ? '1 Prioritário : 1 Normal' :
                    config?.regra_alternancia === '3_P_1_N' ? '3 Prioritários : 1 Normal' :
-                   '2 Prioritários : 1 Normal (Padrão Legal)'}
+                   '2 Prioritários : 1 Normal'}
                 </div>
 
                 <button
                   type="button"
                   onClick={handleChamarProximo}
                   disabled={contadores.aguardando === 0}
-                  className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-black text-base sm:text-lg uppercase tracking-wider rounded-2xl shadow-xl shadow-emerald-500/25 active:scale-95 transition-all disabled:opacity-40 disabled:scale-100 cursor-pointer flex items-center justify-center gap-2"
+                  className="w-full py-2.5 sm:py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-black text-sm uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/25 active:scale-95 transition-all disabled:opacity-40 disabled:scale-100 cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  <Bell className="w-5 h-5 animate-bounce" />
+                  <Bell className="w-4 h-4 animate-bounce" />
                   Chamar Próximo Cidadão
                 </button>
               </div>
             </div>
 
             {/* Painel de Contadores Rápidos */}
-            <div className="grid grid-cols-4 gap-2 pt-4 border-t border-white/10 text-center">
-              <div className="p-2 rounded-xl bg-white/5">
-                <div className="text-lg font-black text-emerald-400 font-mono">{contadores.aguardando}</div>
-                <div className="text-[9px] font-bold text-slate-400 uppercase">Espera</div>
+            <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-white/10 text-center">
+              <div className="p-1.5 rounded-lg bg-white/5">
+                <div className="text-base font-black text-emerald-400 font-mono leading-tight">{contadores.aguardando}</div>
+                <div className="text-[8px] font-bold text-slate-400 uppercase">Espera</div>
               </div>
-              <div className="p-2 rounded-xl bg-white/5">
-                <div className="text-lg font-black text-sky-400 font-mono">{contadores.chamando}</div>
-                <div className="text-[9px] font-bold text-slate-400 uppercase">Chamando</div>
+              <div className="p-1.5 rounded-lg bg-white/5">
+                <div className="text-base font-black text-sky-400 font-mono leading-tight">{contadores.chamando}</div>
+                <div className="text-[8px] font-bold text-slate-400 uppercase">Chamando</div>
               </div>
-              <div className="p-2 rounded-xl bg-white/5">
-                <div className="text-lg font-black text-amber-400 font-mono">{contadores.emAtendimento}</div>
-                <div className="text-[9px] font-bold text-slate-400 uppercase">Em Atend.</div>
+              <div className="p-1.5 rounded-lg bg-white/5">
+                <div className="text-base font-black text-amber-400 font-mono leading-tight">{contadores.emAtendimento}</div>
+                <div className="text-[8px] font-bold text-slate-400 uppercase">Em Atend.</div>
               </div>
-              <div className="p-2 rounded-xl bg-white/5">
-                <div className="text-lg font-black text-purple-400 font-mono">{contadores.concluidos}</div>
-                <div className="text-[9px] font-bold text-slate-400 uppercase">Concluídos</div>
+              <div className="p-1.5 rounded-lg bg-white/5">
+                <div className="text-base font-black text-purple-400 font-mono leading-tight">{contadores.concluidos}</div>
+                <div className="text-[8px] font-bold text-slate-400 uppercase">Concluídos</div>
               </div>
             </div>
           </section>
         </div>
 
-        {/* FILA DE ATENDIMENTO DA UNIDADE */}
-        <section className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6 shadow-xs flex flex-col gap-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        {/* FILA DE ATENDIMENTO DA UNIDADE (EXPANSÃO TOTAL E SCROLL INTERNO) */}
+        <section className="bg-white rounded-2xl border border-slate-200/80 p-2.5 sm:p-3 shadow-xs flex flex-col gap-2 flex-1 min-h-0 overflow-hidden">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shrink-0">
             <div>
-              <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
-                Fila de Atendimento do Dia
-              </h3>
-              <p className="text-xs text-slate-500">
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 tracking-tight">
+                  Fila de Atendimento do Dia
+                </h3>
+                <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                  {senhasFiltradas.length} {senhasFiltradas.length === 1 ? 'registro' : 'registros'}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-500">
                 Acompanhamento em tempo real das senhas emitidas, tempos de espera e ações de chamada.
               </p>
             </div>
 
             {/* Filtros e Busca */}
             <div className="flex items-center gap-2 w-full sm:w-auto">
-              <div className="relative flex-1 sm:w-64">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <div className="relative flex-1 sm:w-56">
+                <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Buscar senha ou cidadão..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs font-bold text-slate-900 focus:bg-white focus:border-emerald-500"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-7 pr-2.5 py-1 text-xs font-bold text-slate-900 focus:bg-white focus:border-emerald-500"
                 />
               </div>
 
               <select
                 value={filtroStatus}
                 onChange={(e) => setFiltroStatus(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700"
+                className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-700"
               >
                 <option value="TODOS">Todos os Status</option>
                 <option value="AGUARDANDO">Aguardando</option>
@@ -749,18 +751,18 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
             </div>
           </div>
 
-          {/* TABELA DE SENHAS */}
-          <div className="overflow-x-auto border border-slate-200/70 rounded-2xl">
+          {/* TABELA DE SENHAS COM SCROLL VERTICAL DEDICADO */}
+          <div className="overflow-x-auto overflow-y-auto border border-slate-200/70 rounded-xl flex-1 min-h-0 custom-scrollbar">
             <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200/80 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  <th className="py-3 px-4">Senha</th>
-                  <th className="py-3 px-4">Cidadão</th>
-                  <th className="py-3 px-4">Prioridade</th>
-                  <th className="py-3 px-4">Emissão</th>
-                  <th className="py-3 px-4">Espera</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-right">Ações Operacionais</th>
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-slate-100/90 backdrop-blur-xs border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-600">
+                  <th className="py-2 px-3">Senha</th>
+                  <th className="py-2 px-3">Cidadão</th>
+                  <th className="py-2 px-3">Prioridade</th>
+                  <th className="py-2 px-3">Emissão</th>
+                  <th className="py-2 px-3">Espera</th>
+                  <th className="py-2 px-3">Status</th>
+                  <th className="py-2 px-3 text-right">Ações Operacionais</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
@@ -773,19 +775,19 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
                     return (
                       <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
                         {/* Número */}
-                        <td className="py-3 px-4">
-                          <span className="font-mono font-black text-sm text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg">
+                        <td className="py-1.5 sm:py-2 px-3">
+                          <span className="font-mono font-black text-xs text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md">
                             {item.numero}
                           </span>
                         </td>
 
                         {/* Nome */}
-                        <td className="py-3 px-4 font-bold text-slate-800">
+                        <td className="py-1.5 sm:py-2 px-3 font-bold text-slate-800">
                           {item.cidadao_nome}
                         </td>
 
                         {/* Prioridade */}
-                        <td className="py-3 px-4">
+                        <td className="py-1.5 sm:py-2 px-3">
                           <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase ${
                             item.prioridade_tipo === 'ESPECIAL' ? 'bg-amber-100 text-amber-900 border border-amber-300' :
                             item.prioridade_tipo === 'PRIORITARIO' ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' :
@@ -796,12 +798,12 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
                         </td>
 
                         {/* Horário */}
-                        <td className="py-3 px-4 font-mono text-slate-600 font-semibold">
+                        <td className="py-1.5 sm:py-2 px-3 font-mono text-slate-600 font-semibold text-[11px]">
                           {horaEmissao}
                         </td>
 
                         {/* Tempo de espera */}
-                        <td className="py-3 px-4 font-semibold">
+                        <td className="py-1.5 sm:py-2 px-3 font-semibold text-xs">
                           {item.wait_time_first_call_seconds ? (
                             <span className="text-slate-600">
                               {formatarDuracaoSegundos(item.wait_time_first_call_seconds)}
@@ -816,8 +818,8 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
                         </td>
 
                         {/* Status */}
-                        <td className="py-3 px-4">
-                          <span className={`inline-block px-2.5 py-1 rounded-xl text-[10px] font-black uppercase ${
+                        <td className="py-1.5 sm:py-2 px-3">
+                          <span className={`inline-block px-2 py-0.5 rounded-lg text-[10px] font-black uppercase ${
                             item.status === 'CHAMANDO' ? 'bg-sky-100 text-sky-800 animate-pulse' :
                             item.status === 'EM_ATENDIMENTO' ? 'bg-amber-100 text-amber-900' :
                             item.status === 'CONCLUIDO' ? 'bg-emerald-100 text-emerald-900' :
@@ -830,7 +832,7 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
                         </td>
 
                         {/* Ações */}
-                        <td className="py-3 px-4 text-right">
+                        <td className="py-1.5 sm:py-2 px-3 text-right">
                           <div className="flex items-center justify-end gap-1.5 flex-wrap">
                             {/* Rechamar */}
                             {(item.status === 'CHAMANDO' || item.status === 'EM_ATENDIMENTO') && (
@@ -1091,9 +1093,39 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
                   Abreviar sobrenome no painel público (Privacidade LGPD)
                 </label>
               </div>
+
+              {/* ZONA DE PRODUÇÃO — ZERAR REGISTROS */}
+              <div className="pt-3 border-t border-slate-200">
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between gap-2">
+                  <div>
+                    <span className="text-[11px] font-black uppercase text-rose-950 block leading-tight">
+                      Reiniciar Fila Operacional (Produção)
+                    </span>
+                    <span className="text-[10px] text-rose-700 leading-tight block">
+                      Zera todas as senhas, chamadas e contadores para início limpo.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (window.confirm('Atenção: Deseja realmente zerar todos os registros de senhas do AutoSenha para iniciar em produção?')) {
+                        await zerarTodosDadosAutoSenha();
+                        await carregarDados();
+                        setModalConfigAberto(false);
+                        setFeedbackSuccess('Todos os registros foram zerados com sucesso para produção!');
+                        setTimeout(() => setFeedbackSuccess(null), 5000);
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-xs cursor-pointer shrink-0"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Zerar Agora
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-6">
+            <div className="flex items-center justify-end gap-2 pt-4">
               <button
                 type="button"
                 onClick={() => setModalConfigAberto(false)}

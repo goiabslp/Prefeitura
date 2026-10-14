@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   ArrowLeft, FileDown, Activity, Clock, Users, AlertTriangle, ShieldCheck,
   TrendingUp, BarChart3, RefreshCw, Calendar, Filter, CheckCircle2,
-  Ticket, AlertCircle, ArrowUpRight, Flame, HeartPulse, Building2
+  Ticket, AlertCircle, ArrowUpRight, Flame, HeartPulse, Building2, Trash2
 } from 'lucide-react';
 import {
   AutoSenhaUnidadeId,
@@ -16,7 +16,8 @@ import {
   getMovimentacoesAuditoria,
   formatarDuracaoSegundos,
   inicializarSeedSeVazio,
-  getDataOperacionalHoje
+  getDataOperacionalHoje,
+  zerarTodosDadosAutoSenha
 } from '../../services/autoSenhaService';
 import { supabase } from '../../services/supabaseClient';
 
@@ -89,6 +90,9 @@ export const AutoSenhaDashboardScreen: React.FC<AutoSenhaDashboardScreenProps> =
     const channel = supabase.channel('autosenha-global');
     channel
       .on('broadcast', { event: 'atualizacao_geral' }, () => {
+        carregarMetricas();
+      })
+      .on('broadcast', { event: 'dados_zerados' }, () => {
         carregarMetricas();
       })
       .subscribe();
@@ -209,10 +213,10 @@ export const AutoSenhaDashboardScreen: React.FC<AutoSenhaDashboardScreenProps> =
   };
 
   return (
-    <div className="h-[calc(100vh-68px)] max-h-[calc(100vh-68px)] bg-slate-50 text-slate-800 flex flex-col overflow-hidden">
-      {/* CABEÇALHO COMPACTO E RESPONSIVO */}
-      <header className="bg-white border-b border-slate-200 shrink-0 z-20 shadow-2xs print:hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3">
+    <div className="w-full flex-1 min-w-0 h-full max-h-full bg-slate-50 text-slate-800 flex flex-col overflow-hidden">
+      {/* CABEÇALHO COMPACTO E RESPONSIVO (100% VIEWPORT LARGURA TOTAL) */}
+      <header className="bg-white border-b border-slate-200 shrink-0 z-20 shadow-2xs print:hidden w-full">
+        <div className="w-full px-3 sm:px-4 lg:px-6 py-2 flex flex-wrap items-center justify-between gap-2.5">
           {/* Lado Esquerdo: Voltar e Título */}
           <div className="flex items-center gap-3">
             {onBack && (
@@ -309,12 +313,29 @@ export const AutoSenhaDashboardScreen: React.FC<AutoSenhaDashboardScreenProps> =
               <FileDown className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Gerar Relatório</span>
             </button>
+
+            {/* BOTÃO ZERAR DADOS PARA PRODUÇÃO */}
+            <button
+              type="button"
+              onClick={async () => {
+                if (window.confirm('Atenção: Deseja realmente zerar todos os registros de senhas, atendimentos e filas de todas as unidades para iniciar em produção?')) {
+                  await zerarTodosDadosAutoSenha();
+                  await carregarMetricas();
+                  alert('Todos os dados do AutoSenha foram zerados com sucesso! O sistema está pronto para produção.');
+                }
+              }}
+              className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-black uppercase tracking-wider shadow-2xs active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+              title="Zerar todos os registros para início em Produção"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+              <span className="hidden md:inline">Zerar Registros</span>
+            </button>
           </div>
         </div>
       </header>
 
-      {/* CONTEÚDO PRINCIPAL COMPACTO E RESPONSIVO */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 w-full flex-1 flex flex-col min-h-0 overflow-y-auto lg:overflow-hidden">
+      {/* CONTEÚDO PRINCIPAL COMPACTO E 100% DO VIEWPORT */}
+      <main className="w-full px-3 sm:px-4 lg:px-6 py-2.5 sm:py-3 flex-1 flex flex-col min-h-0 overflow-y-auto custom-scrollbar">
         {/* ABA 1: VISÃO OPERACIONAL DOS POSTOS */}
         {abaAtiva === 'operacional' && (
           <div className="flex-1 flex flex-col gap-3 sm:gap-4 min-h-0">

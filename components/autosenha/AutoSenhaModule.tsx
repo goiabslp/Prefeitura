@@ -35,127 +35,116 @@ export const AutoSenhaModule: React.FC<AutoSenhaModuleProps> = ({
   // 'upa-controle' -> /AutoSenha/UPA/Controle
   // 'upa-senhatv' -> /AutoSenha/UPA/SenhaTV
 
-  // 1. Central Integrada de Pacientes (/AutoSenha/Pacientes)
-  if (subView === 'pacientes') {
-    return (
-      <PacientesHubScreen
-        currentUser={currentUser}
-        onBack={() => onNavigate('autosenha')}
-        baseRoute="/AutoSenha/Pacientes"
-      />
-    );
-  }
-
-  // 2. Dashboard Administrativo Centralizado (/AutoSenha/Dashboard, /AutoSenha/Dashboard/Capacidade, /AutoSenha/Dashboard/Auditoria)
-  if (subView === 'dashboard' || subView === 'dashboard-capacidade' || subView === 'dashboard-auditoria') {
-    return (
-      <AutoSenhaDashboardScreen
-        currentUser={currentUser}
-        initialAba={
-          subView === 'dashboard-capacidade'
-            ? 'capacidade'
-            : subView === 'dashboard-auditoria'
-            ? 'auditoria'
-            : 'operacional'
-        }
-        onChangeAba={(aba) => {
-          if (aba === 'capacidade') onNavigate('autosenha:dashboard-capacidade');
-          else if (aba === 'auditoria') onNavigate('autosenha:dashboard-auditoria');
-          else onNavigate('autosenha:dashboard');
-        }}
-        onNavigateUnidade={(unidadeId, sub) => {
-          onNavigate(`autosenha:${unidadeId}-${sub}`);
-        }}
-        onBack={() => onNavigate('autosenha')}
-      />
-    );
-  }
-
-  // 2. Senha TV (Painel Público de Televisão)
-  if (subView === 'psf1-senhatv') {
-    return <SenhaTVScreen unidadeId="psf1" onBack={() => onNavigate('autosenha:psf1-controle')} />;
-  }
-  if (subView === 'psf2-senhatv') {
-    return <SenhaTVScreen unidadeId="psf2" onBack={() => onNavigate('autosenha:psf2-controle')} />;
-  }
-  if (subView === 'upa-senhatv') {
-    return <SenhaTVScreen unidadeId="upa" onBack={() => onNavigate('autosenha:upa-controle')} />;
-  }
-
-  // 3. Controle Operacional da Unidade (Recepção)
-  if (subView === 'psf1-controle') {
-    return (
-      <AutoSenhaControleScreen
-        unidadeId="psf1"
-        currentUser={currentUser}
-        onNavigateTV={() => onNavigate('autosenha:psf1-senhatv')}
-        onBack={() => onNavigate('autosenha:psf1')}
-      />
-    );
-  }
-  if (subView === 'psf2-controle') {
-    return (
-      <AutoSenhaControleScreen
-        unidadeId="psf2"
-        currentUser={currentUser}
-        onNavigateTV={() => onNavigate('autosenha:psf2-senhatv')}
-        onBack={() => onNavigate('autosenha:psf2')}
-      />
-    );
-  }
-  if (subView === 'upa-controle') {
-    return (
-      <AutoSenhaControleScreen
-        unidadeId="upa"
-        currentUser={currentUser}
-        onNavigateTV={() => onNavigate('autosenha:upa-senhatv')}
-        onBack={() => onNavigate('autosenha:upa')}
-      />
-    );
-  }
-
-  // 4. Submódulo Individual do Posto (Cards Controle | Senha TV)
-  if (subView === 'psf1') {
-    return (
-      <AutoSenhaPostoScreen
-        unidadeId="psf1"
-        onNavigateControle={() => onNavigate('autosenha:psf1-controle')}
-        onNavigateTV={() => onNavigate('autosenha:psf1-senhatv')}
-        onBack={() => onNavigate('autosenha')}
-      />
-    );
-  }
-  if (subView === 'psf2') {
-    return (
-      <AutoSenhaPostoScreen
-        unidadeId="psf2"
-        onNavigateControle={() => onNavigate('autosenha:psf2-controle')}
-        onNavigateTV={() => onNavigate('autosenha:psf2-senhatv')}
-        onBack={() => onNavigate('autosenha')}
-      />
-    );
-  }
-  if (subView === 'upa') {
-    return (
-      <AutoSenhaPostoScreen
-        unidadeId="upa"
-        onNavigateControle={() => onNavigate('autosenha:upa-controle')}
-        onNavigateTV={() => onNavigate('autosenha:upa-senhatv')}
-        onBack={() => onNavigate('autosenha')}
-      />
-    );
-  }
-
-  // 5. Página Inicial do Módulo (/AutoSenha) com os Cards Principais
+  // Renderizador com wrapper 100% de viewport
   return (
-    <AutoSenhaHomeScreen
-      currentUser={currentUser}
-      onNavigateDashboard={() => onNavigate('autosenha:dashboard')}
-      onNavigatePacientes={() => onNavigate('autosenha:pacientes')}
-      onNavigatePSF1={() => onNavigate('autosenha:psf1')}
-      onNavigatePSF2={() => onNavigate('autosenha:psf2')}
-      onNavigateUPA={() => onNavigate('autosenha:upa')}
-      onBack={() => onNavigate('home')}
-    />
+    <div className="w-full flex-1 min-w-0 h-[calc(100vh-68px)] max-h-[calc(100vh-68px)] flex flex-col overflow-hidden bg-slate-50">
+      {/* 1. Central Integrada de Pacientes (/AutoSenha/Pacientes) */}
+      {subView === 'pacientes' && (
+        <PacientesHubScreen
+          currentUser={currentUser}
+          onBack={() => onNavigate('autosenha')}
+          baseRoute="/AutoSenha/Pacientes"
+        />
+      )}
+
+      {/* 2. Dashboard Administrativo Centralizado (/AutoSenha/Dashboard, /AutoSenha/Dashboard/Capacidade, /AutoSenha/Dashboard/Auditoria) */}
+      {(subView === 'dashboard' || subView === 'dashboard-capacidade' || subView === 'dashboard-auditoria') && (
+        <AutoSenhaDashboardScreen
+          currentUser={currentUser}
+          initialAba={
+            subView === 'dashboard-capacidade'
+              ? 'capacidade'
+              : subView === 'dashboard-auditoria'
+              ? 'auditoria'
+              : 'operacional'
+          }
+          onChangeAba={(aba) => {
+            if (aba === 'capacidade') onNavigate('autosenha:dashboard-capacidade');
+            else if (aba === 'auditoria') onNavigate('autosenha:dashboard-auditoria');
+            else onNavigate('autosenha:dashboard');
+          }}
+          onNavigateUnidade={(unidadeId, sub) => {
+            onNavigate(`autosenha:${unidadeId}-${sub}`);
+          }}
+          onBack={() => onNavigate('autosenha')}
+        />
+      )}
+
+      {/* 3. Senha TV (Painel Público de Televisão) */}
+      {subView === 'psf1-senhatv' && (
+        <SenhaTVScreen unidadeId="psf1" onBack={() => onNavigate('autosenha:psf1-controle')} />
+      )}
+      {subView === 'psf2-senhatv' && (
+        <SenhaTVScreen unidadeId="psf2" onBack={() => onNavigate('autosenha:psf2-controle')} />
+      )}
+      {subView === 'upa-senhatv' && (
+        <SenhaTVScreen unidadeId="upa" onBack={() => onNavigate('autosenha:upa-controle')} />
+      )}
+
+      {/* 4. Controle Operacional da Unidade (Recepção) */}
+      {subView === 'psf1-controle' && (
+        <AutoSenhaControleScreen
+          unidadeId="psf1"
+          currentUser={currentUser}
+          onNavigateTV={() => onNavigate('autosenha:psf1-senhatv')}
+          onBack={() => onNavigate('autosenha:psf1')}
+        />
+      )}
+      {subView === 'psf2-controle' && (
+        <AutoSenhaControleScreen
+          unidadeId="psf2"
+          currentUser={currentUser}
+          onNavigateTV={() => onNavigate('autosenha:psf2-senhatv')}
+          onBack={() => onNavigate('autosenha:psf2')}
+        />
+      )}
+      {subView === 'upa-controle' && (
+        <AutoSenhaControleScreen
+          unidadeId="upa"
+          currentUser={currentUser}
+          onNavigateTV={() => onNavigate('autosenha:upa-senhatv')}
+          onBack={() => onNavigate('autosenha:upa')}
+        />
+      )}
+
+      {/* 5. Submódulo Individual do Posto (Cards Controle | Senha TV) */}
+      {subView === 'psf1' && (
+        <AutoSenhaPostoScreen
+          unidadeId="psf1"
+          onNavigateControle={() => onNavigate('autosenha:psf1-controle')}
+          onNavigateTV={() => onNavigate('autosenha:psf1-senhatv')}
+          onBack={() => onNavigate('autosenha')}
+        />
+      )}
+      {subView === 'psf2' && (
+        <AutoSenhaPostoScreen
+          unidadeId="psf2"
+          onNavigateControle={() => onNavigate('autosenha:psf2-controle')}
+          onNavigateTV={() => onNavigate('autosenha:psf2-senhatv')}
+          onBack={() => onNavigate('autosenha')}
+        />
+      )}
+      {subView === 'upa' && (
+        <AutoSenhaPostoScreen
+          unidadeId="upa"
+          onNavigateControle={() => onNavigate('autosenha:upa-controle')}
+          onNavigateTV={() => onNavigate('autosenha:upa-senhatv')}
+          onBack={() => onNavigate('autosenha')}
+        />
+      )}
+
+      {/* 6. Página Inicial do Módulo (/AutoSenha) com os Cards Principais */}
+      {(!subView || subView === 'home') && (
+        <AutoSenhaHomeScreen
+          currentUser={currentUser}
+          onNavigateDashboard={() => onNavigate('autosenha:dashboard')}
+          onNavigatePacientes={() => onNavigate('autosenha:pacientes')}
+          onNavigatePSF1={() => onNavigate('autosenha:psf1')}
+          onNavigatePSF2={() => onNavigate('autosenha:psf2')}
+          onNavigateUPA={() => onNavigate('autosenha:upa')}
+          onBack={() => onNavigate('home')}
+        />
+      )}
+    </div>
   );
 };

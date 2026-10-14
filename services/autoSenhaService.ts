@@ -1137,192 +1137,70 @@ export async function getMovimentacoesAuditoria(
 }
 
 // ----------------------------------------------------------------------
-// SEED INICIAL DE DEMONSTRAÇÃO REALISTA PARA TESTES OPERACIONAIS
+// PRODUÇÃO: LIMPEZA E ZERAGEM DE REGISTROS DO AUTOSENHA
 // ----------------------------------------------------------------------
+
+/**
+ * Desativado: Módulo em PRODUÇÃO OFICIAL. Não gera senhas fictícias.
+ */
 export async function inicializarSeedSeVazio(): Promise<void> {
-  const locais = getLocalSenhas();
-  const dataHoje = getDataOperacionalHoje();
-  const senhasHoje = locais.filter(s => s.data_operacional === dataHoje);
-
-  if (senhasHoje.length > 0) return;
-
-  const agora = new Date();
-  const itensSeed: AutoSenhaItem[] = [
-    // PSF 1
-    {
-      id: 'seed-psf1-01',
-      unidade_id: 'psf1',
-      numero: 'N001',
-      numero_sequencial: 1,
-      data_operacional: dataHoje,
-      cidadao_nome: 'Antônio Ferreira de Souza',
-      prioridade_tipo: 'NORMAL',
-      prioridade_categoria: 'Geral',
-      status: 'CONCLUIDO',
-      guiche: 'Guichê 1',
-      atendente_nome: 'Marcos Recepção',
-      created_at: new Date(agora.getTime() - 45 * 60000).toISOString(),
-      first_called_at: new Date(agora.getTime() - 35 * 60000).toISOString(),
-      service_started_at: new Date(agora.getTime() - 34 * 60000).toISOString(),
-      service_finished_at: new Date(agora.getTime() - 20 * 60000).toISOString(),
-      wait_time_first_call_seconds: 600,
-      service_duration_seconds: 840,
-      call_count: 1
-    },
-    {
-      id: 'seed-psf1-02',
-      unidade_id: 'psf1',
-      numero: 'P001',
-      numero_sequencial: 1,
-      data_operacional: dataHoje,
-      cidadao_nome: 'Benedita Maria de Oliveira',
-      prioridade_tipo: 'PRIORITARIO',
-      prioridade_categoria: 'Idoso (60 a 79 anos)',
-      status: 'EM_ATENDIMENTO',
-      guiche: 'Guichê 1',
-      atendente_nome: 'Marcos Recepção',
-      created_at: new Date(agora.getTime() - 25 * 60000).toISOString(),
-      first_called_at: new Date(agora.getTime() - 10 * 60000).toISOString(),
-      service_started_at: new Date(agora.getTime() - 9 * 60000).toISOString(),
-      wait_time_first_call_seconds: 900,
-      call_count: 1
-    },
-    {
-      id: 'seed-psf1-03',
-      unidade_id: 'psf1',
-      numero: 'E001',
-      numero_sequencial: 1,
-      data_operacional: dataHoje,
-      cidadao_nome: 'Joaquim Silva Prado (86 anos)',
-      prioridade_tipo: 'ESPECIAL',
-      prioridade_categoria: 'Idoso 80+ (Prioridade Especial)',
-      status: 'AGUARDANDO',
-      guiche: 'Recepção',
-      atendente_nome: 'Marcos Recepção',
-      created_at: new Date(agora.getTime() - 15 * 60000).toISOString(),
-      call_count: 0
-    },
-    {
-      id: 'seed-psf1-04',
-      unidade_id: 'psf1',
-      numero: 'N002',
-      numero_sequencial: 2,
-      data_operacional: dataHoje,
-      cidadao_nome: 'Luciana Martins Costa',
-      prioridade_tipo: 'NORMAL',
-      prioridade_categoria: 'Geral',
-      status: 'AGUARDANDO',
-      guiche: 'Recepção',
-      atendente_nome: 'Marcos Recepção',
-      created_at: new Date(agora.getTime() - 10 * 60000).toISOString(),
-      call_count: 0
-    },
-
-    // PSF 2
-    {
-      id: 'seed-psf2-01',
-      unidade_id: 'psf2',
-      numero: 'N001',
-      numero_sequencial: 1,
-      data_operacional: dataHoje,
-      cidadao_nome: 'Carlos Eduardo Mendes',
-      prioridade_tipo: 'NORMAL',
-      prioridade_categoria: 'Geral',
-      status: 'CHAMANDO',
-      guiche: 'Recepção PSF 2',
-      atendente_nome: 'Fernanda Atendente',
-      created_at: new Date(agora.getTime() - 20 * 60000).toISOString(),
-      first_called_at: new Date(agora.getTime() - 2 * 60000).toISOString(),
-      last_called_at: new Date(agora.getTime() - 2 * 60000).toISOString(),
-      wait_time_first_call_seconds: 1080,
-      call_count: 1
-    },
-    {
-      id: 'seed-psf2-02',
-      unidade_id: 'psf2',
-      numero: 'P001',
-      numero_sequencial: 1,
-      data_operacional: dataHoje,
-      cidadao_nome: 'Juliana Beatriz de Lima (Gestante)',
-      prioridade_tipo: 'PRIORITARIO',
-      prioridade_categoria: 'Gestante',
-      status: 'AGUARDANDO',
-      guiche: 'Recepção PSF 2',
-      atendente_nome: 'Fernanda Atendente',
-      created_at: new Date(agora.getTime() - 12 * 60000).toISOString(),
-      call_count: 0
-    },
-
-    // UPA
-    {
-      id: 'seed-upa-01',
-      unidade_id: 'upa',
-      numero: 'P001',
-      numero_sequencial: 1,
-      data_operacional: dataHoje,
-      cidadao_nome: 'Sebastião Alves Moreira',
-      prioridade_tipo: 'PRIORITARIO',
-      prioridade_categoria: 'Idoso (60 a 79 anos)',
-      status: 'CONCLUIDO',
-      guiche: 'Recepção UPA',
-      atendente_nome: 'Juliana Triagem',
-      created_at: new Date(agora.getTime() - 50 * 60000).toISOString(),
-      first_called_at: new Date(agora.getTime() - 42 * 60000).toISOString(),
-      service_started_at: new Date(agora.getTime() - 40 * 60000).toISOString(),
-      service_finished_at: new Date(agora.getTime() - 28 * 60000).toISOString(),
-      wait_time_first_call_seconds: 480,
-      service_duration_seconds: 720,
-      call_count: 1
-    },
-    {
-      id: 'seed-upa-02',
-      unidade_id: 'upa',
-      numero: 'N001',
-      numero_sequencial: 1,
-      data_operacional: dataHoje,
-      cidadao_nome: 'Renata Albuquerque Santos',
-      prioridade_tipo: 'NORMAL',
-      prioridade_categoria: 'Geral',
-      status: 'EM_ATENDIMENTO',
-      guiche: 'Recepção UPA',
-      atendente_nome: 'Juliana Triagem',
-      created_at: new Date(agora.getTime() - 30 * 60000).toISOString(),
-      first_called_at: new Date(agora.getTime() - 15 * 60000).toISOString(),
-      service_started_at: new Date(agora.getTime() - 14 * 60000).toISOString(),
-      wait_time_first_call_seconds: 900,
-      call_count: 1
-    },
-    {
-      id: 'seed-upa-03',
-      unidade_id: 'upa',
-      numero: 'E001',
-      numero_sequencial: 1,
-      data_operacional: dataHoje,
-      cidadao_nome: 'Geralda Neves da Silva (83 anos)',
-      prioridade_tipo: 'ESPECIAL',
-      prioridade_categoria: 'Idoso 80+ (Prioridade Especial)',
-      status: 'AGUARDANDO',
-      guiche: 'Recepção UPA',
-      atendente_nome: 'Juliana Triagem',
-      created_at: new Date(agora.getTime() - 18 * 60000).toISOString(),
-      call_count: 0
-    },
-    {
-      id: 'seed-upa-04',
-      unidade_id: 'upa',
-      numero: 'N002',
-      numero_sequencial: 2,
-      data_operacional: dataHoje,
-      cidadao_nome: 'Lucas Gabriel Pinheiro',
-      prioridade_tipo: 'NORMAL',
-      prioridade_categoria: 'Geral',
-      status: 'AGUARDANDO',
-      guiche: 'Recepção UPA',
-      atendente_nome: 'Juliana Triagem',
-      created_at: new Date(agora.getTime() - 8 * 60000).toISOString(),
-      call_count: 0
-    }
-  ];
-
-  saveLocalSenhas(itensSeed);
+  return;
 }
+
+/**
+ * Zera completamente todos os registros do AutoSenha (senhas, histórico de chamadas,
+ * auditoria e avaliações urgentes) tanto no localStorage quanto no banco Supabase,
+ * resetando os contadores de alternância para o início limpo em PRODUÇÃO.
+ */
+export async function zerarTodosDadosAutoSenha(): Promise<void> {
+  // 1. Limpeza no LocalStorage
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem(STORAGE_SENHAS_KEY);
+      localStorage.removeItem(STORAGE_AUDIT_KEY);
+      localStorage.removeItem(STORAGE_URGENTES_KEY);
+      localStorage.setItem(STORAGE_SENHAS_KEY, JSON.stringify([]));
+      localStorage.setItem(STORAGE_AUDIT_KEY, JSON.stringify([]));
+      localStorage.setItem(STORAGE_URGENTES_KEY, JSON.stringify([]));
+
+      // Resetar contadores de alternância das configurações de cada unidade
+      for (const u of AUTOSENHA_UNIDADES) {
+        const cfg = getLocalConfig(u.id);
+        cfg.contador_prioridade_atual = 0;
+        cfg.contador_normal_atual = 0;
+        saveLocalConfig(cfg);
+      }
+
+      localStorage.setItem('sys_autosenha_producao_limpo_v1', 'true');
+    } catch (e) {
+      console.error('[AutoSenha] Erro ao limpar registros no localStorage:', e);
+    }
+  }
+
+  // 2. Limpeza no Supabase (se as tabelas estiverem provisionadas)
+  try {
+    await Promise.allSettled([
+      supabase.from('autosenha_itens').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
+      supabase.from('autosenha_auditoria').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
+      supabase.from('autosenha_avaliacoes_urgentes').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
+      supabase.from('autosenha_chamadas_historico').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+    ]);
+  } catch (e) {
+    console.warn('[AutoSenha] Limpeza no Supabase:', e);
+  }
+
+  // 3. Notificar todas as telas operacionais conectadas em tempo real
+  for (const u of AUTOSENHA_UNIDADES) {
+    notificarRealtimeMudanca(u.id, 'dados_zerados', {});
+  }
+}
+
+// Auto-execução imediata para garantir zeragem total ao carregar em produção
+if (typeof window !== 'undefined') {
+  try {
+    if (localStorage.getItem('sys_autosenha_producao_limpo_v1') !== 'true') {
+      zerarTodosDadosAutoSenha();
+    }
+  } catch (e) {}
+}
+
