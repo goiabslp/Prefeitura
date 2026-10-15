@@ -215,19 +215,35 @@ export const FleetFines: React.FC<FleetFinesProps> = ({
     setIsDropdownOpen(false);
 
     // Tentar localizar veículo correspondente na lista
-    const matchedVehicle = vehicles.find(v => 
-      (selectedVehicleId && v.id === selectedVehicleId) ||
-      (rawInput && (
-        cleanPlate(v.plate) === cleanPlate(rawInput) ||
-        (cleanPlate(rawInput).length >= 5 && cleanPlate(v.plate).includes(cleanPlate(rawInput))) ||
-        `${v.brand || ''} ${v.model} • ${v.plate}`.toLowerCase() === rawInput.toLowerCase()
-      ))
-    );
+    // 1) Pelo ID selecionado
+    // 2) Pela placa limpa idêntica
+    // 3) Extraindo placa padrão (ex: TXY2G82) do texto digitado
+    // 4) Pelo modelo / marca
+    const extractedPlate = rawInput.replace(/[^A-Za-z0-9]/g, '').match(/[A-Za-z]{3}[0-9][A-Za-z0-9][0-9]{2}/)?.[0]?.toUpperCase();
+
+    const matchedVehicle = vehicles.find(v => {
+      if (selectedVehicleId && v.id === selectedVehicleId) return true;
+      const vPlateClean = cleanPlate(v.plate);
+      if (!vPlateClean) return false;
+      if (extractedPlate && vPlateClean === extractedPlate) return true;
+      if (rawInput) {
+        const inputClean = cleanPlate(rawInput);
+        if (inputClean === vPlateClean) return true;
+        if (inputClean.length >= 7 && inputClean.includes(vPlateClean)) return true;
+        const brandModelPlate = `${v.brand ? `${v.brand} ` : ''}${v.model} • ${v.plate}`.toLowerCase();
+        if (brandModelPlate === rawInput.toLowerCase()) return true;
+      }
+      return false;
+    });
 
     const effectiveVehicleId = matchedVehicle?.id || selectedVehicleId;
-    const targetPlateClean = cleanPlate(matchedVehicle?.plate || rawInput);
-    const targetModelNorm = normalizeStr(matchedVehicle?.model || rawInput);
-    const targetBrandNorm = normalizeStr(matchedVehicle?.brand || '');
+    const targetPlateClean = extractedPlate || cleanPlate(matchedVehicle?.plate || rawInput);
+    const targetVehicleObj = matchedVehicle || vehicles.find(v => 
+      (effectiveVehicleId && v.id === effectiveVehicleId) ||
+      (targetPlateClean && cleanPlate(v.plate) === targetPlateClean)
+    );
+    const targetModelNorm = normalizeStr(targetVehicleObj?.model || rawInput);
+    const targetBrandNorm = normalizeStr(targetVehicleObj?.brand || '');
 
     // Atualizar URL sem recarregar a página (mantendo a rota canônica /Frota/Multas com parâmetros)
     try {
@@ -242,7 +258,7 @@ export const FleetFines: React.FC<FleetFinesProps> = ({
       console.warn('Falha ao atualizar parâmetros na URL:', e);
     }
 
-    // Construção do Timestamp da infração com tolerância precisa
+    // Construção do Timestamp da infração (interpretação local segura)
     const [hours, minutes] = fineTime.split(':').map(Number);
     const infractionTarget = new Date(`${fineDate}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`);
     const infractionTimestamp = infractionTarget.getTime();
@@ -277,12 +293,26 @@ export const FleetFines: React.FC<FleetFinesProps> = ({
         const depTime = depDate.getTime();
         const retTime = retDate.getTime();
 
-        if (infractionTimestamp >= depTime && infractionTimestamp <= retTime) {
+        // Verificação padrão de intervalo temporal
+        const isInInterval = infractionTimestamp >= depTime && infractionTimestamp <= retTime;
+
+        // Tolerância de fuso horário / mesmo dia caso o horário esteja salvo em UTC com descompasso
+        const sDepDay = format(depDate, 'yyyy-MM-dd');
+        const sRetDay = format(retDate, 'yyyy-MM-dd');
+        const isSameDayMatch = (fineDate >= sDepDay && fineDate <= sRetDay);
+
+        if (isInInterval || (isSameDayMatch && (infractionTimestamp >= depTime - 4 * 3600000 && infractionTimestamp <= retTime + 4 * 3600000))) {
           const driverPerson = persons.find(p => p.id === s.driverId);
           const requesterPerson = persons.find(p => p.id === s.requesterPersonId);
           const sectorObj = sectors.find(sec => sec.id === s.serviceSectorId);
 
           const passengerNames = (s.passengers || []).map(p => p.name).filter(Boolean);
+
+          const displayVehicle = targetVehicleObj || scheduleVehicle;
+          const displayModel = displayVehicle 
+            ? `${displayVehicle.brand ? `${displayVehicle.brand} ` : ''}${displayVehicle.model}`.trim() 
+            : 'Veículo da Frota';
+          const displayPlate = displayVehicle?.plate || scheduleVehicle?.plate || targetPlateClean || 'Não informada';
 
           matches.push({
             id: `agendamento_${s.id}`,
@@ -296,8 +326,8 @@ export const FleetFines: React.FC<FleetFinesProps> = ({
             purpose: s.purpose || 'Finalidade não preenchida',
             departureDateTime: s.departureDateTime,
             returnDateTime: s.returnDateTime,
-            vehicleModel: targetVehicle ? `${targetVehicle.brand} ${targetVehicle.model}` : 'Veículo da Frota',
-            vehiclePlate: targetVehicle?.plate || scheduleVehicle?.plate || 'Não informada',
+            vehicleModel: displayModel,
+            vehiclePlate: displayPlate,
             status: s.status,
             passengers: passengerNames,
             rawRecord: s
@@ -327,10 +357,10 @@ export const FleetFines: React.FC<FleetFinesProps> = ({
       const diariaPlateClean = cleanPlate(rawVeiculoStr);
       const diariaVeiculoNorm = normalizeStr(rawVeiculoStr);
 
-      const isDirectIdMatch = d.veiculo === selectedVehicleId;
-      const isPlateMatch = targetPlateClean && (diariaPlateClean.includes(targetPlateClean) || targetPlateClean.includes(diariaPlateClean));
-      const isModelMatch = targetModelNorm && diariaVeiculoNorm.includes(targetModelNorm);
-      const isBrandMatch = targetBrandNorm && diariaVeiculoNorm.includes(targetBrandNorm);
+      const isDirectIdMatch = Boolean(effectiveVehicleId && d.veiculo === effectiveVehicleId);
+      const isPlateMatch = Boolean(targetPlateClean && (diariaPlateClean.includes(targetPlateClean) || targetPlateClean.includes(diariaPlateClean)));
+      const isModelMatch = Boolean(targetModelNorm && diariaVeiculoNorm.includes(targetModelNorm));
+      const isBrandMatch = Boolean(targetBrandNorm && diariaVeiculoNorm.includes(targetBrandNorm));
 
       if (!isDirectIdMatch && !isPlateMatch && !isModelMatch && !isBrandMatch) return;
 
@@ -361,10 +391,21 @@ export const FleetFines: React.FC<FleetFinesProps> = ({
           retTime = retDate.getTime();
         }
 
-        if (infractionTimestamp >= depTime && infractionTimestamp <= retTime) {
+        const isInInterval = infractionTimestamp >= depTime && infractionTimestamp <= retTime;
+        const dDepDay = format(depDate, 'yyyy-MM-dd');
+        const dRetDay = format(parseISO(d.data_retorno || d.data_saida), 'yyyy-MM-dd');
+        const isSameDay = (fineDate >= dDepDay && fineDate <= dRetDay);
+
+        if (isInInterval || (isSameDay && (infractionTimestamp >= depTime - 4 * 3600000 && infractionTimestamp <= retTime + 4 * 3600000))) {
           const sectorObj = sectors.find(sec => sec.id === d.setor_id);
           const pessoasNames = (d.pessoas || []).map(p => p.name).filter(Boolean);
           const motoristaStr = pessoasNames.length > 0 ? pessoasNames.join(', ') : (d.user_name || 'Servidor da Viagem');
+
+          const displayVehicle = targetVehicleObj;
+          const displayModel = displayVehicle 
+            ? `${displayVehicle.brand ? `${displayVehicle.brand} ` : ''}${displayVehicle.model}`.trim() 
+            : (rawVeiculoStr || 'Veículo Municipal');
+          const displayPlate = displayVehicle?.plate || targetPlateClean || 'Não informada';
 
           matches.push({
             id: `diaria_${d.id}`,
@@ -378,8 +419,8 @@ export const FleetFines: React.FC<FleetFinesProps> = ({
             purpose: d.motivo || 'Finalidade não preenchida',
             departureDateTime: d.data_saida,
             returnDateTime: d.data_retorno || 'Em trânsito / Sem retorno registrado',
-            vehicleModel: targetVehicle ? `${targetVehicle.brand} ${targetVehicle.model}` : (rawVeiculoStr || 'Veículo Municipal'),
-            vehiclePlate: targetVehicle?.plate || targetPlateClean || 'Não informada',
+            vehicleModel: displayModel,
+            vehiclePlate: displayPlate,
             status: d.status,
             passengers: pessoasNames.length > 1 ? pessoasNames.slice(1) : undefined,
             rawRecord: d
@@ -470,56 +511,6 @@ Fonte consultada: Prefeitura Integrada (Módulos Diárias e Agendamento)`;
 
   return (
     <div className="w-full flex flex-col gap-4 max-w-7xl mx-auto pb-8 print:p-0">
-      {/* CABEÇALHO DA ABA MULTAS */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 p-4 md:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3 print:hidden">
-        <div className="flex items-start gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-600 shrink-0 shadow-inner">
-            <ShieldAlert className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base md:text-lg font-black text-slate-900 tracking-tight">
-                Localização de Condutor por Infração de Trânsito
-              </h2>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
-                Aba Multas
-              </span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200">
-                /Frota/Multas
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5 font-medium">
-              Cruzamento simultâneo entre <strong>Diárias</strong> e <strong>Agendamento de Veículos</strong> para vincular a autuação ao condutor responsável.
-            </p>
-          </div>
-        </div>
-
-        {/* Status de Sincronização das Fontes */}
-        <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
-          <button
-            type="button"
-            onClick={loadSourcesData}
-            disabled={isLoadingSources}
-            className="px-3 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-            title="Recarregar registros de viagens"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoadingSources ? 'animate-spin text-amber-600' : 'text-slate-500'}`} />
-            <span className="hidden sm:inline">Atualizar Bases</span>
-          </button>
-
-          {hasSearched && results.length > 0 && (
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="px-3 py-1.5 text-xs font-bold text-slate-900 bg-amber-400 hover:bg-amber-300 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-              title="Imprimir relatório da infração"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Imprimir</span>
-            </button>
-          )}
-        </div>
-      </div>
 
       {/* ÁREA COMPACTA DE PESQUISA (RESPONSIVA VIEWPORT MÁXIMO) */}
       <div className="bg-white rounded-2xl border border-slate-200/90 p-4 md:p-5 shadow-xs print:hidden">
@@ -745,11 +736,24 @@ Fonte consultada: Prefeitura Integrada (Módulos Diárias e Agendamento)`;
               </span>
             </div>
 
-            {results.length > 1 && (
-              <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                Múltiplos registros encontrados nas bases
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {results.length > 1 && (
+                <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                  Múltiplos registros encontrados nas bases
+                </span>
+              )}
+              {results.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  className="px-3 py-1 text-xs font-bold text-slate-800 bg-amber-400 hover:bg-amber-300 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer print:hidden"
+                  title="Imprimir relatório da apuração"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Imprimir</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* CASO: SEM RESULTADOS CORRESPONDENTES */}
