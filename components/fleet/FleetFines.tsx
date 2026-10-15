@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   ShieldAlert, 
   Search, 
@@ -21,7 +21,9 @@ import {
   Layers,
   Sparkles,
   Users,
-  Check
+  Check,
+  ChevronDown,
+  X
 } from 'lucide-react';
 import { Vehicle, Sector, Person, VehicleSchedule, DiariaEvento } from '../../types';
 import { getAllDiariaEventos } from '../../services/diariasEventosService';
@@ -63,8 +65,11 @@ export const FleetFines: React.FC<FleetFinesProps> = ({
 }) => {
   // Parâmetros de pesquisa
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
+  const [vehicleInput, setVehicleInput] = useState<string>('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
   const [fineDate, setFineDate] = useState<string>('');
   const [fineTime, setFineTime] = useState<string>('');
+  const comboboxRef = useRef<HTMLDivElement>(null);
 
   // Fontes de dados
   const [diarias, setDiarias] = useState<DiariaEvento[]>([]);
@@ -84,6 +89,39 @@ export const FleetFines: React.FC<FleetFinesProps> = ({
     if (!str) return '';
     return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   }, []);
+
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (comboboxRef.current && !comboboxRef.current.contains(e.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Lista dinâmica de veículos filtrados pela digitação
+  const filteredVehicles = useMemo(() => {
+    if (!vehicleInput.trim()) {
+      return vehicles.slice().sort((a, b) => (a.plate || '').localeCompare(b.plate || ''));
+    }
+    const qClean = cleanPlate(vehicleInput);
+    const qNorm = normalizeStr(vehicleInput);
+
+    return vehicles.filter(v => {
+      const pClean = cleanPlate(v.plate);
+      const mNorm = normalizeStr(v.model);
+      const bNorm = normalizeStr(v.brand);
+
+      return (
+        (qClean && pClean.includes(qClean)) ||
+        (qNorm && mNorm.includes(qNorm)) ||
+        (qNorm && bNorm.includes(qNorm)) ||
+        `${bNorm} ${mNorm}`.includes(qNorm)
+      );
+    }).sort((a, b) => (a.plate || '').localeCompare(b.plate || ''));
+  }, [vehicles, vehicleInput, cleanPlate, normalizeStr]);
 
   // 1. Carregar dados reais de /Diarias/Lancamentos e /AgendamentoVeiculos/Historico
   const loadSourcesData = useCallback(async () => {
@@ -121,13 +159,21 @@ export const FleetFines: React.FC<FleetFinesProps> = ({
       const urlDate = searchParams.get('data') || searchParams.get('date');
       const urlTime = searchParams.get('hora') || searchParams.get('time');
 
-      if (urlVehicle) setSelectedVehicleId(urlVehicle);
+      if (urlVehicle) {
+        const matched = vehicles.find(v => v.id === urlVehicle || cleanPlate(v.plate) === cleanPlate(urlVehicle));
+        if (matched) {
+          setSelectedVehicleId(matched.id);
+          setVehicleInput(`${matched.brand ? `${matched.brand} ` : ''}${matched.model} • ${matched.plate}`);
+        } else {
+          setVehicleInput(urlVehicle);
+        }
+      }
       if (urlDate) setFineDate(urlDate);
       if (urlTime) setFineTime(urlTime);
     } catch (e) {
       console.warn('Erro ao ler searchParams da URL:', e);
     }
-  }, []);
+  }, [vehicles, cleanPlate]);
 
   // Formatação segura de data/hora para exibição
   const formatDateTimeDisplay = (dtStr?: string) => {
@@ -150,8 +196,9 @@ export const FleetFines: React.FC<FleetFinesProps> = ({
 
   // 3. Execução da Consulta Cruzada
   const handleSearch = useCallback(() => {
-    if (!selectedVehicleId) {
-      alert('Selecione o veículo da ocorrência para iniciar a pesquisa.');
+    const rawInput = vehicleInput.trim();
+    if (!rawInput && !selectedVehicleId) {
+      alert('Informe a placa ou modelo do veículo infrator para iniciar a pesquisa.');
       return;
     }
     if (!fineDate) {
@@ -165,11 +212,28 @@ export const FleetFines: React.FC<FleetFinesProps> = ({
 
     setIsSearching(true);
     setHasSearched(true);
+    setIsDropdownOpen(false);
+
+    // Tentar localizar veículo correspondente na lista
+    const matchedVehicle = vehicles.find(v => 
+      (selectedVehicleId && v.id === selectedVehicleId) ||
+      (rawInput && (
+        cleanPlate(v.plate) === cleanPlate(rawInput) ||
+        (cleanPlate(rawInput).length >= 5 && cleanPlate(v.plate).includes(cleanPlate(rawInput))) ||
+        `${v.brand || ''} ${v.model} • ${v.plate}`.toLowerCase() === rawInput.toLowerCase()
+      ))
+    );
+
+    const effectiveVehicleId = matchedVehicle?.id || selectedVehicleId;
+    const targetPlateClean = cleanPlate(matchedVehicle?.plate || rawInput);
+    const targetModelNorm = normalizeStr(matchedVehicle?.model || rawInput);
+    const targetBrandNorm = normalizeStr(matchedVehicle?.brand || '');
 
     // Atualizar URL sem recarregar a página (mantendo a rota canônica /Frota/Multas com parâmetros)
     try {
       const params = new URLSearchParams();
-      params.set('veiculo', selectedVehicleId);
+      if (targetPlateClean) params.set('veiculo', targetPlateClean);
+      else if (effectiveVehicleId) params.set('veiculo', effectiveVehicleId);
       params.set('data', fineDate);
       params.set('hora', fineTime);
       const newUrl = `/Frota/Multas?${params.toString()}`;
@@ -177,11 +241,6 @@ export const FleetFines: React.FC<FleetFinesProps> = ({
     } catch (e) {
       console.warn('Falha ao atualizar parâmetros na URL:', e);
     }
-
-    const targetVehicle = vehicles.find(v => v.id === selectedVehicleId);
-    const targetPlateClean = cleanPlate(targetVehicle?.plate);
-    const targetModelNorm = normalizeStr(targetVehicle?.model);
-    const targetBrandNorm = normalizeStr(targetVehicle?.brand);
 
     // Construção do Timestamp da infração com tolerância precisa
     const [hours, minutes] = fineTime.split(':').map(Number);
@@ -197,8 +256,14 @@ export const FleetFines: React.FC<FleetFinesProps> = ({
 
       // Correspondência do Veículo
       const scheduleVehicle = vehicles.find(v => v.id === s.vehicleId);
-      const isVehicleDirectMatch = s.vehicleId === selectedVehicleId;
-      const isPlateMatch = targetPlateClean && scheduleVehicle && cleanPlate(scheduleVehicle.plate) === targetPlateClean;
+      const isVehicleDirectMatch = Boolean(effectiveVehicleId && s.vehicleId === effectiveVehicleId);
+      const schedulePlateClean = cleanPlate(scheduleVehicle?.plate);
+      
+      const isPlateMatch = Boolean(
+        targetPlateClean && 
+        schedulePlateClean && 
+        (schedulePlateClean === targetPlateClean || schedulePlateClean.includes(targetPlateClean) || targetPlateClean.includes(schedulePlateClean))
+      );
 
       if (!isVehicleDirectMatch && !isPlateMatch) return;
 
@@ -340,6 +405,7 @@ export const FleetFines: React.FC<FleetFinesProps> = ({
     setIsSearching(false);
   }, [
     selectedVehicleId, 
+    vehicleInput,
     fineDate, 
     fineTime, 
     vehicles, 
@@ -354,6 +420,8 @@ export const FleetFines: React.FC<FleetFinesProps> = ({
   // Limpar pesquisa
   const handleClear = () => {
     setSelectedVehicleId('');
+    setVehicleInput('');
+    setIsDropdownOpen(false);
     setFineDate('');
     setFineTime('');
     setResults([]);
@@ -395,7 +463,10 @@ Fonte consultada: Prefeitura Integrada (Módulos Diárias e Agendamento)`;
     window.print();
   };
 
-  const selectedVehicleObj = vehicles.find(v => v.id === selectedVehicleId);
+  const selectedVehicleObj = vehicles.find(v => 
+    (selectedVehicleId && v.id === selectedVehicleId) ||
+    (vehicleInput.trim() && cleanPlate(v.plate) && cleanPlate(v.plate) === cleanPlate(vehicleInput))
+  );
 
   return (
     <div className="w-full flex flex-col gap-4 max-w-7xl mx-auto pb-8 print:p-0">
@@ -459,31 +530,118 @@ Fonte consultada: Prefeitura Integrada (Módulos Diárias e Agendamento)`;
           }}
           className="grid grid-cols-1 md:grid-cols-12 gap-3.5 items-end"
         >
-          {/* CAMPO 1: VEÍCULO (SELECT DINÂMICO NOME/MODELO + PLACA) */}
-          <div className="md:col-span-5 flex flex-col gap-1.5">
-            <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-              <Car className="w-3.5 h-3.5 text-amber-600" />
-              <span>Veículo Infrator</span>
-              <span className="text-rose-500">*</span>
+          {/* CAMPO 1: VEÍCULO INFRATOR (ABERTO PARA DIGITAÇÃO + AUTOCOMPLETE INTELIGENTE) */}
+          <div className="md:col-span-5 flex flex-col gap-1.5 relative" ref={comboboxRef}>
+            <label className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Car className="w-3.5 h-3.5 text-amber-600" />
+                <span>Veículo Infrator</span>
+                <span className="text-rose-500">*</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-medium">
+                digite placa ou modelo
+              </span>
             </label>
             <div className="relative">
-              <select
-                value={selectedVehicleId}
-                onChange={(e) => setSelectedVehicleId(e.target.value)}
-                className="w-full text-xs md:text-sm font-bold text-slate-800 bg-slate-50 hover:bg-white border border-slate-300 rounded-xl px-3 py-2.5 outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all cursor-pointer shadow-xs truncate"
+              <input
+                type="text"
+                value={vehicleInput}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setVehicleInput(val);
+                  setIsDropdownOpen(true);
+                  const match = vehicles.find(v => 
+                    cleanPlate(v.plate) === cleanPlate(val) ||
+                    `${v.brand ? `${v.brand} ` : ''}${v.model} • ${v.plate}`.toLowerCase() === val.toLowerCase()
+                  );
+                  setSelectedVehicleId(match ? match.id : '');
+                }}
+                onFocus={() => setIsDropdownOpen(true)}
+                placeholder="Digite a placa ou modelo (ex: TZD0F52 ou Toro)..."
+                className="w-full text-xs md:text-sm font-bold text-slate-800 bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-xl pl-3 pr-16 py-2.5 outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all shadow-xs"
                 required
-              >
-                <option value="">Selecione o veículo (Modelo + Placa)...</option>
-                {vehicles
-                  .slice()
-                  .sort((a, b) => (a.plate || '').localeCompare(b.plate || ''))
-                  .map(v => (
-                    <option key={v.id} value={v.id}>
-                      {v.brand ? `${v.brand} ` : ''}{v.model} • {v.plate}
-                    </option>
-                  ))}
-              </select>
+                autoComplete="off"
+              />
+
+              {/* AÇÕES NO FINAL DO INPUT */}
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-slate-400">
+                {vehicleInput && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVehicleInput('');
+                      setSelectedVehicleId('');
+                      setIsDropdownOpen(false);
+                    }}
+                    className="p-1 hover:text-slate-700 hover:bg-slate-200/60 rounded-md transition-colors cursor-pointer"
+                    title="Limpar veículo"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsDropdownOpen(prev => !prev)}
+                  className="p-1 hover:text-slate-700 hover:bg-slate-200/60 rounded-md transition-colors cursor-pointer"
+                  title="Ver veículos da frota"
+                >
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180 text-amber-600' : ''}`} />
+                </button>
+              </div>
             </div>
+
+            {/* DROPDOWN FLUTUANTE DE AUTOCOMPLETE */}
+            {isDropdownOpen && (
+              <div className="absolute z-50 left-0 right-0 top-full mt-1.5 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden max-h-64 overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+                <div className="p-2 border-b border-slate-100 flex items-center justify-between text-[11px] font-bold text-slate-400 bg-slate-50/80 sticky top-0 backdrop-blur-xs z-10">
+                  <span>Veículos da Frota ({filteredVehicles.length})</span>
+                  <span className="text-[10px] text-slate-400">Clique para preencher</span>
+                </div>
+
+                <div className="divide-y divide-slate-100">
+                  {filteredVehicles.map(v => {
+                    const isSelected = selectedVehicleId === v.id;
+                    return (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedVehicleId(v.id);
+                          setVehicleInput(`${v.brand ? `${v.brand} ` : ''}${v.model} • ${v.plate}`);
+                          setIsDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2.5 hover:bg-amber-50/80 flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                          isSelected ? 'bg-amber-50 text-amber-900 font-black' : 'text-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Car className={`w-4 h-4 shrink-0 ${isSelected ? 'text-amber-600' : 'text-slate-400'}`} />
+                          <div className="truncate">
+                            <span className="text-xs font-bold text-slate-800">
+                              {v.brand ? `${v.brand} ` : ''}{v.model}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="font-mono text-xs font-extrabold px-2 py-0.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 shrink-0">
+                          {v.plate}
+                        </span>
+                      </button>
+                    );
+                  })}
+
+                  {filteredVehicles.length === 0 && (
+                    <div className="p-4 text-center">
+                      <p className="text-xs font-bold text-slate-600">
+                        Nenhum veículo com essa placa/modelo na frota cadastrada.
+                      </p>
+                      <p className="text-[11px] text-amber-700 mt-1 font-medium">
+                        Você pode continuar com a digitação livre de <strong>"{vehicleInput}"</strong> para apurar nas diárias e agendamentos.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* CAMPO 2: DATA DA INFRAÇÃO */}
@@ -529,7 +687,7 @@ Fonte consultada: Prefeitura Integrada (Módulos Diárias e Agendamento)`;
               <span>Consultar</span>
             </button>
 
-            {(selectedVehicleId || fineDate || fineTime || hasSearched) && (
+            {(selectedVehicleId || vehicleInput || fineDate || fineTime || hasSearched) && (
               <button
                 type="button"
                 onClick={handleClear}
@@ -555,11 +713,17 @@ Fonte consultada: Prefeitura Integrada (Módulos Diárias e Agendamento)`;
             </span>
           </div>
 
-          {selectedVehicleObj && (
-            <div className="text-amber-800 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
-              Veículo Selecionado: <strong>{selectedVehicleObj.brand} {selectedVehicleObj.model} ({selectedVehicleObj.plate})</strong>
+          {selectedVehicleObj ? (
+            <div className="text-amber-800 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200 flex items-center gap-1.5">
+              <Car className="w-3.5 h-3.5 text-amber-600" />
+              <span>Veículo: <strong>{selectedVehicleObj.brand} {selectedVehicleObj.model} ({selectedVehicleObj.plate})</strong></span>
             </div>
-          )}
+          ) : vehicleInput.trim() ? (
+            <div className="text-slate-700 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200 flex items-center gap-1.5">
+              <Car className="w-3.5 h-3.5 text-slate-500" />
+              <span>Termo digitado: <strong>{vehicleInput.trim().toUpperCase()}</strong></span>
+            </div>
+          ) : null}
         </div>
       </div>
 
