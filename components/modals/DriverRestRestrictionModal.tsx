@@ -10,6 +10,8 @@ interface DriverRestRestrictionModalProps {
     validationResult: DriverValidationResult | null;
     driver?: Person | null;
     vehicle?: Vehicle | null;
+    canOverride?: boolean;
+    onConfirmOverride?: () => void;
 }
 
 export const DriverRestRestrictionModal: React.FC<DriverRestRestrictionModalProps> = ({
@@ -17,7 +19,9 @@ export const DriverRestRestrictionModal: React.FC<DriverRestRestrictionModalProp
     onClose,
     validationResult,
     driver,
-    vehicle
+    vehicle,
+    canOverride = false,
+    onConfirmOverride
 }) => {
     const [isClosing, setIsClosing] = useState(false);
 
@@ -42,6 +46,17 @@ export const DriverRestRestrictionModal: React.FC<DriverRestRestrictionModalProp
             onClose();
             setIsClosing(false);
         }, 250);
+    };
+
+    const handleConfirm = () => {
+        setIsClosing(true);
+        setTimeout(() => {
+            onClose();
+            if (onConfirmOverride) {
+                onConfirmOverride();
+            }
+            setIsClosing(false);
+        }, 200);
     };
 
     const getRuleIcon = () => {
@@ -98,7 +113,7 @@ export const DriverRestRestrictionModal: React.FC<DriverRestRestrictionModalProp
                 <div className="bg-gradient-to-br from-rose-50 via-amber-50/60 to-white px-6 pt-6 pb-5 border-b border-rose-100/60 relative">
                     <button
                         onClick={handleClose}
-                        className="absolute top-4 right-4 p-2 bg-white/80 hover:bg-white text-slate-400 hover:text-slate-600 rounded-xl transition-all shadow-xs"
+                        className="absolute top-4 right-4 p-2 bg-white/80 hover:bg-white text-slate-400 hover:text-slate-600 rounded-xl transition-all shadow-xs cursor-pointer"
                     >
                         <X className="w-5 h-5" />
                     </button>
@@ -163,6 +178,22 @@ export const DriverRestRestrictionModal: React.FC<DriverRestRestrictionModalProp
                         </div>
                     )}
 
+                    {/* Alerta de Autorização de Administrador */}
+                    {canOverride && (
+                        <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 space-y-2 shadow-xs">
+                            <div className="flex items-center gap-2 text-amber-900 font-black text-xs uppercase tracking-wider">
+                                <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+                                <span>Aviso para Administrador</span>
+                            </div>
+                            <p className="text-xs text-amber-950 font-medium leading-relaxed">
+                                Este agendamento infringe a norma regular de descanso ou final de semana. Como <strong>Administrador</strong>, você pode autorizar esta viagem excepcionalmente e prosseguir com o agendamento.
+                            </p>
+                            <p className="text-[11px] text-amber-800/90 font-bold">
+                                Deseja autorizar a exceção e continuar?
+                            </p>
+                        </div>
+                    )}
+
                     {/* Informação Resumida da Norma */}
                     <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-100 text-slate-600">
                         <Info className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
@@ -172,18 +203,31 @@ export const DriverRestRestrictionModal: React.FC<DriverRestRestrictionModalProp
                     </div>
                 </div>
 
-                {/* Footer com Botão */}
-                <div className="px-6 py-4 bg-slate-50/80 border-t border-slate-100 flex items-center justify-end gap-3">
+                {/* Footer com Ações */}
+                <div className="px-6 py-4 bg-slate-50/80 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-end gap-2.5">
                     <button
+                        type="button"
                         onClick={handleClose}
-                        className="w-full sm:w-auto px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
+                        className="w-full sm:w-auto px-5 py-2.5 bg-white hover:bg-slate-100 active:scale-95 text-slate-700 border border-slate-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
                     >
-                        <Check className="w-4 h-4" />
-                        <span>Entendido / Selecionar Outro Condutor</span>
+                        <X className="w-4 h-4 text-slate-400" />
+                        <span>{canOverride ? 'Cancelar' : 'Entendido / Selecionar Outro Condutor'}</span>
                     </button>
+
+                    {canOverride && onConfirmOverride && (
+                        <button
+                            type="button"
+                            onClick={handleConfirm}
+                            className="w-full sm:w-auto px-5 py-2.5 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-2 border border-amber-300"
+                        >
+                            <ShieldAlert className="w-4 h-4 text-slate-950" />
+                            <span>Continuar Mesmo Assim (Autorizar Exceção)</span>
+                        </button>
+                    )}
                 </div>
             </div>
         </div>,
         document.body
     );
 };
+

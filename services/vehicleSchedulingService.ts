@@ -141,9 +141,14 @@ const notifyRequester = async (scheduleId: string, status: ScheduleStatus) => {
 };
 
 
-export const createSchedule = async (schedule: Omit<VehicleSchedule, 'id' | 'createdAt' | 'protocol'>): Promise<VehicleSchedule | null> => {
+export const createSchedule = async (
+    schedule: Omit<VehicleSchedule, 'id' | 'createdAt' | 'protocol'>, 
+    allowRestOverride?: boolean
+): Promise<VehicleSchedule | null> => {
+    const shouldOverride = Boolean(allowRestOverride || schedule.overrideRestRules);
+
     // Validação Definitiva no Backend: Regras de Descanso e Disponibilidade do Motorista
-    if (schedule.driverId && schedule.departureDateTime && schedule.returnDateTime) {
+    if (!shouldOverride && schedule.driverId && schedule.departureDateTime && schedule.returnDateTime) {
         const existingSchedules = await getSchedules();
         const holidays = await fetchSystemHolidaysFromDatabase();
         const validation = validateDriverScheduleRules({
@@ -158,6 +163,8 @@ export const createSchedule = async (schedule: Omit<VehicleSchedule, 'id' | 'cre
             console.error('Tentativa de agendamento bloqueada por regra de descanso:', validation);
             throw new Error(validation.message || 'Motorista indisponível pelas regras de descanso.');
         }
+    } else if (shouldOverride) {
+        console.warn('Agendamento realizado sob autorização de exceção de descanso pelo Administrador.');
     }
 
     const protocol = await generateProtocol();
@@ -219,9 +226,14 @@ export const createSchedule = async (schedule: Omit<VehicleSchedule, 'id' | 'cre
     return result;
 };
 
-export const updateSchedule = async (schedule: VehicleSchedule): Promise<VehicleSchedule | null> => {
+export const updateSchedule = async (
+    schedule: VehicleSchedule, 
+    allowRestOverride?: boolean
+): Promise<VehicleSchedule | null> => {
+    const shouldOverride = Boolean(allowRestOverride || schedule.overrideRestRules);
+
     // Validação Definitiva no Backend: Regras de Descanso e Disponibilidade do Motorista
-    if (schedule.driverId && schedule.departureDateTime && schedule.returnDateTime && schedule.status !== 'cancelado') {
+    if (!shouldOverride && schedule.driverId && schedule.departureDateTime && schedule.returnDateTime && schedule.status !== 'cancelado') {
         const existingSchedules = await getSchedules();
         const holidays = await fetchSystemHolidaysFromDatabase();
         const validation = validateDriverScheduleRules({
@@ -237,6 +249,8 @@ export const updateSchedule = async (schedule: VehicleSchedule): Promise<Vehicle
             console.error('Tentativa de atualização bloqueada por regra de descanso:', validation);
             throw new Error(validation.message || 'Motorista indisponível pelas regras de descanso.');
         }
+    } else if (shouldOverride) {
+        console.warn('Atualização de agendamento realizada sob exceção de descanso pelo Administrador.');
     }
 
     const dbSchedule = {
@@ -321,10 +335,11 @@ export const updateSchedule = async (schedule: VehicleSchedule): Promise<Vehicle
 export const updateScheduleStatus = async (
     id: string,
     status: ScheduleStatus,
-    cancellationDetails?: { reason: string, cancelledBy: string }
+    cancellationDetails?: { reason: string, cancelledBy: string },
+    allowRestOverride?: boolean
 ): Promise<boolean> => {
     // Validação ao aprovar agendamento
-    if (status === 'confirmado') {
+    if (status === 'confirmado' && !allowRestOverride) {
         const current = await getScheduleById(id);
         if (current && current.driverId && current.departureDateTime && current.returnDateTime) {
             const existingSchedules = await getSchedules();

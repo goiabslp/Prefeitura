@@ -531,6 +531,7 @@ export interface VehicleSchedule {
   cancellationReason?: string;
   cancelledAt?: string;
   cancelledBy?: string;
+  overrideRestRules?: boolean;
 }
 
 export interface CrewMember {

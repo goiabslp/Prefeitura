@@ -6103,7 +6103,7 @@ timestamp: ${new Date().toISOString()}`);
                   const optimistic = { ...s, id: Date.now().toString(), createdAt: new Date().toISOString() } as VehicleSchedule;
                   setSchedules(prev => [optimistic, ...prev]);
                   try {
-                    await vehicleSchedulingService.createSchedule(s);
+                    await vehicleSchedulingService.createSchedule(s, (s as any).overrideRestRules);
                   } catch (e) {
                     console.error("Failed to create schedule", e);
                     setSchedules(prev => prev.filter(x => x.id !== optimistic.id));
@@ -6116,7 +6116,7 @@ timestamp: ${new Date().toISOString()}`);
                   setSchedules(prev => prev.map(old => old.id === s.id ? s : old));
 
                   try {
-                    const result = await vehicleSchedulingService.updateSchedule(s);
+                    const result = await vehicleSchedulingService.updateSchedule(s, (s as any).overrideRestRules);
                     if (!result) throw new Error('Update failed');
                     // Ensure the state reflects any server-side defaults/changes
                     setSchedules(prev => prev.map(old => old.id === result.id ? result : old));
