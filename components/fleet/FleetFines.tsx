@@ -798,44 +798,6 @@ Fonte consultada: Prefeitura Integrada (Módulos Diárias e Agendamento)`;
         </div>
       )}
 
-      {/* ESTADO INICIAL / ORIENTAÇÕES */}
-      {!hasSearched && (
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-8 text-center flex flex-col items-center justify-center gap-3 shadow-xs">
-          <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-500 shadow-inner">
-            <Search className="w-7 h-7 text-slate-400" />
-          </div>
-          <div className="max-w-md">
-            <h4 className="text-base font-black text-slate-900 tracking-tight">
-              Apurar Infração de Trânsito
-            </h4>
-            <p className="text-xs text-slate-500 mt-1 font-medium leading-relaxed">
-              Selecione o <strong>veículo</strong> e informe a <strong>data</strong> e <strong>hora</strong> constantes na autuação para localizar quem estava na condução no momento exato.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-xl w-full mt-2 text-left">
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
-              <div className="font-extrabold text-blue-800 flex items-center gap-1.5 mb-1">
-                <FileText className="w-3.5 h-3.5" />
-                <span>Módulo de Diárias</span>
-              </div>
-              <p className="text-[11px] text-slate-600 leading-normal">
-                Verifica automaticamente viagens registradas em <code>/Diarias/Lancamentos</code>, identificando servidores, setores e deslocamentos intermunicipais.
-              </p>
-            </div>
-
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
-              <div className="font-extrabold text-emerald-800 flex items-center gap-1.5 mb-1">
-                <Navigation className="w-3.5 h-3.5" />
-                <span>Agendamento de Veículos</span>
-              </div>
-              <p className="text-[11px] text-slate-600 leading-normal">
-                Verifica ordens de serviço e viagens em <code>/AgendamentoVeiculos/Historico</code>, com horários de saída, chegada e motorista escalado.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
