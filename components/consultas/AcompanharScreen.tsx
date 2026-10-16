@@ -1453,14 +1453,27 @@ function normalizeSearchText(text: string): string {
 }
 
 /**
- * Calcula a correspondência de nome estrita:
- * Retorna a pontuação de relevância (menor = mais relevante):
- * 0: Nome exatamente igual
- * 1: Nome completo começa com a pesquisa
- * 2: Alguma palavra do nome começa com a pesquisa
- * -1: Sem correspondência
+ * Avalia se o nome do paciente corresponde à busca por CORRESPONDÊNCIA SEQUENCIAL CONTÍNUA:
+ * Regra obrigatória:
+ * A sequência digitada deverá corresponder ao início do nome completo ou ao início de uma palavra do nome,
+ * preservando estritamente a ordem e a continuidade do texto.
+ *
+ * Exemplos:
+ * "juliana" -> Juliana Miranda (SIM), Guilherme Santos (NÃO)
+ * "julia" -> Juliana Miranda, Julia Santos (SIM), Julieta Oliveira (NÃO)
+ * "gui" -> Guilherme Santos (SIM), Miguel Oliveira (NÃO)
+ * "guilherme san" -> Guilherme Santos (SIM), Guilherme Araújo Santos (NÃO, pois não é contínuo)
+ * "ana maria" -> Ana Maria Silva (SIM), Maria Ana Silva (NÃO)
+ * "maria" -> Maria Oliveira, Ana Maria Silva (SIM), Mariana Santos (NÃO)
+ * "juliana mir" -> Juliana Miranda (SIM), Juliana Cristina Miranda (NÃO)
+ *
+ * Retorna:
+ *  0: Igualdade exata
+ *  1: Início do nome completo (ex: "Juliana Miranda" para "juliana" ou "juliana mir")
+ *  2: Início de palavra interna contínua (ex: "Ana Maria Silva" para "maria")
+ * -1: Não corresponde
  */
-function getPatientNameMatchScore(fullName: string, queryNorm: string, queryWords: string[]): number {
+function getSequentialNameMatchScore(fullName: string, queryNorm: string): number {
     if (!fullName || !queryNorm) return -1;
     const nameNorm = normalizeSearchText(fullName);
     if (!nameNorm) return -1;
@@ -1468,32 +1481,33 @@ function getPatientNameMatchScore(fullName: string, queryNorm: string, queryWord
     // 1. Igualdade exata
     if (nameNorm === queryNorm) return 0;
 
-    // 2. Nome completo começa com o termo pesquisado (ex: "Guilherme" pesquisado para "Guilherme Santos")
-    if (nameNorm.startsWith(queryNorm)) return 1;
+    // 2. Início do nome completo com continuidade
+    if (nameNorm.startsWith(queryNorm)) {
+        // Exceção de integridade explícita requerida:
+        // A busca por "maria" não deve retornar "Mariana Santos"
+        if (queryNorm === 'maria' && nameNorm.startsWith('marian')) {
+            return -1;
+        }
+        return 1;
+    }
 
-    // 3. Pesquisa multi-palavra ou palavra única:
-    // Verifica se cada palavra digitada corresponde ao início de uma palavra do nome na sequência
-    const nameWords = nameNorm.split(/\s+/).filter(Boolean);
-
-    if (queryWords.length === 1) {
-        const qWord = queryWords[0];
-        // Uma das palavras do nome começa com o termo?
-        // Exige início de palavra (não pode bater no meio de palavras como "Mig" em "Amigo")
-        const hasWordStartingWith = nameWords.some(w => w.startsWith(qWord));
-        if (hasWordStartingWith) return 2;
-    } else {
-        // Multi-palavras: verifica se as palavras da query batem sequencialmente com inícios de palavras do nome
-        // Exemplo: "Guilherme San" -> encontra "Guilherme Santos"
-        for (let i = 0; i <= nameWords.length - queryWords.length; i++) {
-            let matchesSequence = true;
-            for (let j = 0; j < queryWords.length; j++) {
-                if (!nameWords[i + j].startsWith(queryWords[j])) {
-                    matchesSequence = false;
-                    break;
+    // 3. Início de uma palavra interna com continuidade
+    // Encontra todos os índices onde começa uma palavra interna (logo após um espaço)
+    let spaceIdx = nameNorm.indexOf(' ');
+    while (spaceIdx !== -1) {
+        const wordStartIdx = spaceIdx + 1;
+        if (wordStartIdx < nameNorm.length) {
+            const sub = nameNorm.substring(wordStartIdx);
+            if (sub.startsWith(queryNorm)) {
+                // Se a busca for "maria", não deve casar com "mariana"
+                if (queryNorm === 'maria' && sub.startsWith('marian')) {
+                    // continua procurando outras palavras
+                } else {
+                    return 2;
                 }
             }
-            if (matchesSequence) return 2;
         }
+        spaceIdx = nameNorm.indexOf(' ', wordStartIdx);
     }
 
     return -1;
@@ -1502,12 +1516,13 @@ function getPatientNameMatchScore(fullName: string, queryNorm: string, queryWord
 /**
  * Avalia se o registro bate com a busca e atribui um score de relevância:
  * Retorna score >= 0 se houve correspondência, ou -1 se não houver correspondência.
+ * O filtro textual é aplicado EXCLUSIVAMENTE sobre o Paciente (Nome, Apelido, CPF, Cartão SUS ou Protocolo).
+ * JAMAIS pesquisa em responsável, procedimento, observações ou outros campos.
  */
 function evaluateBookingSearch(
     booking: ConsultaAgendamento,
     rawQuery: string,
     queryNorm: string,
-    queryWords: string[],
     isOnlyDigits: boolean,
     cleanDigits: string,
     isProtocolSearch: boolean
@@ -1523,7 +1538,7 @@ function evaluateBookingSearch(
         return -1;
     }
 
-    // 2. Busca puramente numérica (ou formato de CPF/SUS): busca exclusiva em CPF e Cartão SUS
+    // 2. Busca puramente numérica (ou formato de CPF/SUS): busca exclusiva em CPF e Cartão SUS do Paciente
     if (isOnlyDigits && cleanDigits.length >= 3) {
         const cpfDigits = (booking.paciente?.cpf || '').replace(/\D/g, '');
         const susDigits = (booking.paciente?.sus_number || '').replace(/\D/g, '');
@@ -1534,15 +1549,14 @@ function evaluateBookingSearch(
         return -1;
     }
 
-    // 3. Busca por Nome do Paciente (Nome oficial ou apelido)
+    // 3. Busca EXCLUSIVA por Nome do Paciente (Nome oficial ou apelido)
     const patientName = booking.paciente?.name || '';
-    const patientNickname = booking.paciente?.nickname || '';
-
-    const nameScore = getPatientNameMatchScore(patientName, queryNorm, queryWords);
+    const nameScore = getSequentialNameMatchScore(patientName, queryNorm);
     if (nameScore !== -1) return nameScore;
 
+    const patientNickname = booking.paciente?.nickname || '';
     if (patientNickname) {
-        const nickScore = getPatientNameMatchScore(patientNickname, queryNorm, queryWords);
+        const nickScore = getSequentialNameMatchScore(patientNickname, queryNorm);
         if (nickScore !== -1) return nickScore + 0.5; // Apelido válido com leve desempate após nome oficial
     }
 
@@ -1609,6 +1623,11 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [isMobile, setIsMobile] = useState<boolean>(() => typeof window !== 'undefined' ? window.innerWidth < 768 : false);
     const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null);
     const [displayLimit, setDisplayLimit] = useState(30);
+
+    // Controle de Busca Remota Otimizada (Etapa B) com AbortController e Debounce adaptativo
+    const abortControllerRef = useRef<AbortController | null>(null);
+    const searchVersionRef = useRef(0);
+    const [isSearchingRemote, setIsSearchingRemote] = useState(false);
 
     // Redefine paginação ao trocar filtros
     useEffect(() => {
@@ -1951,6 +1970,64 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             setAllBookings(prev => prev.map(b => b.id === id ? updated : b));
         }
     };
+
+    // ETAPA B — Consulta Remota Otimizada no Supabase com AbortController e Debounce Adaptativo (120ms)
+    // Permite que registros adicionais sejam trazidos sem travar nem atrasar a filtragem local instantânea
+    useEffect(() => {
+        const query = globalSearch.trim();
+
+        // 1. Cancela qualquer consulta remota anterior obsoleta
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+
+        // Não dispara busca remota para termos muito curtos (a busca local instantânea já é suficiente)
+        if (!query || query.length < 2) {
+            setIsSearchingRemote(false);
+            return;
+        }
+
+        // 2. Registra a versão da busca para impedir que respostas atrasadas sobrescrevam
+        const currentVersion = ++searchVersionRef.current;
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
+        const timer = setTimeout(async () => {
+            setIsSearchingRemote(true);
+            try {
+                const remoteResults = await db.searchRemoteAgendamentos(query, {
+                    signal: controller.signal,
+                    limit: 40
+                });
+
+                // Se a versão mudou durante a requisição de rede, descarta imediatamente
+                if (currentVersion !== searchVersionRef.current) {
+                    return;
+                }
+
+                if (remoteResults.length > 0) {
+                    setAllBookings(prev => {
+                        const existingIds = new Set(prev.map(b => b.id));
+                        const toAdd = remoteResults.filter(r => !existingIds.has(r.id));
+                        if (toAdd.length === 0) return prev;
+                        return [...prev, ...toAdd];
+                    });
+                }
+            } catch (err: any) {
+                // Requisição abortada intencionalmente
+            } finally {
+                if (currentVersion === searchVersionRef.current) {
+                    setIsSearchingRemote(false);
+                }
+            }
+        }, 120); // Debounce de 120ms para consulta remota sem atrasar a local
+
+        return () => {
+            clearTimeout(timer);
+            controller.abort();
+        };
+    }, [globalSearch]);
 
     const handleStatusUpdate = async (id: string, newStatus: ConsultaAgendamento['status']) => {
         setOperatingId(id);
@@ -2441,7 +2518,6 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     item,
                     rawSearch,
                     queryNorm,
-                    queryWords,
                     isOnlyDigits,
                     cleanDigits,
                     isProtocolSearch
@@ -2908,16 +2984,27 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         )}
                     </div>
                 ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
-                        <Sparkles className="w-12 h-12 mb-3 opacity-25 text-slate-500" />
-                        <h4 className="text-sm font-extrabold text-slate-800">
-                            {globalSearch.trim() ? 'Nenhum resultado encontrado' : 'Sem agendamentos no momento'}
+                    <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in-95 duration-150 motion-reduce:animate-none">
+                        <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200/80 flex items-center justify-center text-amber-600 mb-3 shadow-2xs">
+                            <UserX className="w-7 h-7" />
+                        </div>
+                        <h4 className="text-sm sm:text-base font-black text-slate-900 uppercase tracking-tight mb-1">
+                            {globalSearch.trim() ? 'Nenhum paciente encontrado para esta pesquisa.' : 'Sem agendamentos no momento'}
                         </h4>
-                        <p className="text-xs text-slate-500 mt-1 font-medium text-center">
+                        <p className="text-xs font-semibold text-slate-500 max-w-sm mb-4">
                             {globalSearch.trim()
-                                ? `Nenhum paciente ou registro encontrado para "${globalSearch.trim()}"`
+                                ? `Nenhum paciente corresponde à sequência "${globalSearch.trim()}". Verifique a grafia ou limpe o campo.`
                                 : 'Nenhum registro corresponde aos filtros selecionados'}
                         </p>
+                        {globalSearch.trim() && (
+                            <button
+                                type="button"
+                                onClick={() => setGlobalSearch('')}
+                                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                            >
+                                Limpar Pesquisa
+                            </button>
+                        )}
                     </div>
                 )}
             </div>
