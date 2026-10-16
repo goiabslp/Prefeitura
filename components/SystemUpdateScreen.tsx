@@ -189,48 +189,48 @@ export const SystemUpdateScreen: React.FC<SystemUpdateScreenProps> = ({ onBack, 
   });
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-50 overflow-y-auto custom-scrollbar relative">
+    <div className="flex-1 flex flex-col h-full min-h-0 bg-slate-50 overflow-y-auto custom-scrollbar relative">
       {/* Header com botão de retorno ao Painel */}
-      <div className="p-6 pb-2 z-10 flex items-center justify-between">
+      <div className="p-4 sm:p-6 pb-2 z-10 flex items-center justify-between shrink-0 gap-3">
         <button 
           onClick={onBack}
-          className="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-all font-bold text-xs tracking-wide bg-white/90 backdrop-blur-md px-4 py-2.5 rounded-xl border border-slate-200 shadow-xs hover:shadow-md active:scale-95 cursor-pointer"
+          className="flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-all font-bold text-xs tracking-wide bg-white/90 backdrop-blur-md px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl border border-slate-200 shadow-xs hover:shadow-md active:scale-95 cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
-          Voltar ao Painel
+          <span>Voltar ao Painel</span>
         </button>
 
-        <span className="text-[11px] font-mono text-slate-400 bg-white/80 px-3 py-1.5 rounded-lg border border-slate-200">
+        <span className="text-[10px] sm:text-[11px] font-mono text-slate-400 bg-white/80 px-2.5 py-1.5 sm:px-3 rounded-lg border border-slate-200">
           /Admin/Dashboard/atualizar
         </span>
       </div>
 
       {/* Seletor de Modo de Atualização: Global ou Individual */}
-      <div className="max-w-xl mx-auto w-full px-4 pt-4 pb-2">
-        <div className="bg-slate-200/80 p-1 rounded-2xl flex items-center shadow-inner">
+      <div className="max-w-lg mx-auto w-full px-4 pt-1 sm:pt-2 pb-2 shrink-0">
+        <div className="bg-slate-200/70 p-1 rounded-2xl flex items-center shadow-inner border border-slate-200/60">
           <button
             type="button"
             onClick={() => setActiveTab('global')}
-            className={`flex-1 py-2.5 px-4 rounded-xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${
+            className={`flex-1 py-2 sm:py-2.5 px-3 sm:px-4 rounded-xl font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${
               activeTab === 'global'
                 ? 'bg-white text-slate-900 shadow-md scale-100'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
             <RefreshCw className="w-3.5 h-3.5 text-orange-500" />
-            Atualização Global
+            <span className="truncate">Atualização Global</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('individual')}
-            className={`flex-1 py-2.5 px-4 rounded-xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${
+            className={`flex-1 py-2 sm:py-2.5 px-3 sm:px-4 rounded-xl font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${
               activeTab === 'individual'
                 ? 'bg-white text-slate-900 shadow-md scale-100'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
             <UserIcon className="w-3.5 h-3.5 text-indigo-500" />
-            Atualização por Usuário
+            <span className="truncate">Atualização por Usuário</span>
           </button>
         </div>
       </div>
@@ -238,39 +238,39 @@ export const SystemUpdateScreen: React.FC<SystemUpdateScreenProps> = ({ onBack, 
       {/* Conteúdo da Aba Selecionada */}
       {activeTab === 'global' ? (
         /* Card Central de Atualização Global */
-        <div className="flex-1 flex items-center justify-center p-4 min-h-[460px]">
-          <div className="w-full max-w-[480px] bg-white rounded-[2.5rem] border border-slate-200/90 shadow-2xl p-8 sm:p-12 overflow-hidden relative animate-scale-up">
+        <div className="flex-1 flex flex-col items-center justify-start sm:justify-center p-4 sm:p-6 overflow-y-auto min-h-0 custom-scrollbar">
+          <div className="my-auto w-full max-w-[440px] sm:max-w-[460px] bg-white rounded-[2.2rem] sm:rounded-[2.5rem] border border-slate-200/90 shadow-2xl p-6 sm:p-8 md:p-10 overflow-hidden relative animate-scale-up">
             {/* Faixa superior com detalhe em degradê laranja/âmbar */}
-            <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500"></div>
+            <div className="absolute top-0 left-0 right-0 h-1.5 sm:h-2 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500"></div>
             
             <div className="flex flex-col items-center text-center">
               {/* Ícone circular grande com fundo amarelo/laranja suave */}
-              <div className="w-24 h-24 sm:w-28 sm:h-28 bg-[#fef7eb] rounded-[2.2rem] flex items-center justify-center mb-8 text-[#f59e0b] ring-8 ring-amber-500/5 shadow-inner">
-                <RefreshCw className="w-12 h-12 sm:w-14 sm:h-14 text-[#ea580c] animate-spin-slow stroke-[2.2]" />
+              <div className="w-20 h-20 sm:w-24 sm:h-24 bg-[#fef7eb] rounded-[1.8rem] sm:rounded-[2.2rem] flex items-center justify-center mb-5 sm:mb-6 text-[#f59e0b] ring-8 ring-amber-500/5 shadow-inner">
+                <RefreshCw className="w-10 h-10 sm:w-12 sm:h-12 text-[#ea580c] animate-spin-slow stroke-[2.2]" />
               </div>
 
               {/* Título Principal */}
-              <h2 className="text-2xl sm:text-3xl font-black text-[#0f172a] mb-4 tracking-tight uppercase leading-tight">
+              <h2 className="text-xl sm:text-2xl md:text-[26px] font-black text-[#0f172a] mb-3 sm:mb-4 tracking-tight uppercase leading-tight">
                 Atualização Global<br />do Sistema
               </h2>
               
               {/* Texto Explicativo */}
-              <p className="text-sm sm:text-base text-slate-600 font-normal mb-9 leading-relaxed max-w-[340px]">
+              <p className="text-xs sm:text-sm text-slate-500 font-medium mb-6 sm:mb-7 leading-relaxed max-w-[320px]">
                 Esta ação disparará um alerta de <b className="font-bold text-slate-800">60 segundos</b> para todos os usuários online. Após a contagem, o recarregamento será forçado.
               </p>
 
               {/* Botão de Ação Primária */}
               <button
                 onClick={() => setShowConfirmModal(true)}
-                className="w-full flex items-center justify-center gap-3 bg-[#0f172a] hover:bg-[#ea580c] text-white font-black py-4 sm:py-4.5 px-8 rounded-2xl transition-all duration-200 active:scale-98 shadow-xl shadow-slate-900/10 uppercase tracking-widest text-xs sm:text-sm cursor-pointer"
+                className="w-full flex items-center justify-center gap-2.5 bg-[#0f172a] hover:bg-[#ea580c] text-white font-black py-3.5 sm:py-4 px-6 rounded-2xl transition-all duration-200 active:scale-98 shadow-xl shadow-slate-900/10 uppercase tracking-widest text-xs sm:text-sm cursor-pointer"
               >
                 <Play className="w-4 h-4 fill-current" />
                 Iniciar Atualização Global
               </button>
 
               {/* Rodapé Institucional */}
-              <div className="mt-8 pt-8 border-t border-slate-100 w-full">
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.25em]">
+              <div className="mt-6 sm:mt-8 pt-5 sm:pt-6 border-t border-slate-100 w-full">
+                <p className="text-[9.5px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-[0.25em]">
                   Prefeitura Integrada • Admin
                 </p>
               </div>
