@@ -12,51 +12,91 @@ export interface AuditLog {
   created_at?: string;
 }
 
-let cachedUser: { id: string, name: string, email: string } | null = null;
+export interface LogActionParams {
+  action_type: string;
+  module?: string | null;
+  description: string;
+  details?: any;
+  user?: {
+    id?: string | null;
+    name?: string;
+    email?: string;
+  } | null;
+}
+
+let activeCurrentUser: { id?: string | null; name: string; email: string } | null = null;
+let cachedSessionUser: { id: string; name: string; email: string } | null = null;
+let realtimeBroadcastChannel: ReturnType<typeof supabase.channel> | null = null;
+
+const isValidUUID = (val?: string | null): boolean => {
+  if (!val) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+};
+
+function getBroadcastChannel() {
+  if (!realtimeBroadcastChannel) {
+    realtimeBroadcastChannel = supabase.channel('audit_logs_realtime_feed');
+    realtimeBroadcastChannel.subscribe();
+  }
+  return realtimeBroadcastChannel;
+}
 
 export const auditLogService = {
-  async getCurrentUser() {
-    if (cachedUser) return cachedUser;
+  /**
+   * Define o usuário atual da aplicação em memória para gravação instantânea e precisa
+   */
+  setCurrentUser(user: { id?: string | null; name?: string; email?: string } | null) {
+    if (user && user.name) {
+      activeCurrentUser = {
+        id: user.id || null,
+        name: user.name,
+        email: user.email || ''
+      };
+    } else {
+      activeCurrentUser = null;
+    }
+  },
 
-    const { data: { session } } = await supabase.auth.getSession();
-    const user = session?.user;
-    if (!user) return null;
+  async getCurrentUser() {
+    if (activeCurrentUser) return activeCurrentUser;
+    if (cachedSessionUser) return cachedSessionUser;
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
+      if (!user) return null;
+
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('name')
         .eq('id', user.id)
         .single();
 
-      cachedUser = {
+      cachedSessionUser = {
         id: user.id,
         name: (profile && !error) ? profile.name : (user.email || 'Usuário'),
         email: user.email || ''
       };
-      return cachedUser;
+      return cachedSessionUser;
     } catch (e) {
-      console.error('Falha ao obter perfil do usuário para logs:', e);
-      return {
-        id: user.id,
-        name: user.email || 'Usuário',
-        email: user.email || ''
-      };
+      console.warn('Falha ao obter perfil do usuário para logs:', e);
+      return null;
     }
   },
 
   clearCache() {
-    cachedUser = null;
+    activeCurrentUser = null;
+    cachedSessionUser = null;
   },
 
   /**
-   * Registra log de auditoria no Supabase.
+   * Registra log de auditoria no Supabase e transmite via Realtime Broadcast.
    * Se houver sessão de simulação / acompanhamento assistido ativa, preserva indelével:
    * Usuário Efetivo, Administrador Executor, Modo, Rota URL e Data/Hora com segundos.
    */
-  async logAction(log: { action_type: string, module?: string | null, description: string, details?: any }) {
+  async logAction(log: LogActionParams) {
     try {
-      const user = await this.getCurrentUser();
+      const user = log.user || await this.getCurrentUser();
 
       // Recupera sessão ativa de simulação do sessionStorage
       let activeImpersonation: any = null;
@@ -74,7 +114,7 @@ export const auditLogService = {
         }
       }
 
-      let finalUserId = user?.id || null;
+      let rawUserId = user?.id || null;
       let finalUserName = user?.name || 'Usuário';
       let finalUserEmail = user?.email || '';
       let finalDescription = log.description;
@@ -87,7 +127,7 @@ export const auditLogService = {
 
       if (activeImpersonation && !isImpersonationLifecycle) {
         // Usuário efetivo é o usuário simulado, mas a autoria do administrador real é gravada
-        finalUserId = activeImpersonation.targetUser.id;
+        rawUserId = activeImpersonation.targetUser.id;
         finalUserName = `${activeImpersonation.targetUser.name} (Simulado por Admin: ${activeImpersonation.realAdmin.name})`;
         finalUserEmail = activeImpersonation.targetUser.email || activeImpersonation.realAdmin.email || '';
         
@@ -118,7 +158,13 @@ export const auditLogService = {
         };
       }
 
-      const { error } = await supabase.from('audit_logs').insert([{
+      // Validação estrita de UUID para evitar erro de sintaxe do Postgres
+      const finalUserId = isValidUUID(rawUserId) ? rawUserId : null;
+      if (rawUserId && !isValidUUID(rawUserId)) {
+        finalDetails.custom_user_id = rawUserId;
+      }
+
+      const logPayload: AuditLog = {
         user_id: finalUserId,
         user_name: finalUserName,
         user_email: finalUserEmail,
@@ -127,17 +173,83 @@ export const auditLogService = {
         description: finalDescription,
         details: finalDetails,
         created_at: preciseTimestamp
-      }]);
-      
-      if (error) {
-        console.error('Erro ao gravar log de auditoria:', error);
+      };
+
+      // 1. Grava no banco de dados Supabase de forma assíncrona
+      const insertPromise = supabase.from('audit_logs').insert([logPayload]).select('id').single();
+
+      // 2. Dispara notificação Realtime em tempo real (Broadcast)
+      try {
+        const channel = getBroadcastChannel();
+        channel.send({
+          type: 'broadcast',
+          event: 'new_audit_log',
+          payload: logPayload
+        }).catch(() => {});
+      } catch (err) {
+        // Fallback silencioso
       }
+
+      // 3. Dispara evento local para abas da mesma janela
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('audit_log_created', { detail: logPayload }));
+      }
+
+      const { data: insertedData, error } = await insertPromise;
+      if (error) {
+        console.warn('Erro ao gravar log de auditoria no Supabase:', error.message);
+      } else if (insertedData?.id) {
+        logPayload.id = insertedData.id;
+      }
+
+      return logPayload;
     } catch (err) {
-      console.error('Falha ao processar log de auditoria:', err);
+      console.warn('Falha ao processar log de auditoria:', err);
+      return null;
     }
   },
 
-  async fetchLogs(filters?: { date?: string, user_id?: string, action_type?: string }): Promise<AuditLog[]> {
+  /**
+   * Assina atualizações em tempo real dos logs de auditoria
+   */
+  subscribeToLogs(onNewLog: (log: AuditLog) => void): () => void {
+    const channelName = `audit_logs_sub_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const channel = supabase.channel(channelName)
+      .on('broadcast', { event: 'new_audit_log' }, (payload) => {
+        if (payload?.payload) {
+          onNewLog(payload.payload as AuditLog);
+        }
+      })
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'audit_logs' },
+        (payload) => {
+          if (payload?.new) {
+            onNewLog(payload.new as AuditLog);
+          }
+        }
+      )
+      .subscribe();
+
+    const handleLocal = (e: any) => {
+      if (e.detail) {
+        onNewLog(e.detail as AuditLog);
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('audit_log_created', handleLocal);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('audit_log_created', handleLocal);
+      }
+      supabase.removeChannel(channel);
+    };
+  },
+
+  async fetchLogs(filters?: { date?: string; user_id?: string; action_type?: string }): Promise<AuditLog[]> {
     try {
       let query = supabase
         .from('audit_logs')
@@ -157,16 +269,17 @@ export const auditLogService = {
         query = query.eq('user_id', filters.user_id);
       }
 
-      if (filters?.action_type) {
+      if (filters?.action_type && filters.action_type !== 'all') {
         query = query.eq('action_type', filters.action_type);
       }
 
-      const { data, error } = await query.limit(500);
+      const { data, error } = await query.limit(1000);
       if (error) throw error;
       return (data || []) as AuditLog[];
     } catch (err) {
-      console.error('Falha ao buscar logs de auditoria:', err);
+      console.warn('Falha ao buscar logs de auditoria:', err);
       return [];
     }
   }
 };
+

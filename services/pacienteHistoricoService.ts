@@ -463,20 +463,43 @@ export const construirLinhaDoTempo = (
             });
         }
 
-        // 3. Agendamento ou Realização
+        // 3. Agendamento, Realização ou Falta
         const st = (s.status || '').toLowerCase();
         if (s.appointment_date) {
-            if (st.includes('realizad')) {
+            if (st.includes('realizad') && !st.includes('não')) {
+                const confDataStr = s.confirmed_at ? new Date(s.confirmed_at).toLocaleDateString('pt-BR') : undefined;
+                const confInfo = confDataStr 
+                    ? ` • Confirmado em ${confDataStr}${s.confirmed_by_name ? ` por ${s.confirmed_by_name}` : ''}`
+                    : '';
+
                 itens.push({
                     id: `realiz-${s.id}`,
                     tipo: 'realizacao',
-                    titulo: `Procedimento Realizado: ${nomeProc}`,
-                    subtitulo: `Data da realização: ${new Date(s.appointment_date).toLocaleDateString('pt-BR')}`,
-                    detalhes: s.prestador ? `Prestador: ${s.prestador}${s.municipio ? ` (${s.municipio})` : ''}` : undefined,
-                    dataHora: s.appointment_date,
-                    badge: 'Concluído',
+                    titulo: `Consulta / Procedimento Realizado: ${nomeProc}`,
+                    subtitulo: `Data do atendimento: ${new Date(s.appointment_date).toLocaleDateString('pt-BR')}${s.appointment_time ? ` às ${s.appointment_time}` : ''}${confInfo}`,
+                    detalhes: s.prestador ? `Local / Prestador: ${s.prestador}${s.municipio ? ` (${s.municipio})` : ''}` : 'Atendimento municipal concluído com sucesso',
+                    dataHora: s.confirmed_at || s.appointment_date,
+                    badge: 'Realizado',
                     badgeColor: 'emerald',
                     origem: 'Consultas',
+                    dadosOriginais: s
+                });
+            } else if (st.includes('não') || st.includes('falt')) {
+                const confDataStr = s.confirmed_at ? new Date(s.confirmed_at).toLocaleDateString('pt-BR') : undefined;
+                const confInfo = confDataStr 
+                    ? ` • Registrado em ${confDataStr}${s.confirmed_by_name ? ` por ${s.confirmed_by_name}` : ''}`
+                    : '';
+
+                itens.push({
+                    id: `falta-${s.id}`,
+                    tipo: 'cancelamento',
+                    titulo: `Ausência / Faltou: ${nomeProc}`,
+                    subtitulo: `Data prevista: ${new Date(s.appointment_date).toLocaleDateString('pt-BR')}${s.appointment_time ? ` às ${s.appointment_time}` : ''}${confInfo}`,
+                    detalhes: 'Paciente não compareceu ao atendimento agendado na rede municipal.',
+                    dataHora: s.confirmed_at || s.appointment_date,
+                    badge: 'Faltou',
+                    badgeColor: 'rose',
+                    origem: 'Regulação',
                     dadosOriginais: s
                 });
             } else if (st.includes('agendad')) {
@@ -496,7 +519,7 @@ export const construirLinhaDoTempo = (
         }
 
         // 4. Cancelamento
-        if (st.includes('cancel') || st.includes('não')) {
+        if (st.includes('cancel')) {
             itens.push({
                 id: `canc-${s.id}`,
                 tipo: 'cancelamento',

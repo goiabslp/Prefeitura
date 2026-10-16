@@ -1403,6 +1403,120 @@ export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<Con
     }
 };
 
+/**
+ * Consulta Remota Otimizada de Agendamentos (Etapa B)
+ * Busca indexada no Supabase exclusivamente por Paciente (Nome sequencial, CPF, Cartão SUS ou Protocolo)
+ * Suporta AbortSignal para cancelamento automático de consultas obsoletas
+ */
+export const searchRemoteAgendamentos = async (
+    query: string,
+    options?: { signal?: AbortSignal; limit?: number }
+): Promise<ConsultaAgendamento[]> => {
+    const raw = query.trim();
+    if (!raw || raw.length < 2) return [];
+
+    try {
+        const fullColumns = `
+            id, patient_id, procedimento_id, appointment_date, appointment_time, solicitation_date,
+            quantity, priority, queue_position, special_sequence, status, created_by, created_at,
+            is_retorno, retorno_tipo, retorno_grau, tipo_atendimento, prestador, municipio, convenio, vaga_id,
+            cancellation_reason, canceled_by, canceled_by_name, canceled_at,
+            paciente:consultas_pacientes(id, name, cpf, birth_date, phone, neighborhood, sus_number, agente_saude),
+            procedimento:consultas_procedimentos(id, name, code, type, available_quantity, total_quantity, status, recurso),
+            responsavel:profiles(id, name)
+        `;
+
+        const cleanDigits = raw.replace(/\D/g, '');
+        const isOnlyDigits = cleanDigits.length >= 3 && /^[0-9.\-/ ]+$/.test(raw);
+        const isProtocol = raw.startsWith('#') || /^[a-fA-F0-9]{6,8}$/.test(raw);
+
+        // Se for protocolo direto (#id)
+        if (isProtocol) {
+            const cleanId = raw.replace(/^#/, '').toLowerCase();
+            let q = supabase
+                .from('consultas_agendamentos')
+                .select(fullColumns)
+                .ilike('id', `${cleanId}%`)
+                .limit(options?.limit || 20);
+
+            if (options?.signal) {
+                q = q.abortSignal(options.signal);
+            }
+
+            const { data, error } = await q;
+            if (error || !data) return [];
+            return data as unknown as ConsultaAgendamento[];
+        }
+
+        // Se for busca numérica por CPF ou SUS
+        if (isOnlyDigits) {
+            let patientQuery = supabase
+                .from('consultas_pacientes')
+                .select('id')
+                .or(`cpf.ilike.%${cleanDigits}%,sus_number.ilike.%${cleanDigits}%`)
+                .limit(options?.limit || 20);
+
+            if (options?.signal) {
+                patientQuery = patientQuery.abortSignal(options.signal);
+            }
+
+            const { data: patients, error: patErr } = await patientQuery;
+            if (patErr || !patients || patients.length === 0) return [];
+
+            const patientIds = patients.map(p => p.id);
+            let q = supabase
+                .from('consultas_agendamentos')
+                .select(fullColumns)
+                .in('patient_id', patientIds)
+                .limit(options?.limit || 30);
+
+            if (options?.signal) {
+                q = q.abortSignal(options.signal);
+            }
+
+            const { data, error } = await q;
+            if (error || !data) return [];
+            return data as unknown as ConsultaAgendamento[];
+        }
+
+        // Busca por Nome do Paciente (prefixo sequencial da primeira palavra ou de palavras compostas)
+        const queryNorm = raw.replace(/[%_]/g, '');
+        let patientQuery = supabase
+            .from('consultas_pacientes')
+            .select('id')
+            .ilike('name', `${queryNorm}%`)
+            .limit(options?.limit || 30);
+
+        if (options?.signal) {
+            patientQuery = patientQuery.abortSignal(options.signal);
+        }
+
+        const { data: patients, error: patErr } = await patientQuery;
+        if (patErr || !patients || patients.length === 0) return [];
+
+        const patientIds = patients.map(p => p.id);
+        let q = supabase
+            .from('consultas_agendamentos')
+            .select(fullColumns)
+            .in('patient_id', patientIds)
+            .limit(options?.limit || 40);
+
+        if (options?.signal) {
+            q = q.abortSignal(options.signal);
+        }
+
+        const { data, error } = await q;
+        if (error || !data) return [];
+        return data as unknown as ConsultaAgendamento[];
+    } catch (err: any) {
+        if (err?.name === 'AbortError' || err?.message?.includes('aborted')) {
+            return [];
+        }
+        console.warn('[consultasService] searchRemoteAgendamentos silenciosamente interceptado:', err);
+        return [];
+    }
+};
+
 export const createAgendamento = async (agendamento: Omit<ConsultaAgendamento, 'id' | 'created_at'>): Promise<ConsultaAgendamento> => {
     try {
         // 1. Conflict Prevention check: check if this patient already has an active booking for this procedure on this day
@@ -1528,6 +1642,116 @@ export const updateAgendamentoDateAndStatus = async (
         appointment_date: date,
         status: status
     });
+};
+
+/**
+ * Obtém a data de hoje no fuso horário 'America/Sao_Paulo' no formato YYYY-MM-DD
+ */
+export const getHojeBrasilDateStr = (): string => {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    });
+    return formatter.format(new Date());
+};
+
+/**
+ * Identifica agendamentos cuja data de atendimento já passou (anterior a hoje no fuso de Brasília),
+ * que ainda não possuem confirmação de comparecimento (ou seja, status ainda 'Agendado' e sem confirmed_at),
+ * e não foram cancelados.
+ */
+export const getAgendamentosPendentesConfirmacao = async (): Promise<ConsultaAgendamento[]> => {
+    try {
+        const hojeBr = getHojeBrasilDateStr();
+        const { data, error } = await supabase
+            .from('consultas_agendamentos')
+            .select(`
+                *,
+                paciente:consultas_pacientes(*),
+                procedimento:consultas_procedimentos(
+                    *,
+                    especialista:consultas_especialistas(*)
+                ),
+                responsavel:profiles(id, name)
+            `)
+            .lt('appointment_date', hojeBr)
+            .eq('status', 'Agendado')
+            .order('appointment_date', { ascending: true })
+            .order('appointment_time', { ascending: true, nullsFirst: false });
+
+        if (error) throw error;
+        return (data as ConsultaAgendamento[]) || [];
+    } catch (error) {
+        console.error('[consultasService] getAgendamentosPendentesConfirmacao Error:', error);
+        return [];
+    }
+};
+
+/**
+ * Confirma o comparecimento ('Realizado') ou ausência ('Não Realizado' / Faltou) de um agendamento.
+ * Registra data, hora, servidor responsável e auditoria completa.
+ */
+export const confirmarComparecimentoAgendamento = async (
+    id: string,
+    situacao: 'Realizado' | 'Não Realizado',
+    currentUser: User
+): Promise<ConsultaAgendamento> => {
+    const agoraIso = new Date().toISOString();
+    const serverName = currentUser.name || 'Servidor Municipal';
+
+    // 1. Atualizar agendamento no Supabase
+    const payload: Partial<ConsultaAgendamento> = {
+        status: situacao,
+        confirmed_at: agoraIso,
+        confirmed_by: currentUser.id,
+        confirmed_by_name: serverName,
+        confirmation_origin: 'Regulação - Confirmação Automática de Atendimentos'
+    };
+
+    const updated = await updateAgendamento(id, payload);
+    if (!updated) {
+        throw new Error('Falha ao atualizar a situação do agendamento.');
+    }
+
+    // 2. Registrar auditoria no auditLogService
+    try {
+        await auditLogService.logAction({
+            action_type: situacao === 'Realizado' ? 'CONFIRMACAO_ATENDIMENTO_REALIZADO' : 'CONFIRMACAO_ATENDIMENTO_FALTOU',
+            module: 'Regulação - Acompanhar',
+            description: `Atendimento marcado como "${situacao === 'Realizado' ? 'Realizado' : 'Faltou'}" para o paciente ${updated.paciente?.name || 'N/A'} (Procedimento: ${updated.procedimento?.name || 'N/A'}).`,
+            details: {
+                agendamento_id: id,
+                paciente_id: updated.patient_id,
+                paciente_nome: updated.paciente?.name,
+                procedimento_id: updated.procedimento_id,
+                procedimento_nome: updated.procedimento?.name,
+                data_atendimento: updated.appointment_date,
+                hora_atendimento: updated.appointment_time,
+                situacao_anterior: 'Agendado',
+                nova_situacao: situacao,
+                confirmed_at: agoraIso,
+                confirmed_by: currentUser.id,
+                confirmed_by_name: serverName
+            },
+            user: {
+                id: currentUser.id,
+                name: serverName,
+                email: currentUser.email || ''
+            }
+        });
+    } catch (auditErr) {
+        console.warn('[consultasService] Aviso ao registrar auditoria de confirmação:', auditErr);
+    }
+
+    // 3. Disparar eventos para sincronização em tempo real entre abas e módulos
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+        window.dispatchEvent(new CustomEvent('consultas-pacientes-changed'));
+    }
+
+    return updated;
 };
 
 // --- CONTROLE DE PAUSA E RETOMADA DE SOLICITAÇÃO ---

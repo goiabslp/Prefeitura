@@ -10,6 +10,7 @@ import html2canvas from 'html2canvas';
 import { ConsultaPdfGenerator } from './ConsultaPdfGenerator';
 import { ConsultasReportPdfGenerator } from './ConsultasReportPdfGenerator';
 import { DefinirDataModal } from './DefinirDataModal';
+import { ConfirmacaoAtendimentosModal } from './ConfirmacaoAtendimentosModal';
 
 const formatPatientName = (patient?: ConsultaPaciente | null) => {
     if (!patient) return '';
@@ -443,6 +444,7 @@ interface AgendamentoCardProps {
     canCancel: boolean;
     canDelete: boolean;
     canPause?: boolean;
+    isGestorOrAdmin?: boolean;
     onOpenPauseModal?: (b: ConsultaAgendamento) => void;
     onOpenResumeModal?: (b: ConsultaAgendamento) => void;
     onEdit: (b: ConsultaAgendamento) => void;
@@ -475,6 +477,7 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
     canCancel,
     canDelete,
     canPause,
+    isGestorOrAdmin = false,
     onOpenPauseModal,
     onOpenResumeModal,
     onEdit,
@@ -493,6 +496,54 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
 }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const isPaused = booking.is_paused || booking.status === 'Pausada';
+
+    // Determina se a data da consulta já foi ultrapassada
+    const isAppointmentPassed = useMemo(() => {
+        if (!booking.appointment_date) return false;
+        try {
+            const datePart = booking.appointment_date.split('T')[0];
+            const [y, m, d] = datePart.split('-').map(Number);
+            if (!y || !m || !d) return false;
+
+            const now = new Date();
+            let apptDateTime: Date;
+
+            if (booking.appointment_time) {
+                const [hours, minutes] = booking.appointment_time.split(':').map(Number);
+                apptDateTime = new Date(y, m - 1, d, hours || 0, minutes || 0, 0);
+            } else {
+                apptDateTime = new Date(y, m - 1, d, 23, 59, 59, 999);
+            }
+
+            return now.getTime() > apptDateTime.getTime();
+        } catch {
+            return false;
+        }
+    }, [booking.appointment_date, booking.appointment_time]);
+
+    // Regras de permissões:
+    // 1. Marcar como "Realizado":
+    //    - Administradores e Gestores podem sempre
+    //    - Usuários comuns ("não administradores e não gestores"): liberado após a data da consulta ser ultrapassada
+    const canCompleteThis = canComplete || (!isGestorOrAdmin && isAppointmentPassed);
+
+    // 2. Transferir Procedimento:
+    //    - Administradores e Gestores podem transferir
+    //    - Usuários comuns: ocultado após a data da consulta OU quando o status for "Agendado"
+    const canTransferThis = Boolean(onTransfer && canEdit && (
+        isGestorOrAdmin || (!isAppointmentPassed && booking.status !== 'Agendado')
+    ));
+
+    // 3. Cancelar:
+    //    - Administradores e Gestores podem cancelar
+    //    - Usuários comuns: ocultado após a data da consulta
+    const canCancelThis = Boolean(canCancel && (
+        isGestorOrAdmin || !isAppointmentPassed
+    ));
+
+    // 4. Excluir:
+    //    - Exclusivo para administradores e gestores (NÃO visível para usuários que não sejam administradores ou gestores)
+    const canDeleteThis = Boolean(canDelete && isGestorOrAdmin);
 
     const patientName = booking.paciente ? formatPatientName(booking.paciente) : 'Paciente não informado';
     const rawCpf = booking.paciente?.cpf || '';
@@ -848,8 +899,8 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                             {/* Ações Rápidas de Linha + Chevron */}
                             <div className="flex items-center gap-1.5 self-end wide:self-center shrink-0">
                                 <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                    {/* Ação Rápida: Marcar como Realizado (Exclusivo Administradores e Gestores) */}
-                                    {canComplete && booking.status !== 'Realizado' && booking.status !== 'Cancelado' && (
+                                    {/* Ação Rápida: Marcar como Realizado */}
+                                    {canCompleteThis && booking.status !== 'Realizado' && booking.status !== 'Cancelado' && (
                                         <button
                                             type="button"
                                             onClick={() => {
@@ -858,7 +909,7 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                                 }
                                             }}
                                             className="w-8 h-8 rounded-xl bg-emerald-50 hover:bg-emerald-600 border border-emerald-300 text-emerald-700 hover:text-white flex items-center justify-center transition-all shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer"
-                                            title="Marcar como REALIZADO (Exclusivo Administradores e Gestores)"
+                                            title="Marcar como REALIZADO"
                                         >
                                             <CheckCircle2 className="w-3.5 h-3.5" />
                                         </button>
@@ -873,10 +924,10 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                             <Edit2 className="w-3.5 h-3.5" />
                                         </button>
                                     )}
-                                    {canEdit && onTransfer && (
+                                    {canTransferThis && (
                                         <button
                                             type="button"
-                                            onClick={() => onTransfer(booking)}
+                                            onClick={() => onTransfer!(booking)}
                                             className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200/80 hover:border-indigo-300 text-slate-400 hover:text-indigo-600 flex items-center justify-center transition-all shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer"
                                             title="Transferir para Outro Procedimento"
                                         >
@@ -1177,10 +1228,10 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                         )}
 
                                         {/* Transferir Procedimento */}
-                                        {canEdit && onTransfer && (
+                                        {canTransferThis && (
                                             <button
                                                 type="button"
-                                                onClick={(e) => { e.stopPropagation(); onTransfer(booking); }}
+                                                onClick={(e) => { e.stopPropagation(); onTransfer!(booking); }}
                                                 className="flex items-center gap-1.5 px-3 py-1.5 text-indigo-700 hover:text-white bg-indigo-50/90 hover:bg-indigo-600 rounded-lg transition-colors text-xs font-bold border border-indigo-200 cursor-pointer shadow-2xs"
                                                 title="Transferir este agendamento para outro exame ou procedimento"
                                             >
@@ -1230,7 +1281,7 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                             <button
                                                 type="button"
                                                 onClick={(e) => { e.stopPropagation(); onOpenPauseModal(booking); }}
-                                                className="flex items-center gap-1.5 px-3 py-1.5 text-amber-800 hover:text-white bg-amber-50 hover:bg-amber-600 rounded-lg transition-colors text-xs font-black border border-amber-300 cursor-pointer shadow-2xs active:scale-95"
+                                                className="flex items-center gap-1.5 px-3.5 py-1.5 text-amber-800 hover:text-white bg-amber-50 hover:bg-amber-600 rounded-lg transition-colors text-xs font-black border border-amber-300 cursor-pointer shadow-2xs active:scale-95"
                                                 title="Pausar Solicitação temporariamente mantendo a posição original congelada"
                                             >
                                                 <PauseCircle className="w-4 h-4 text-amber-600 group-hover:text-white" />
@@ -1263,8 +1314,8 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                             </button>
                                         )}
 
-                                        {/* BOTÃO MARCAR COMO REALIZADO (Exclusivo para Gestores e Administradores) */}
-                                        {canComplete && booking.status !== 'Realizado' && booking.status !== 'Cancelado' && (
+                                        {/* BOTÃO MARCAR COMO REALIZADO */}
+                                        {canCompleteThis && booking.status !== 'Realizado' && booking.status !== 'Cancelado' && (
                                             <button
                                                 type="button"
                                                 onClick={(e) => {
@@ -1274,7 +1325,7 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                                     }
                                                 }}
                                                 className="flex items-center gap-1.5 px-3.5 py-1.5 text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-all text-xs font-black uppercase tracking-wider shadow-sm hover:shadow active:scale-95 cursor-pointer"
-                                                title="Marcar como REALIZADO (Exclusivo Administradores e Gestores)"
+                                                title="Marcar como REALIZADO"
                                             >
                                                 <CheckCircle2 className="w-3.5 h-3.5" />
                                                 Realizado
@@ -1294,7 +1345,7 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                                         Aprovar
                                                     </button>
                                                 )}
-                                                {canCancel && (
+                                                {canCancelThis && (
                                                     <button
                                                         type="button"
                                                         onClick={(e) => { e.stopPropagation(); onOpenCancelModal(booking); }}
@@ -1321,7 +1372,7 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                                         Faltou
                                                     </button>
                                                 )}
-                                                {canCancel && (
+                                                {canCancelThis && (
                                                     <button
                                                         type="button"
                                                         onClick={(e) => { e.stopPropagation(); onOpenCancelModal(booking); }}
@@ -1337,7 +1388,7 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
 
                                         {(booking.status === 'Fila de espera' || booking.status === 'Aguardando Data') && (
                                             <>
-                                                {canCancel && (
+                                                {canCancelThis && (
                                                     <button
                                                         type="button"
                                                         onClick={(e) => { e.stopPropagation(); onOpenCancelModal(booking); }}
@@ -1352,7 +1403,7 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                         )}
 
                                         {/* Excluir */}
-                                        {canDelete && (
+                                        {canDeleteThis && (
                                             <button
                                                 type="button"
                                                 onClick={(e) => { e.stopPropagation(); onDelete(booking.id); }}
@@ -1383,6 +1434,119 @@ interface AcompanharScreenProps {
     onNavigate?: (view: string) => void;
     subView?: string;
     appState: AppState;
+}
+
+/**
+ * Utilitários para a Pesquisa Instantânea e Precisa em Tempo Real:
+ * - Normalização de acentos e case (ex: "José" -> "jose", "Guilherme" -> "guilherme")
+ * - Correspondência estrita de nomes por palavras completas ou prefixos de palavras
+ * - Correspondência isolada para CPF, Cartão SUS e Protocolo
+ * - Ordenação por relevância inteligente (exato > prefixo do nome completo > prefixo de palavra)
+ */
+function normalizeSearchText(text: string): string {
+    if (!text) return '';
+    return text
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
+}
+
+/**
+ * Calcula a correspondência de nome estrita:
+ * Retorna a pontuação de relevância (menor = mais relevante):
+ * 0: Nome exatamente igual
+ * 1: Nome completo começa com a pesquisa
+ * 2: Alguma palavra do nome começa com a pesquisa
+ * -1: Sem correspondência
+ */
+function getPatientNameMatchScore(fullName: string, queryNorm: string, queryWords: string[]): number {
+    if (!fullName || !queryNorm) return -1;
+    const nameNorm = normalizeSearchText(fullName);
+    if (!nameNorm) return -1;
+
+    // 1. Igualdade exata
+    if (nameNorm === queryNorm) return 0;
+
+    // 2. Nome completo começa com o termo pesquisado (ex: "Guilherme" pesquisado para "Guilherme Santos")
+    if (nameNorm.startsWith(queryNorm)) return 1;
+
+    // 3. Pesquisa multi-palavra ou palavra única:
+    // Verifica se cada palavra digitada corresponde ao início de uma palavra do nome na sequência
+    const nameWords = nameNorm.split(/\s+/).filter(Boolean);
+
+    if (queryWords.length === 1) {
+        const qWord = queryWords[0];
+        // Uma das palavras do nome começa com o termo?
+        // Exige início de palavra (não pode bater no meio de palavras como "Mig" em "Amigo")
+        const hasWordStartingWith = nameWords.some(w => w.startsWith(qWord));
+        if (hasWordStartingWith) return 2;
+    } else {
+        // Multi-palavras: verifica se as palavras da query batem sequencialmente com inícios de palavras do nome
+        // Exemplo: "Guilherme San" -> encontra "Guilherme Santos"
+        for (let i = 0; i <= nameWords.length - queryWords.length; i++) {
+            let matchesSequence = true;
+            for (let j = 0; j < queryWords.length; j++) {
+                if (!nameWords[i + j].startsWith(queryWords[j])) {
+                    matchesSequence = false;
+                    break;
+                }
+            }
+            if (matchesSequence) return 2;
+        }
+    }
+
+    return -1;
+}
+
+/**
+ * Avalia se o registro bate com a busca e atribui um score de relevância:
+ * Retorna score >= 0 se houve correspondência, ou -1 se não houver correspondência.
+ */
+function evaluateBookingSearch(
+    booking: ConsultaAgendamento,
+    rawQuery: string,
+    queryNorm: string,
+    queryWords: string[],
+    isOnlyDigits: boolean,
+    cleanDigits: string,
+    isProtocolSearch: boolean
+): number {
+    // 1. Busca por Protocolo explícito (#12345678 ou padrão hexadecimal/id curto)
+    if (isProtocolSearch) {
+        const fullId = (booking.id || '').toLowerCase();
+        const shortId = fullId.substring(0, 8);
+        const searchClean = queryNorm.replace(/^#/, '');
+        if (searchClean.length >= 2 && (fullId.startsWith(searchClean) || shortId.startsWith(searchClean))) {
+            return 0;
+        }
+        return -1;
+    }
+
+    // 2. Busca puramente numérica (ou formato de CPF/SUS): busca exclusiva em CPF e Cartão SUS
+    if (isOnlyDigits && cleanDigits.length >= 3) {
+        const cpfDigits = (booking.paciente?.cpf || '').replace(/\D/g, '');
+        const susDigits = (booking.paciente?.sus_number || '').replace(/\D/g, '');
+
+        if (cpfDigits === cleanDigits || susDigits === cleanDigits) return 0;
+        if (cpfDigits.startsWith(cleanDigits) || susDigits.startsWith(cleanDigits)) return 1;
+        if (cpfDigits.includes(cleanDigits) || susDigits.includes(cleanDigits)) return 2;
+        return -1;
+    }
+
+    // 3. Busca por Nome do Paciente (Nome oficial ou apelido)
+    const patientName = booking.paciente?.name || '';
+    const patientNickname = booking.paciente?.nickname || '';
+
+    const nameScore = getPatientNameMatchScore(patientName, queryNorm, queryWords);
+    if (nameScore !== -1) return nameScore;
+
+    if (patientNickname) {
+        const nickScore = getPatientNameMatchScore(patientNickname, queryNorm, queryWords);
+        if (nickScore !== -1) return nickScore + 0.5; // Apelido válido com leve desempate após nome oficial
+    }
+
+    return -1;
 }
 
 export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
@@ -1423,8 +1587,9 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         });
     };
 
-    const [bookings, setBookings] = useState<ConsultaAgendamento[]>([]);
     const [allBookings, setAllBookings] = useState<ConsultaAgendamento[]>([]);
+    const [isConfirmacaoModalOpen, setIsConfirmacaoModalOpen] = useState(false);
+    const [hasAutoOpenedConfirmacaoModal, setHasAutoOpenedConfirmacaoModal] = useState(false);
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [reportType, setReportType] = useState<'simplificado' | 'completo'>('simplificado');
     const [reportDemandaFilter, setReportDemandaFilter] = useState<'TODAS' | 'INTERNO' | 'EXTERNO'>('TODAS');
@@ -1547,7 +1712,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const canCancel = true;
     const canComplete = isGestorOrAdmin;
     const canEdit = true;
-    const canDelete = true;
+    const canDelete = isGestorOrAdmin;
 
     const formatDateBr = (d: string) => {
         if (!d) return '';
@@ -1651,7 +1816,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const handleScheduleBlockingPatient = () => {
         if (!blockedQueueTarget) return;
         const targetId = blockedQueueTarget.blockingPatient.id;
-        const targetBooking = allBookings.find(b => b.id === targetId) || bookings.find(b => b.id === targetId);
+        const targetBooking = allBookings.find(b => b.id === targetId) || filteredAndSortedBookings.find(b => b.id === targetId);
         
         setBlockedQueueTarget(null);
         if (targetBooking) {
@@ -1716,140 +1881,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             setQueuePositions(positionMap);
             setSpecialSequences(specialSeqMap);
 
-            // Apply filters in-memory (Apenas no Mobile: não exibe resultados antes da pesquisa se não houver filtro)
-            if (isMobile && !globalSearch.trim() && !filterDate && !filterStatus) {
-                setBookings([]);
-                setLoading(false);
-                return;
-            }
-
-            let filtered = allBookingData;
-            if (globalSearch.trim()) {
-                const rawSearch = globalSearch.trim();
-                const searchLower = rawSearch.toLowerCase();
-                const searchNorm = searchLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                const cleanDigits = rawSearch.replace(/\D/g, '');
-
-                filtered = filtered.filter(a => {
-                    // 1. NOME DO PACIENTE (Nome oficial e apelido)
-                    const patientName = a.paciente?.name || '';
-                    const patientNickname = a.paciente?.nickname || '';
-                    const nameNorm = patientName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    const nicknameNorm = patientNickname.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    const nameMatch = nameNorm.includes(searchNorm) || nicknameNorm.includes(searchNorm);
-
-                    // 2. NÚMERO DO CARTÃO SUS DO PACIENTE
-                    const susRaw = a.paciente?.sus_number || '';
-                    const susClean = susRaw.replace(/\D/g, '');
-                    const susMatch = (cleanDigits.length > 0 && susClean.includes(cleanDigits)) ||
-                                     (susRaw.toLowerCase().includes(searchLower));
-
-                    // 3. CPF DO PACIENTE (limpo ou formatado com pontuação)
-                    const cpfRaw = a.paciente?.cpf || '';
-                    const cpfClean = cpfRaw.replace(/\D/g, '');
-                    const cpfFormatted = cpfClean.length === 11
-                        ? cpfClean.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
-                        : cpfRaw;
-                    const cpfMatch = (cleanDigits.length > 0 && cpfClean.includes(cleanDigits)) ||
-                                     (cpfFormatted.toLowerCase().includes(searchLower)) ||
-                                     (cpfRaw.toLowerCase().includes(searchLower));
-
-                    // 4. NOME DO PROCEDIMENTO (nome, label formatada, grupo ou especialidade)
-                    const procName = a.procedimento?.name || '';
-                    const procType = a.procedimento?.type || '';
-                    const procEspName = a.procedimento?.especialista?.nome || '';
-                    const procSpecialty = a.procedimento?.especialista?.especialidade || '';
-                    const procGroup = a.procedimento?.especialista?.grupo || '';
-                    const procFormatted = formatProcedimentoLabel(a.procedimento);
-                    const procCombined = `${procName} ${procType} ${procEspName} ${procSpecialty} ${procGroup} ${procFormatted}`.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    const procNameMatch = procCombined.includes(searchNorm);
-
-                    // 5. PRIORIDADE (Normal, Urgência, Especial, Retorno, etc.)
-                    const priority = (a.priority || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    const retornoLabel = a.is_retorno ? `retorno ${a.retorno_tipo || ''}`.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') : '';
-                    const priorityMatch = priority.includes(searchNorm) || (retornoLabel.length > 0 && retornoLabel.includes(searchNorm));
-
-                    // 6. DATA DA SOLICITAÇÃO (Formatos DD/MM/YYYY, DD/MM, YYYY-MM-DD)
-                    const solRaw = a.solicitation_date || a.created_at || '';
-                    let solPt = '';
-                    let solIso = '';
-                    if (solRaw) {
-                        try {
-                            const dStr = solRaw.includes('T') ? solRaw : `${solRaw}T00:00:00`;
-                            const d = new Date(dStr);
-                            if (!isNaN(d.getTime())) {
-                                const dia = String(d.getDate()).padStart(2, '0');
-                                const mes = String(d.getMonth() + 1).padStart(2, '0');
-                                const ano = String(d.getFullYear());
-                                solPt = `${dia}/${mes}/${ano}`;
-                                solIso = `${ano}-${mes}-${dia}`;
-                            }
-                        } catch {}
-                    }
-                    const dataMatch = (solPt.length > 0 && (solPt.includes(searchLower) || solPt.includes(rawSearch))) ||
-                                      (solIso.length > 0 && solIso.includes(searchLower)) ||
-                                      (solRaw.toLowerCase().includes(searchLower));
-
-                    // 7. CÓDIGO DO EXAME
-                    const procCode = (a.procedimento?.code || '').toLowerCase().trim();
-                    const cleanCode = procCode.replace(/\D/g, '');
-                    const procCodeMatch = (procCode.length > 0 && procCode.includes(searchLower)) ||
-                                          (cleanDigits.length > 0 && cleanCode.length > 0 && (cleanCode.includes(cleanDigits) || cleanDigits.includes(cleanCode)));
-
-                    // 8. PROTOCOLO (Protocolo exibido #12345678 ou ID completo)
-                    const fullId = (a.id || '').toLowerCase();
-                    const protocolShort = (a.id ? a.id.substring(0, 8) : '').toLowerCase();
-                    const searchNoHash = searchLower.replace(/^#/, '');
-                    const protocolMatch = fullId.includes(searchNoHash) ||
-                                          protocolShort.includes(searchNoHash);
-
-                    // 9. RESPONSÁVEL (Responsável pelo agendamento, criador ou Agente de Saúde)
-                    const respName = (a.responsavel?.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    const respCreatedBy = (a.created_by || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    const agenteSaude = (a.paciente?.agente_saude || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    const responsavelMatch = respName.includes(searchNorm) ||
-                                             respCreatedBy.includes(searchNorm) ||
-                                             agenteSaude.includes(searchNorm);
-
-                    return nameMatch ||
-                           susMatch ||
-                           cpfMatch ||
-                           procNameMatch ||
-                           priorityMatch ||
-                           dataMatch ||
-                           procCodeMatch ||
-                           protocolMatch ||
-                           responsavelMatch;
-                });
-            }
-            if (filterDate) {
-                filtered = filtered.filter(a => a.appointment_date === filterDate);
-            }
-            if (filterStatus) {
-                if (filterStatus === 'Urgencias') {
-                    filtered = filtered.filter(a => {
-                        const prio = (a.priority || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                        return prio.includes('urg');
-                    });
-                } else if (filterStatus === 'Definir Data') {
-                    filtered = filtered.filter(a => (a.status === 'Fila de espera' || a.status === 'Aguardando Data') && !a.is_paused);
-                } else if (filterStatus === 'Pausada') {
-                    filtered = filtered.filter(a => a.is_paused || a.status === 'Pausada');
-                } else {
-                    filtered = filtered.filter(a => a.status === filterStatus);
-                }
-            }
-            if (filterTipoAtendimento) {
-                if (filterTipoAtendimento === 'INTERNO') {
-                    filtered = filtered.filter(a => (a.status === 'Agendado' || a.status === 'Realizado' || !!a.appointment_date) && a.tipo_atendimento === 'INTERNO');
-                } else if (filterTipoAtendimento === 'EXTERNO') {
-                    filtered = filtered.filter(a => (a.status === 'Agendado' || a.status === 'Realizado' || !!a.appointment_date) && a.tipo_atendimento === 'EXTERNO');
-                } else if (filterTipoAtendimento === 'NAO_DEFINIDO') {
-                    filtered = filtered.filter(a => a.status === 'Fila de espera' || a.status === 'Aguardando Data' || !a.tipo_atendimento || !a.appointment_date);
-                }
-            }
-
-            setBookings(filtered);
+            // Carregamento completo concluído com sucesso
         } catch (error) {
             console.error('Error loading agendamentos:', error);
         } finally {
@@ -1857,19 +1889,10 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         }
     };
 
-    // Trigger loading on filter change
+    // Trigger loading apenas quando os dados iniciais ou eventos externos dispararem
     useEffect(() => {
         loadData();
-    }, [filterDate, filterStatus, filterTipoAtendimento]);
-
-    // Debounce manual typing search
-    useEffect(() => {
-        const delayDebounceFn = setTimeout(() => {
-            loadData(true);
-        }, 350);
-
-        return () => clearTimeout(delayDebounceFn);
-    }, [globalSearch]);
+    }, []);
 
     // Subscribe to realtime changes via event bus
     useEffect(() => {
@@ -1886,14 +1909,54 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             window.removeEventListener('consultas-pacientes-changed', handleRealtimeChange);
             window.removeEventListener('consultas-procedimentos-changed', handleRealtimeChange);
         };
-    }, [globalSearch, filterDate, filterStatus]);
+    }, []);
+
+    // 1. Verificação Automática dos Agendamentos Vencidos aguardando confirmação (America/Sao_Paulo)
+    // Regra: data do atendimento anterior à data atual, status 'Agendado' e sem confirmação prévia
+    const pendenciasConfirmacao = useMemo(() => {
+        const hojeBr = db.getHojeBrasilDateStr();
+        return allBookings.filter(a => {
+            if (!a.appointment_date) return false;
+            // Apenas datas anteriores à data de hoje no fuso de Brasília
+            if (a.appointment_date >= hojeBr) return false;
+            // Não cancelados e ainda sem confirmação (status Agendado e sem confirmed_at)
+            const st = (a.status || '').toLowerCase();
+            const isConfirmed = st.includes('realizad') || st.includes('cancel') || !!a.confirmed_at;
+            if (isConfirmed) return false;
+
+            return a.status === 'Agendado';
+        }).sort((a, b) => {
+            const dateA = a.appointment_date || '';
+            const dateB = b.appointment_date || '';
+            const comp = dateA.localeCompare(dateB); // Dos mais antigos para os mais recentes
+            if (comp !== 0) return comp;
+            const timeA = a.appointment_time || '';
+            const timeB = b.appointment_time || '';
+            return timeA.localeCompare(timeB);
+        });
+    }, [allBookings]);
+
+    // Abertura automática ao acessar /Regulacao/Acompanhar quando houver pendências
+    useEffect(() => {
+        if (!loading && pendenciasConfirmacao.length > 0 && !hasAutoOpenedConfirmacaoModal) {
+            setIsConfirmacaoModalOpen(true);
+            setHasAutoOpenedConfirmacaoModal(true);
+        }
+    }, [loading, pendenciasConfirmacao.length, hasAutoOpenedConfirmacaoModal]);
+
+    // Handler para confirmar individualmente (Realizado ou Faltou)
+    const handleConfirmarComparecimento = async (id: string, situacao: 'Realizado' | 'Não Realizado') => {
+        const updated = await db.confirmarComparecimentoAgendamento(id, situacao, currentUser);
+        if (updated) {
+            setAllBookings(prev => prev.map(b => b.id === id ? updated : b));
+        }
+    };
 
     const handleStatusUpdate = async (id: string, newStatus: ConsultaAgendamento['status']) => {
         setOperatingId(id);
         try {
             const updated = await db.updateAgendamentoStatus(id, newStatus);
             if (updated) {
-                setBookings(prev => prev.map(b => b.id === id ? updated : b));
                 setAllBookings(prev => prev.map(b => b.id === id ? updated : b));
             }
             window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
@@ -2142,7 +2205,6 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             // 3. Atualizar estado local imediatamente
             if (updatedBooking) {
                 setAllBookings(prev => prev.map(b => b.id === updatedBooking.id ? updatedBooking : b));
-                setBookings(prev => prev.map(b => b.id === updatedBooking.id ? updatedBooking : b));
             }
 
             // Recalcular e sincronizar posições da fila após atualização
@@ -2303,7 +2365,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         setOperatingId(id);
         try {
             await db.deleteAgendamento(id);
-            setBookings(prev => prev.filter(b => b.id !== id));
+            setAllBookings(prev => prev.filter(b => b.id !== id));
         } catch (error: any) {
             alert(error.message || 'Erro ao excluir agendamento.');
             loadData(true);
@@ -2316,75 +2378,139 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         return db.getQueueEligibilityMap(allBookings, allVagas);
     }, [allBookings, allVagas]);
 
-    const sortedBookings = useMemo(() => {
-        let list = [...bookings];
-
-        // Se o usuário filtrou especificamente por "Definir Data"
-        if (filterStatus === 'Definir Data') {
-            list = list.filter(item => eligibilityMap.get(item.id)?.isEligible);
+    // Filtragem instantânea em memória e ordenação inteligente por relevância (≤ 100ms)
+    const filteredAndSortedBookings = useMemo(() => {
+        // Se estiver no mobile e não houver filtro nem pesquisa, mantém vazio até interação
+        if (isMobile && !globalSearch.trim() && !filterDate && !filterStatus && !filterTipoAtendimento) {
+            return [];
         }
 
-        return list.sort((a, b) => {
+        let list = allBookings;
+
+        // 1. Filtro por Data
+        if (filterDate) {
+            list = list.filter(a => a.appointment_date === filterDate);
+        }
+
+        // 2. Filtro por Status
+        if (filterStatus) {
+            if (filterStatus === 'Urgencias') {
+                list = list.filter(a => {
+                    const prio = (a.priority || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    return prio.includes('urg');
+                });
+            } else if (filterStatus === 'Definir Data') {
+                list = list.filter(a => {
+                    const isQueue = (a.status === 'Fila de espera' || a.status === 'Aguardando Data') && !a.is_paused;
+                    const isEligible = eligibilityMap.get(a.id)?.isEligible;
+                    return isQueue && isEligible;
+                });
+            } else if (filterStatus === 'Pausada') {
+                list = list.filter(a => a.is_paused || a.status === 'Pausada');
+            } else {
+                list = list.filter(a => a.status === filterStatus);
+            }
+        }
+
+        // 3. Filtro por Tipo de Atendimento
+        if (filterTipoAtendimento) {
+            if (filterTipoAtendimento === 'INTERNO') {
+                list = list.filter(a => (a.status === 'Agendado' || a.status === 'Realizado' || !!a.appointment_date) && a.tipo_atendimento === 'INTERNO');
+            } else if (filterTipoAtendimento === 'EXTERNO') {
+                list = list.filter(a => (a.status === 'Agendado' || a.status === 'Realizado' || !!a.appointment_date) && a.tipo_atendimento === 'EXTERNO');
+            } else if (filterTipoAtendimento === 'NAO_DEFINIDO') {
+                list = list.filter(a => a.status === 'Fila de espera' || a.status === 'Aguardando Data' || !a.tipo_atendimento || !a.appointment_date);
+            }
+        }
+
+        // 4. Pesquisa Instantânea Unificada com Correspondência Estrita
+        const rawSearch = globalSearch.trim();
+        let searchScores = new Map<string, number>();
+
+        if (rawSearch) {
+            const queryNorm = normalizeSearchText(rawSearch);
+            const queryWords = queryNorm.split(/\s+/).filter(Boolean);
+            const cleanDigits = rawSearch.replace(/\D/g, '');
+            const isOnlyDigits = cleanDigits.length > 0 && /^[0-9.\-/ ]+$/.test(rawSearch);
+            const isProtocolSearch = rawSearch.startsWith('#') || /^[a-fA-F0-9]{6,8}$/.test(rawSearch);
+
+            const filteredWithScores: { item: ConsultaAgendamento; score: number }[] = [];
+
+            for (const item of list) {
+                const score = evaluateBookingSearch(
+                    item,
+                    rawSearch,
+                    queryNorm,
+                    queryWords,
+                    isOnlyDigits,
+                    cleanDigits,
+                    isProtocolSearch
+                );
+
+                if (score >= 0) {
+                    filteredWithScores.push({ item, score });
+                    searchScores.set(item.id, score);
+                }
+            }
+
+            list = filteredWithScores.map(res => res.item);
+        }
+
+        // 5. Ordenação Inteligente:
+        // Se houver pesquisa ativa, ordena prioritariamente pelo Score de Relevância
+        // (0: Exato -> 1: Prefixo do nome -> 2: Prefixo de palavra interna)
+        return [...list].sort((a, b) => {
+            if (rawSearch) {
+                const scoreA = searchScores.get(a.id) ?? 999;
+                const scoreB = searchScores.get(b.id) ?? 999;
+                if (scoreA !== scoreB) {
+                    return scoreA - scoreB;
+                }
+            }
+
             const eligA = eligibilityMap.get(a.id);
             const eligB = eligibilityMap.get(b.id);
             const isDefinirDataA = !!eligA?.isEligible;
             const isDefinirDataB = !!eligB?.isEligible;
 
-            // 1. PRIORIDADE MÁXIMA NA ORDENAÇÃO PADRÃO:
-            // Pacientes com status "Definir Data" (vaga liberada disponível) no topo absoluto
+            // Prioridade máxima na ordenação: Vaga Liberada ("Definir Data")
             if (isDefinirDataA !== isDefinirDataB) {
                 return isDefinirDataA ? -1 : 1;
             }
 
-            // Se ambos são "Definir Data":
             if (isDefinirDataA && isDefinirDataB) {
                 const posA = eligA?.queuePosition ?? (queuePositions[a.id] ?? 999999);
                 const posB = eligB?.queuePosition ?? (queuePositions[b.id] ?? 999999);
+                if (posA !== posB) return posA - posB;
 
-                // 1.1 Organizados rigorosamente pela posição da fila (1º lugar, 2º lugar, 3º lugar...)
-                if (posA !== posB) {
-                    return posA - posB;
-                }
-
-                // 1.2 Em caso de empate de posição entre procedimentos diferentes:
-                // Agendamento Especial vem primeiro
                 const isSpecialA = a.priority === 'Especial';
                 const isSpecialB = b.priority === 'Especial';
-                if (isSpecialA !== isSpecialB) {
-                    return isSpecialA ? -1 : 1;
-                }
+                if (isSpecialA !== isSpecialB) return isSpecialA ? -1 : 1;
 
-                // 1.3 Ordem cronológica determinística estrita: Data da Solicitação e Data/Hora de Criação
                 return db.compareConsultasChronological(a, b);
             }
 
-            // 2. Demais pacientes da Fila de espera (sem vaga liberada no momento)
+            // Fila de espera
             const isWaitlistA = a.status === 'Fila de espera' || a.status === 'Aguardando Data';
             const isWaitlistB = b.status === 'Fila de espera' || b.status === 'Aguardando Data';
 
             if (isWaitlistA && isWaitlistB) {
                 const isSpecialA = a.priority === 'Especial';
                 const isSpecialB = b.priority === 'Especial';
-                if (isSpecialA !== isSpecialB) {
-                    return isSpecialA ? -1 : 1;
-                }
+                if (isSpecialA !== isSpecialB) return isSpecialA ? -1 : 1;
 
                 const posA = eligA?.queuePosition ?? (queuePositions[a.id] ?? 999999);
                 const posB = eligB?.queuePosition ?? (queuePositions[b.id] ?? 999999);
-                if (posA !== posB) {
-                    return posA - posB;
-                }
+                if (posA !== posB) return posA - posB;
 
-                // Ordem cronológica determinística estrita: Data da Solicitação e Data/Hora de Criação
                 return db.compareConsultasChronological(a, b);
             }
 
-            // Fila de espera vem antes dos agendamentos finalizados/confirmados
             if (isWaitlistA !== isWaitlistB) {
                 return isWaitlistA ? -1 : 1;
             }
 
-            // 3. Demais registros (Agendados, Realizados, Cancelados, etc.)
+            // Demais registros (Agendados, Realizados, etc.)
             const dateA = a.appointment_date ? new Date(a.appointment_date + 'T12:00:00').getTime() : 0;
             const dateB = b.appointment_date ? new Date(b.appointment_date + 'T12:00:00').getTime() : 0;
             if (dateA !== dateB) return dateB - dateA;
@@ -2393,11 +2519,11 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
             return timeB - timeA;
         });
-    }, [bookings, eligibilityMap, filterStatus, queuePositions]);
+    }, [allBookings, eligibilityMap, filterDate, filterStatus, filterTipoAtendimento, globalSearch, isMobile, queuePositions]);
 
     const visibleBookings = useMemo(() => {
-        return sortedBookings.slice(0, displayLimit);
-    }, [sortedBookings, displayLimit]);
+        return filteredAndSortedBookings.slice(0, displayLimit);
+    }, [filteredAndSortedBookings, displayLimit]);
 
 
 
@@ -2424,10 +2550,29 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 Acompanhar
                             </h3>
                             <span className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-sky-50 to-blue-50 text-sky-700 font-black text-[11px] uppercase border border-sky-200/80 shadow-2xs">
-                                {bookings.length}
+                                {filteredAndSortedBookings.length}
                             </span>
                         </div>
                     </div>
+
+                    {/* Botão de Confirmação de Atendimentos no Mobile */}
+                    <button
+                        type="button"
+                        onClick={() => setIsConfirmacaoModalOpen(true)}
+                        className={`p-2 rounded-2xl border transition-all cursor-pointer flex items-center gap-1.5 ${
+                            pendenciasConfirmacao.length > 0
+                                ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-500/25'
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-200/80 hover:bg-emerald-100'
+                        }`}
+                        title={pendenciasConfirmacao.length > 0 ? `Confirmar Atendimentos (${pendenciasConfirmacao.length} pendentes)` : 'Atendimentos em Dia'}
+                    >
+                        <CheckCircle2 className="w-4.5 h-4.5" />
+                        {pendenciasConfirmacao.length > 0 && (
+                            <span className="text-[10px] font-black px-1.5 py-0.2 bg-white text-amber-700 rounded-full">
+                                {pendenciasConfirmacao.length}
+                            </span>
+                        )}
+                    </button>
 
                     {/* Botão de Relatório Rápido no Mobile */}
                     <button
@@ -2445,7 +2590,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     <div className="relative w-full animate-in fade-in duration-200">
                         <input
                             type="text"
-                            placeholder="Buscar por Paciente, SUS, CPF, Procedimento, Prioridade, Data, Código, Protocolo ou Responsável..."
+                            placeholder="Buscar por Paciente, CPF, Cartão SUS ou Protocolo..."
                             className="w-full bg-slate-50 border border-slate-200/90 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 rounded-2xl pl-9 pr-9 py-2 text-xs font-bold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
                             value={globalSearch}
                             onChange={(e) => setGlobalSearch(e.target.value)}
@@ -2488,18 +2633,18 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                         </span>
                         <span className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-sky-50 to-blue-50 text-sky-700 font-black text-[11px] uppercase tracking-wider border border-sky-200/80 shadow-2xs shrink-0">
-                            {bookings.length}
+                            {filteredAndSortedBookings.length}
                         </span>
                     </div>
                 </div>
 
                 {/* Center / Right: Integrated Modern Single-Line Filters & Actions */}
                 <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
-                    {/* 1 Único Campo de Busca Unificado (Nome, CPF, Cartão SUS ou Procedimento) */}
+                    {/* Campo de Busca Otimizado e Preciso */}
                     <div className="relative flex-1 min-w-[200px] max-w-md shrink-0">
                         <input
                             type="text"
-                            placeholder="Buscar por Paciente, SUS, CPF, Procedimento, Prioridade, Data, Código, Protocolo ou Responsável..."
+                            placeholder="Buscar por Paciente, CPF, Cartão SUS ou Protocolo..."
                             className="w-full bg-slate-50/90 hover:bg-slate-100/80 focus:bg-white border border-slate-200/90 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 rounded-2xl pl-9 pr-8 py-1.5 text-xs font-semibold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
                             value={globalSearch}
                             onChange={(e) => setGlobalSearch(e.target.value)}
@@ -2558,6 +2703,25 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         minWidth="w-28 sm:w-36 lg:w-40"
                     />
 
+                    {/* Action Button 0: Confirmar Atendimentos */}
+                    <button
+                        onClick={() => setIsConfirmacaoModalOpen(true)}
+                        className={`px-3.5 py-1.5 font-extrabold rounded-2xl active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                            pendenciasConfirmacao.length > 0
+                                ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md shadow-amber-500/25 animate-pulse'
+                                : 'bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/90 text-emerald-700 shadow-2xs'
+                        }`}
+                        title={pendenciasConfirmacao.length > 0 ? `Confirmar Atendimentos (${pendenciasConfirmacao.length} pendentes)` : 'Atendimentos em Dia'}
+                    >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span className="hidden xl:inline">
+                            {pendenciasConfirmacao.length > 0 ? `Confirmar Atendimentos (${pendenciasConfirmacao.length})` : 'Atendimentos em Dia'}
+                        </span>
+                        <span className="xl:hidden">
+                            {pendenciasConfirmacao.length > 0 ? `Confirmar (${pendenciasConfirmacao.length})` : 'Em Dia'}
+                        </span>
+                    </button>
+
                     {/* Action Button 1: Relatório */}
                     <button
                         onClick={() => setIsReportModalOpen(true)}
@@ -2603,7 +2767,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 Qual agendamento você procura?
                             </h3>
                             <p className="text-xs sm:text-sm font-semibold text-slate-500 max-w-sm mb-5 leading-relaxed">
-                                Pesquise por nome do paciente, SUS, CPF, procedimento, prioridade, data da solicitação, código do exame, protocolo ou responsável.
+                                Pesquise instantaneamente por nome do paciente, CPF, Cartão SUS ou número do protocolo.
                             </p>
 
                             {/* Campo de Pesquisa Maior no Centro da Tela Mobile */}
@@ -2611,7 +2775,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 <input
                                     type="text"
                                     autoFocus
-                                    placeholder="Buscar por Paciente, SUS, CPF, Procedimento, Prioridade, Data, Código, Protocolo ou Responsável..."
+                                    placeholder="Buscar por Paciente, CPF, Cartão SUS ou Protocolo..."
                                     className="w-full bg-white border-2 border-slate-200/90 hover:border-sky-300 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15 rounded-2xl pl-12 pr-11 py-3.5 sm:py-4 text-sm font-extrabold text-slate-900 placeholder:text-slate-400 placeholder:font-medium transition-all shadow-xs"
                                     value={globalSearch}
                                     onChange={(e) => setGlobalSearch(e.target.value)}
@@ -2669,7 +2833,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                             </div>
                         </div>
                     </div>
-                ) : bookings.length > 0 ? (
+                ) : filteredAndSortedBookings.length > 0 ? (
                     <div className="space-y-3 w-full pb-6">
                         {visibleBookings.map((booking) => {
                             const eligibility = eligibilityMap.get(booking.id);
@@ -2692,6 +2856,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                     canCancel={canCancel}
                                     canDelete={canDelete}
                                     canPause={canPause}
+                                    isGestorOrAdmin={isGestorOrAdmin}
                                     onOpenPauseModal={handleOpenPauseModal}
                                     onOpenResumeModal={handleOpenResumeModal}
                                     onEdit={handleOpenEditModal}
@@ -2718,10 +2883,10 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         })}
 
                         {/* Barra de Paginação / Carregar Mais Agendamentos */}
-                        {sortedBookings.length > visibleBookings.length && (
+                        {filteredAndSortedBookings.length > visibleBookings.length && (
                             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 pb-6 px-4 bg-white rounded-2xl border border-slate-200/90 shadow-2xs mt-4">
                                 <div className="text-xs font-bold text-slate-500">
-                                    Exibindo <span className="text-slate-900 font-extrabold">{visibleBookings.length}</span> de <span className="text-slate-900 font-extrabold">{sortedBookings.length}</span> agendamentos
+                                    Exibindo <span className="text-slate-900 font-extrabold">{visibleBookings.length}</span> de <span className="text-slate-900 font-extrabold">{filteredAndSortedBookings.length}</span> agendamentos
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <button
@@ -2733,7 +2898,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => setDisplayLimit(sortedBookings.length)}
+                                        onClick={() => setDisplayLimit(filteredAndSortedBookings.length)}
                                         className="px-3 py-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl text-xs font-bold transition-all cursor-pointer"
                                     >
                                         Mostrar Todos
@@ -2745,8 +2910,14 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 ) : (
                     <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
                         <Sparkles className="w-12 h-12 mb-3 opacity-25 text-slate-500" />
-                        <h4 className="text-sm font-extrabold text-slate-800">Sem agendamentos no momento</h4>
-                        <p className="text-xs text-slate-500 mt-1 font-medium text-center">Nenhum registro corresponde aos filtros selecionados</p>
+                        <h4 className="text-sm font-extrabold text-slate-800">
+                            {globalSearch.trim() ? 'Nenhum resultado encontrado' : 'Sem agendamentos no momento'}
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-1 font-medium text-center">
+                            {globalSearch.trim()
+                                ? `Nenhum paciente ou registro encontrado para "${globalSearch.trim()}"`
+                                : 'Nenhum registro corresponde aos filtros selecionados'}
+                        </p>
                     </div>
                 )}
             </div>
@@ -4398,6 +4569,15 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 </div>,
                 document.body
             )}
+
+            {/* MODAL OPERACIONAL DE CONFIRMAÇÃO DE ATENDIMENTOS PENDENTES (VENCIDOS) */}
+            <ConfirmacaoAtendimentosModal
+                isOpen={isConfirmacaoModalOpen}
+                onClose={() => setIsConfirmacaoModalOpen(false)}
+                pendencias={pendenciasConfirmacao}
+                currentUser={currentUser}
+                onConfirmar={handleConfirmarComparecimento}
+            />
         </div>
     );
 };

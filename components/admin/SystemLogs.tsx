@@ -13,6 +13,7 @@ export const SystemLogs: React.FC<SystemLogsProps> = ({ onBack }) => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLiveConnected, setIsLiveConnected] = useState(true);
   
   // Default to today's date formatted as YYYY-MM-DD in local time
   const getTodayDateString = () => {
@@ -28,8 +29,8 @@ export const SystemLogs: React.FC<SystemLogsProps> = ({ onBack }) => {
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [selectedUserKey, setSelectedUserKey] = useState<string | null>(null);
 
-  const fetchLogs = async () => {
-    setLoading(true);
+  const fetchLogs = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const filters: { date?: string; action_type?: string } = {};
       if (dateFilter) filters.date = dateFilter;
@@ -37,15 +38,62 @@ export const SystemLogs: React.FC<SystemLogsProps> = ({ onBack }) => {
 
       const data = await auditLogService.fetchLogs(filters);
       setLogs(data);
+      setIsLiveConnected(true);
     } catch (e) {
-      console.error('Failed to load audit logs:', e);
+      console.warn('Falha ao carregar logs de auditoria:', e);
+      setIsLiveConnected(false);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
+  // Carregamento inicial ao mudar filtros
   useEffect(() => {
     fetchLogs();
+  }, [dateFilter, typeFilter]);
+
+  // Inscrição em Tempo Real (Broadcast + Postgres Changes + Fallback Polling)
+  useEffect(() => {
+    const unsubscribe = auditLogService.subscribeToLogs((newLog) => {
+      setIsLiveConnected(true);
+      setLogs(prev => {
+        // Evita duplicatas se o ID já existir ou se for o mesmo log recente
+        const alreadyExists = prev.some(l => 
+          (l.id && newLog.id && l.id === newLog.id) ||
+          (l.created_at === newLog.created_at && l.user_name === newLog.user_name && l.description === newLog.description)
+        );
+        if (alreadyExists) return prev;
+
+        // Valida filtro de tipo de ação
+        if (typeFilter !== 'all' && newLog.action_type !== typeFilter) {
+          return prev;
+        }
+
+        // Valida filtro de data
+        if (dateFilter && newLog.created_at) {
+          const logDate = new Date(newLog.created_at);
+          const y = logDate.getFullYear();
+          const m = String(logDate.getMonth() + 1).padStart(2, '0');
+          const d = String(logDate.getDate()).padStart(2, '0');
+          const logDateStr = `${y}-${m}-${d}`;
+          if (logDateStr !== dateFilter) {
+            return prev;
+          }
+        }
+
+        return [newLog, ...prev];
+      });
+    });
+
+    // Polling silencioso de background a cada 6 segundos para reconciliar e não perder nada
+    const interval = setInterval(() => {
+      fetchLogs(true);
+    }, 6000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, [dateFilter, typeFilter]);
 
   const toggleExpandLog = (id: string) => {
@@ -220,28 +268,45 @@ export const SystemLogs: React.FC<SystemLogsProps> = ({ onBack }) => {
               <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase">
                 {selectedUserKey ? "Logs do Usuário" : "Logs de Auditoria"}
               </h1>
-              <div className="px-2.5 py-1 rounded-full bg-indigo-50 border border-indigo-100 flex items-center gap-1.5 shadow-sm">
-                <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div>
-                <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Tempo Real</span>
+              <div className="flex items-center gap-2">
+                <div className={`px-2.5 py-1 rounded-full border flex items-center gap-1.5 shadow-sm ${
+                  isLiveConnected 
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                    : 'bg-amber-50 border-amber-200 text-amber-700'
+                }`}>
+                  <div className={`w-2 h-2 rounded-full ${
+                    isLiveConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                  }`}></div>
+                  <span className="text-[10px] font-black uppercase tracking-widest">
+                    {isLiveConnected ? 'Tempo Real Ativo' : 'Sincronizando...'}
+                  </span>
+                </div>
+                <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-slate-50 border border-slate-200 text-[10px] font-extrabold text-slate-600">
+                  <span>{groupedUsers.length} Colaboradores</span>
+                  <span className="text-slate-300">•</span>
+                  <span>{logs.length} Ações</span>
+                </div>
               </div>
             </div>
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mt-1.5 ml-1">
               {selectedUserKey 
                 ? `Visualizando atividade individual de ${selectedUser?.user_name}` 
-                : "Monitore e audite cada clique, navegação e ação organizados por usuário."
+                : "Monitore e audite cada clique, navegação e ação organizados por usuário em tempo real."
               }
             </p>
           </div>
         </div>
 
-        <button
-          onClick={fetchLogs}
-          disabled={loading}
-          className="p-3 bg-white hover:bg-indigo-600 active:scale-95 text-slate-500 hover:text-white rounded-2xl transition-all border border-slate-200 hover:border-indigo-600 flex items-center justify-center shadow-sm"
-          title="Atualizar Logs"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => fetchLogs(false)}
+            disabled={loading}
+            className="p-3 bg-white hover:bg-indigo-600 active:scale-95 text-slate-500 hover:text-white rounded-2xl transition-all border border-slate-200 hover:border-indigo-600 flex items-center justify-center shadow-sm"
+            title="Atualizar Logs"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </header>
 
       {/* Filters Toolbar */}

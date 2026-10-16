@@ -734,6 +734,12 @@ export interface ConsultaAgendamento {
   resumed_by_name?: string;
   pause_history?: PauseHistoryItem[];
   original_status?: string;
+
+  // Confirmação de Comparecimento
+  confirmed_at?: string;
+  confirmed_by?: string;
+  confirmed_by_name?: string;
+  confirmation_origin?: string;
 }
 
 export interface ConsultaVaga {

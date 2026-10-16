@@ -609,6 +609,19 @@ const App: React.FC = () => {
     impersonationSession ? users : null
   ]);
 
+  // Sincroniza o usuário atual com o auditLogService para logs em tempo real instantâneos
+  useEffect(() => {
+    if (currentUser) {
+      auditLogService.setCurrentUser({
+        id: currentUser.id,
+        name: currentUser.name,
+        email: currentUser.email || ''
+      });
+    } else {
+      auditLogService.setCurrentUser(null);
+    }
+  }, [currentUser?.id, currentUser?.name, currentUser?.email]);
+
   // Presence do Administrador: mantém o estado ativo publicado para o usuário alvo
   useEffect(() => {
     if (!impersonationSession) return;
@@ -3053,111 +3066,147 @@ timestamp: ${new Date().toISOString()}`);
     };
   }, [currentUser?.id]);
 
-  // --- TRACKING LOGS EFFECTS ---
-  // 1. Navigation Tracking
+  // --- TRACKING LOGS EFFECTS EM TEMPO REAL ---
+  // 1. Navigation Tracking: Registra em tempo real a navegação de todos os funcionários
+  const lastNavRef = useRef<string>('');
   useEffect(() => {
-    // Desativado temporariamente para economizar a cota de Egress/Database no Supabase
-    /*
-    if (currentUser) {
-      const getFriendlyViewName = (view: string) => {
-        switch (view) {
-          case 'home': return 'Página Inicial';
-          case 'login': return 'Login';
-          case 'editor': return 'Criar Documento';
-          case 'tracking': return 'Histórico / Acompanhamento';
-          case 'admin': return 'Painel Administrativo';
-          case 'order-details': return 'Detalhes do Pedido';
-          case 'vehicle-scheduling': return 'Agendamento de Veículos';
-          case 'abastecimento': return 'Gestão de Abastecimento';
-          case 'rh': return 'Recursos Humanos';
-          case 'tarefas': return 'Minhas Tarefas';
-          case 'calendario': return 'Calendário';
-          case 'projetos': return 'Projetos';
-          case 'marketing': return 'Marketing';
-          case 'licitacao': return 'Licitação';
-          case 'consultas': return 'Consultas Médicas';
-          case 'farmacia': return 'Farmácia Popular';
-          default: return view;
-        }
-      };
+    if (!currentUser) return;
 
-      const getFriendlyBlockName = (block: string) => {
-        switch (block) {
-          case 'oficio': return 'Ofícios';
-          case 'compras': return 'Compras';
-          case 'diarias': return 'Diárias';
-          case 'licitacao': return 'Licitações';
-          case 'farmacia': return 'Farmácia';
-          case 'agendamento': return 'Agendamento';
-          case 'abastecimento': return 'Abastecimento';
-          default: return block;
-        }
-      };
-
-      const friendlyView = getFriendlyViewName(currentView);
-      const friendlyBlock = activeBlock ? getFriendlyBlockName(activeBlock) : '';
-      const description = friendlyBlock 
-        ? `Acessou o módulo: ${friendlyBlock} (${friendlyView})` 
-        : `Acessou a tela: ${friendlyView}`;
-
-      auditLogService.logAction({
-        action_type: 'navigation',
-        module: activeBlock || 'geral',
-        description,
-        details: { view: currentView, block: activeBlock }
-      });
+    // Evita loop se o próprio admin estiver auditando os logs
+    if (typeof window !== 'undefined' && window.location.pathname.toLowerCase().startsWith('/admin/logs')) {
+      return;
     }
-    */
+
+    const navKey = `${currentView}_${activeBlock || 'none'}`;
+    if (lastNavRef.current === navKey) return;
+    lastNavRef.current = navKey;
+
+    const getFriendlyViewName = (view: string) => {
+      switch (view) {
+        case 'home': return 'Página Inicial';
+        case 'login': return 'Login';
+        case 'editor': return 'Criar Documento';
+        case 'tracking': return 'Histórico / Acompanhamento';
+        case 'admin': return 'Painel Administrativo';
+        case 'order-details': return 'Detalhes do Pedido';
+        case 'vehicle-scheduling': return 'Agendamento de Veículos';
+        case 'abastecimento': return 'Gestão de Abastecimento';
+        case 'rh': return 'Recursos Humanos';
+        case 'tarefas': return 'Minhas Tarefas';
+        case 'calendario': return 'Calendário';
+        case 'projetos': return 'Projetos';
+        case 'marketing': return 'Marketing';
+        case 'licitacao': return 'Licitação';
+        case 'consultas': return 'Regulação & Consultas';
+        case 'farmacia': return 'Farmácia';
+        default: return view;
+      }
+    };
+
+    const getFriendlyBlockName = (block: string) => {
+      switch (block) {
+        case 'oficio': return 'Ofícios';
+        case 'compras': return 'Compras';
+        case 'diarias': return 'Diárias';
+        case 'licitacao': return 'Licitações';
+        case 'farmacia': return 'Farmácia';
+        case 'agendamento': return 'Agendamento de Veículos';
+        case 'abastecimento': return 'Abastecimento';
+        default: return block;
+      }
+    };
+
+    const friendlyView = getFriendlyViewName(currentView);
+    const friendlyBlock = activeBlock ? getFriendlyBlockName(activeBlock) : '';
+    const description = friendlyBlock 
+      ? `Acessou o módulo: ${friendlyBlock} (${friendlyView})` 
+      : `Acessou a tela: ${friendlyView}`;
+
+    auditLogService.logAction({
+      action_type: 'navigation',
+      module: activeBlock || 'geral',
+      description,
+      details: { view: currentView, block: activeBlock, path: window.location.pathname },
+      user: {
+        id: currentUser.id,
+        name: currentUser.name,
+        email: currentUser.email || ''
+      }
+    });
   }, [currentView, activeBlock, currentUser]);
 
-  // 2. Global Click Tracking
+  // 2. Global Click Tracking: Registra em tempo real os cliques interativos de todos os funcionários
+  const lastClickRef = useRef<{ target: string; time: number }>({ target: '', time: 0 });
   useEffect(() => {
-    // Desativado temporariamente para economizar a cota de Egress/Database no Supabase
-    /*
     if (!currentUser) return;
 
     const handleGlobalClick = (e: MouseEvent) => {
+      // Não rastreia cliques dentro da própria tela de visualização de logs do admin
+      if (typeof window !== 'undefined' && window.location.pathname.toLowerCase().startsWith('/admin/logs')) {
+        return;
+      }
+
       const target = e.target as HTMLElement;
+      if (!target) return;
+
       let interactiveEl = target.closest('button, a, input, select, textarea, [role="button"]') as HTMLElement | null;
       
-      // Heuristic: if we didn't find a standard interactive element, check if the clicked element or any parent has cursor: pointer style
+      // Heurística para botões/ícones customizados estilizados com cursor pointer
       if (!interactiveEl) {
         let current: HTMLElement | null = target;
-        while (current && current !== document.body) {
-          const style = window.getComputedStyle(current);
-          if (style.cursor === 'pointer') {
-            interactiveEl = current;
+        let depth = 0;
+        while (current && current !== document.body && depth < 4) {
+          try {
+            const style = window.getComputedStyle(current);
+            if (style.cursor === 'pointer' && (current.tagName === 'DIV' || current.tagName === 'SPAN' || current.tagName === 'LI')) {
+              interactiveEl = current;
+              break;
+            }
+          } catch {
             break;
           }
           current = current.parentElement;
+          depth++;
         }
       }
 
       if (interactiveEl) {
         const tagName = interactiveEl.tagName.toLowerCase();
-        let elementText = '';
 
+        // NUNCA captura cliques em campos de senha
+        if (interactiveEl.getAttribute('type') === 'password') {
+          return;
+        }
+
+        let elementText = '';
         if (tagName === 'input' || tagName === 'textarea') {
           const input = interactiveEl as HTMLInputElement | HTMLTextAreaElement;
-          elementText = input.placeholder || input.name || input.id || input.value || '';
+          elementText = input.placeholder || input.name || input.id || '';
         } else if (tagName === 'select') {
           const select = interactiveEl as HTMLSelectElement;
-          elementText = select.name || select.id || select.value || '';
+          elementText = select.name || select.id || select.options[select.selectedIndex]?.text || '';
         } else {
-          elementText = interactiveEl.textContent?.trim().replace(/\s+/g, ' ').substring(0, 100) || '';
+          elementText = interactiveEl.textContent?.trim().replace(/\s+/g, ' ').substring(0, 80) || '';
         }
 
         const elementId = interactiveEl.id || '';
         const elementRole = interactiveEl.getAttribute('role') || '';
         const elementTitle = interactiveEl.getAttribute('title') || '';
         const elementAriaLabel = interactiveEl.getAttribute('aria-label') || '';
-        const label = elementText || elementTitle || elementAriaLabel || elementId || elementRole || 'elemento';
+        const label = elementText || elementTitle || elementAriaLabel || elementId || elementRole;
 
-        if (interactiveEl.getAttribute('type') === 'password') {
+        // Ignora cliques em elementos vazios ou genéricos sem nenhum label
+        if (!label || label.trim() === '') return;
+
+        const displayLabel = label.substring(0, 70);
+        const clickKey = `${tagName}_${displayLabel}`;
+        const now = Date.now();
+
+        // Throttle de 750ms para cliques consecutivos no mesmo elemento
+        if (lastClickRef.current.target === clickKey && now - lastClickRef.current.time < 750) {
           return;
         }
-
-        const displayLabel = label.substring(0, 80);
+        lastClickRef.current = { target: clickKey, time: now };
 
         auditLogService.logAction({
           action_type: 'click',
@@ -3166,13 +3215,17 @@ timestamp: ${new Date().toISOString()}`);
           details: {
             tagName,
             id: elementId,
-            text: elementText.substring(0, 200),
             role: elementRole,
             title: elementTitle,
             ariaLabel: elementAriaLabel,
             path: window.location.pathname,
             view: currentView,
             block: activeBlock
+          },
+          user: {
+            id: currentUser.id,
+            name: currentUser.name,
+            email: currentUser.email || ''
           }
         });
       }
@@ -3180,7 +3233,6 @@ timestamp: ${new Date().toISOString()}`);
 
     window.addEventListener('click', handleGlobalClick, true);
     return () => window.removeEventListener('click', handleGlobalClick, true);
-    */
   }, [currentView, activeBlock, currentUser]);
 
 
