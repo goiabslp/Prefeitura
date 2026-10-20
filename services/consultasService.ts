@@ -725,9 +725,108 @@ export const formatProcedimentoLabel = (
     return procedimento.name.trim();
 };
 
+// --- MAPEAMENTO CENTRALIZADO: PROCEDIMENTO PAI <-> PROCEDIMENTOS FILHOS ---
+
+const PROC_PARENT_STORAGE_KEY = 'consultas_proc_parent_map';
+let memProcParentMap: Record<string, string> = {};
+
+export const getProcParentMapping = (childProcId?: string | null): string | null => {
+    if (!childProcId) return null;
+    if (memProcParentMap[childProcId]) return memProcParentMap[childProcId];
+    if (typeof window !== 'undefined') {
+        try {
+            const raw = localStorage.getItem(PROC_PARENT_STORAGE_KEY);
+            const map: Record<string, string> = raw ? JSON.parse(raw) : {};
+            return map[childProcId] || null;
+        } catch {
+            return null;
+        }
+    }
+    return null;
+};
+
+export const saveProcParentMapping = (childProcId: string, parentProcId?: string | null) => {
+    if (!childProcId) return;
+    if (parentProcId) {
+        memProcParentMap[childProcId] = parentProcId;
+    } else {
+        delete memProcParentMap[childProcId];
+    }
+    if (typeof window !== 'undefined') {
+        try {
+            const raw = localStorage.getItem(PROC_PARENT_STORAGE_KEY);
+            const map: Record<string, string> = raw ? JSON.parse(raw) : {};
+            if (parentProcId) {
+                map[childProcId] = parentProcId;
+            } else {
+                delete map[childProcId];
+            }
+            localStorage.setItem(PROC_PARENT_STORAGE_KEY, JSON.stringify(map));
+        } catch {}
+    }
+
+    // Sincroniza com Supabase organization_settings
+    (async () => {
+        try {
+            const { data: orgData } = await supabase
+                .from('organization_settings')
+                .select('ui_config')
+                .eq('id', 'global_config')
+                .maybeSingle();
+
+            const currentUiConfig = orgData?.ui_config || {};
+            const currentMap = { ...(currentUiConfig.consultas_proc_parents || {}) };
+            if (parentProcId) {
+                currentMap[childProcId] = parentProcId;
+            } else {
+                delete currentMap[childProcId];
+            }
+
+            await supabase
+                .from('organization_settings')
+                .update({
+                    ui_config: {
+                        ...currentUiConfig,
+                        consultas_proc_parents: currentMap
+                    }
+                })
+                .eq('id', 'global_config');
+        } catch (syncErr) {
+            console.warn('[consultasService] Aviso ao salvar parent mapping no Supabase:', syncErr);
+        }
+    })();
+};
+
+/**
+ * Gera o próximo código de especialista vinculado a um procedimento principal.
+ * Padrão: CÓDIGO_PAI-SUFIXO (ex: 0397-10, 0397-11, 0397-12)
+ * Preserva os zeros à esquerda do código pai.
+ * Não reutiliza códigos existentes e inicia em -10.
+ */
+export const getNextEspecialistaCode = (parentCode: string, existingChildCodes: string[]): string => {
+    const cleanParentCode = (parentCode || '0000').trim();
+    const prefix = `${cleanParentCode}-`;
+
+    const suffixes = existingChildCodes
+        .filter(c => c && c.startsWith(prefix))
+        .map(c => {
+            const part = c.substring(prefix.length);
+            const num = parseInt(part, 10);
+            return isNaN(num) ? 0 : num;
+        });
+
+    let nextSuffix = 10;
+    if (suffixes.length > 0) {
+        const maxSuffix = Math.max(...suffixes);
+        nextSuffix = Math.max(10, maxSuffix + 1);
+    }
+
+    return `${cleanParentCode}-${nextSuffix}`;
+};
+
 // --- PROCEDIMENTOS ---
 
-const PROCEDIMENTO_COLUMNS = 'id, name, code, type, available_quantity, total_quantity, status, recurso, created_at, updated_at';
+const PROCEDIMENTO_COLUMNS = 'id, name, code, type, available_quantity, total_quantity, status, recurso, parent_id, especialista_id, created_at, updated_at';
 const PROCEDIMENTO_COLUMNS_FALLBACK = 'id, name, code, type, available_quantity, total_quantity, status, recurso, created_at, updated_at';
 
 export const getProcedimentos = async (
@@ -755,18 +854,32 @@ export const getProcedimentos = async (
         const especialistas = await getEspecialistas();
         const espMap = new Map<string, ConsultaEspecialista>(especialistas.map(e => [e.id, e]));
 
+        // Carregar mapeamentos remotos de parent se disponíveis
+        try {
+            const { data: orgData } = await supabase
+                .from('organization_settings')
+                .select('ui_config')
+                .eq('id', 'global_config')
+                .maybeSingle();
+            if (orgData?.ui_config?.consultas_proc_parents) {
+                memProcParentMap = { ...memProcParentMap, ...orgData.ui_config.consultas_proc_parents };
+            }
+        } catch {}
+
         const mapped = procs.map(p => {
             const espId = p.especialista_id || getProcEspecialistaMapping(p.id);
+            const parentId = p.parent_id || getProcParentMapping(p.id) || null;
             const espObj = (espId ? espMap.get(espId) : null) || p.especialista || null;
             return {
                 ...p,
+                parent_id: parentId,
                 especialista_id: espId || null,
                 especialista: espObj
             };
         });
 
         if (hasEspecialistaFilter !== undefined) {
-            return mapped.filter(p => hasEspecialistaFilter ? !!p.especialista_id : !p.especialista_id);
+            return mapped.filter(p => hasEspecialistaFilter ? (!!p.especialista_id || !!p.parent_id) : (!p.especialista_id && !p.parent_id));
         }
 
         return mapped;
@@ -780,6 +893,7 @@ export const getProcedimentos = async (
 export const createProcedimento = async (procedimento: Omit<ConsultaProcedimento, 'id' | 'created_at' | 'updated_at'>): Promise<ConsultaProcedimento | null> => {
     try {
         const espIdPayload = procedimento.especialista_id || null;
+        const parentIdPayload = procedimento.parent_id || null;
         let payload: any = { ...procedimento };
         delete payload.especialista;
 
@@ -789,9 +903,10 @@ export const createProcedimento = async (procedimento: Omit<ConsultaProcedimento
             .select()
             .single();
 
-        // Fallback progressivo caso coluna especialista_id não exista no schema Supabase
+        // Fallback progressivo caso coluna especialista_id ou parent_id não exista no schema Supabase
         if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache'))) {
             delete payload.especialista_id;
+            delete payload.parent_id;
             const retryRes = await supabase
                 .from('consultas_procedimentos')
                 .insert([payload])
@@ -803,9 +918,11 @@ export const createProcedimento = async (procedimento: Omit<ConsultaProcedimento
 
         if (error) throw error;
 
-        // Salvar vínculo no storage de mapeamento
+        // Salvar vínculos no storage de mapeamento
         if (data && data.id) {
             saveProcEspecialistaMapping(data.id, espIdPayload);
+            saveProcParentMapping(data.id, parentIdPayload);
+            data.parent_id = parentIdPayload;
             if (espIdPayload) {
                 const esp = await getEspecialistaById(espIdPayload);
                 data.especialista_id = espIdPayload;
@@ -828,6 +945,7 @@ export const createProcedimento = async (procedimento: Omit<ConsultaProcedimento
 export const updateProcedimento = async (id: string, updates: Partial<ConsultaProcedimento>): Promise<ConsultaProcedimento | null> => {
     try {
         const espIdPayload = updates.especialista_id !== undefined ? updates.especialista_id : getProcEspecialistaMapping(id);
+        const parentIdPayload = updates.parent_id !== undefined ? updates.parent_id : getProcParentMapping(id);
         let payload: any = { ...updates };
         delete payload.especialista;
 
@@ -838,9 +956,10 @@ export const updateProcedimento = async (id: string, updates: Partial<ConsultaPr
             .select()
             .single();
 
-        // Fallback progressivo caso coluna especialista_id não exista no schema Supabase
+        // Fallback progressivo caso colunas não existam no schema cache do Supabase
         if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache'))) {
             delete payload.especialista_id;
+            delete payload.parent_id;
             const retryRes = await supabase
                 .from('consultas_procedimentos')
                 .update(payload)
@@ -853,13 +972,31 @@ export const updateProcedimento = async (id: string, updates: Partial<ConsultaPr
 
         if (error) throw error;
 
-        // Atualizar mapeamento
+        // Atualizar mapeamentos
         saveProcEspecialistaMapping(id, espIdPayload);
+        saveProcParentMapping(id, parentIdPayload);
         if (data) {
+            data.parent_id = parentIdPayload || null;
             data.especialista_id = espIdPayload || null;
             if (espIdPayload) {
                 const esp = await getEspecialistaById(espIdPayload);
                 data.especialista = esp;
+            }
+        }
+
+        // Se este procedimento for pai e seu nome mudou, atualizar o nome exibido dos procedimentos filhos vinculados
+        if (updates.name && (!updates.parent_id && !getProcParentMapping(id))) {
+            try {
+                const procs = await getProcedimentos();
+                const children = procs.filter(p => p.parent_id === id);
+                for (const child of children) {
+                    if (child.especialista?.nome) {
+                        const newChildName = `${updates.name.trim().toUpperCase()} — ${child.especialista.nome.trim().toUpperCase()}`;
+                        await updateProcedimento(child.id, { name: newChildName });
+                    }
+                }
+            } catch (cascadeErr) {
+                console.warn('[consultasService] Aviso ao propagar alteração de nome para procedimentos filhos:', cascadeErr);
             }
         }
 
@@ -875,9 +1012,88 @@ export const updateProcedimento = async (id: string, updates: Partial<ConsultaPr
     }
 };
 
+/**
+ * Cria ou vincula um especialista a um procedimento principal gerando código próprio CÓDIGO_PAI-SUFIXO.
+ */
+export const vincularEspecialistaProcedimento = async (params: {
+    parentId: string;
+    especialistaId: string;
+    status?: 'Ativo' | 'Inativo';
+}): Promise<ConsultaProcedimento> => {
+    try {
+        const procs = await getProcedimentos();
+        const parentProc = procs.find(p => p.id === params.parentId);
+        if (!parentProc) {
+            throw new Error('Procedimento principal não encontrado.');
+        }
+
+        const especialistas = await getEspecialistas();
+        const esp = especialistas.find(e => e.id === params.especialistaId);
+        if (!esp) {
+            throw new Error('Especialista selecionado não encontrado.');
+        }
+
+        // Obter filhos existentes deste pai para verificar unicidade e gerar código sequencial
+        const existingChildren = procs.filter(p => p.parent_id === parentProc.id || (p.code && p.code.startsWith(`${parentProc.code}-`)));
+        
+        // Verifica se este especialista já está vinculado ao procedimento pai
+        const alreadyLinked = existingChildren.find(p => p.especialista_id === esp.id);
+        if (alreadyLinked) {
+            throw new Error(`O especialista ${esp.nome} já está vinculado ao procedimento "${parentProc.name}" com o código ${alreadyLinked.code}.`);
+        }
+
+        const childCodes = existingChildren.map(c => c.code || '');
+        const autoCode = getNextEspecialistaCode(parentProc.code || '0000', childCodes);
+        const childName = `${parentProc.name.trim().toUpperCase()} — ${esp.nome.trim().toUpperCase()}`;
+
+        const created = await createProcedimento({
+            name: childName,
+            code: autoCode,
+            type: parentProc.type,
+            parent_id: parentProc.id,
+            especialista_id: esp.id,
+            status: params.status || 'Ativo',
+            recurso: parentProc.recurso || 'Não Se Aplica',
+            total_quantity: 0,
+            available_quantity: 0
+        });
+
+        if (!created) {
+            throw new Error('Falha ao cadastrar especialista no procedimento.');
+        }
+
+        return created;
+    } catch (error: any) {
+        const appError = handleSupabaseError(error);
+        console.error('[consultasService] vincularEspecialistaProcedimento Error:', appError.message);
+        throw appError;
+    }
+};
+
 export const deleteProcedimento = async (id: string): Promise<boolean> => {
     try {
-        // 1. Limpar dependências em cascata (vagas vinculadas ao procedimento)
+        const procs = await getProcedimentos();
+        const proc = procs.find(p => p.id === id);
+
+        // Se for um procedimento principal, verificar se possui especialistas vinculados
+        if (proc && !proc.parent_id) {
+            const children = procs.filter(p => p.parent_id === id || (p.code && proc.code && p.code.startsWith(`${proc.code}-`)));
+            if (children.length > 0) {
+                throw new Error(`Este procedimento possui ${children.length} especialista(s) vinculado(s). Remova ou suspenda os especialistas antes de excluir o procedimento principal.`);
+            }
+        }
+
+        // Verificar se há agendamentos históricos vinculados
+        const { count: agendamentosCount } = await supabase
+            .from('consultas_agendamentos')
+            .select('id', { count: 'exact', head: true })
+            .eq('procedimento_id', id);
+
+        if (agendamentosCount && agendamentosCount > 0) {
+            throw new Error(`Não é possível excluir fisicamente este procedimento pois ele possui ${agendamentosCount} agendamento(s) no histórico. Recomendamos alterar o status para "Suspenso".`);
+        }
+
+        // 1. Limpar vagas vinculadas
         const { error: vagasError } = await supabase
             .from('consultas_vagas')
             .delete()
@@ -887,18 +1103,9 @@ export const deleteProcedimento = async (id: string): Promise<boolean> => {
             console.warn('[consultasService] Aviso ao remover vagas vinculadas na exclusão:', vagasError.message);
         }
 
-        // 2. Limpar dependências em cascata (agendamentos vinculados ao procedimento)
-        const { error: agendamentosError } = await supabase
-            .from('consultas_agendamentos')
-            .delete()
-            .eq('procedimento_id', id);
-
-        if (agendamentosError) {
-            console.warn('[consultasService] Aviso ao remover agendamentos vinculados na exclusão:', agendamentosError.message);
-        }
-
-        // 3. Limpar mapeamento local de especialista
+        // 2. Limpar mapeamentos locais e remotos
         saveProcEspecialistaMapping(id, null);
+        saveProcParentMapping(id, null);
 
         // 4. Excluir o procedimento da tabela consultas_procedimentos
         const { error, count } = await supabase

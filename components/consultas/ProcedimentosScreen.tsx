@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { User, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga, ConsultaEspecialista } from '../../types';
 import { 
     ArrowLeft, Settings, Plus, Edit2, Search, Check, AlertTriangle, 
-    Loader2, X, ChevronLeft, ChevronRight, Activity, Stethoscope, 
+    Loader2, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Activity, Stethoscope, 
     Sparkles, Trash2, PauseCircle, PlayCircle, Calendar, Filter,
     CheckCircle2, Clock, Users, ShieldAlert, Layers, UserCheck, ToggleLeft, ToggleRight
 } from 'lucide-react';
@@ -63,9 +63,29 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
     const [procType, setProcType] = useState<'Exame' | 'Consulta' | 'Cirurgia'>('Exame');
     const [procStatus, setProcStatus] = useState<'Ativo' | 'Inativo'>('Ativo');
     const [procRecurso, setProcRecurso] = useState<'Não Se Aplica' | 'FM' | 'PPI'>('Não Se Aplica');
-    const [hasEspecialista, setHasEspecialista] = useState(false);
-    const [selectedEspecialistaId, setSelectedEspecialistaId] = useState('');
     const [procError, setProcError] = useState('');
+
+    // Modal Adicionar Especialista State
+    const [isAddEspecialistaModalOpen, setIsAddEspecialistaModalOpen] = useState(false);
+    const [selectedParentProcId, setSelectedParentProcId] = useState('');
+    const [addEspSearchParent, setAddEspSearchParent] = useState('');
+    const [isParentDropdownOpen, setIsParentDropdownOpen] = useState(false);
+    const [selectedAddEspecialistaId, setSelectedAddEspecialistaId] = useState('');
+    const [addEspSearchMedico, setAddEspSearchMedico] = useState('');
+    const [isMedicoDropdownOpen, setIsMedicoDropdownOpen] = useState(false);
+    const [addEspecialistaStatus, setAddEspecialistaStatus] = useState<'Ativo' | 'Inativo'>('Ativo');
+    const [addEspecialistaError, setAddEspecialistaError] = useState('');
+
+    // Accordion State: quais procedimentos principais estão expandidos na listagem
+    const [expandedParentIds, setExpandedParentIds] = useState<Record<string, boolean>>({});
+
+    const toggleExpandParent = (parentId: string, e?: React.MouseEvent) => {
+        if (e) e.stopPropagation();
+        setExpandedParentIds(prev => ({
+            ...prev,
+            [parentId]: !prev[parentId]
+        }));
+    };
 
     // Detail & Slots (Vagas) State
     const [selectedProc, setSelectedProc] = useState<ConsultaProcedimento | null>(null);
@@ -292,16 +312,103 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
         });
     }, [procedures, especialistas, procSearch, selectedTypeFilter, selectedStatusFilter]);
 
-    // Metrics summary
+    // Procedimentos agrupados hierarquicamente: Pais (sem parent_id e sem especialista) e Filhos (vinculados a especialistas)
+    const hierarchicalProcedures = useMemo(() => {
+        // Procedimentos pais são aqueles que não possuem parent_id e não possuem especialista_id direto
+        const parents = procedures.filter(p => !p.parent_id && !p.especialista_id);
+        
+        // Mapear filhos para cada pai
+        const childrenByParent = new Map<string, ConsultaProcedimento[]>();
+        
+        // Filhos reais com parent_id ou que têm código derivado (ex: 0397-10) ou possuem especialista_id
+        procedures.forEach(p => {
+            if (p.parent_id) {
+                const list = childrenByParent.get(p.parent_id) || [];
+                list.push(p);
+                childrenByParent.set(p.parent_id, list);
+            } else if (p.code && p.code.includes('-')) {
+                const parentCode = p.code.split('-')[0];
+                const matchingParent = parents.find(parent => parent.code === parentCode);
+                if (matchingParent) {
+                    const list = childrenByParent.get(matchingParent.id) || [];
+                    if (!list.some(existing => existing.id === p.id)) {
+                        list.push(p);
+                        childrenByParent.set(matchingParent.id, list);
+                    }
+                }
+            } else if (p.especialista_id) {
+                // Procedimento legado com especialista direto que não tem parent_id explícito
+                // Se houver um pai com mesmo tipo ou prefixo, associa; senão, trata individualmente
+                const matchingParent = parents.find(parent => p.name.toUpperCase().startsWith(parent.name.toUpperCase()) && parent.id !== p.id);
+                if (matchingParent) {
+                    const list = childrenByParent.get(matchingParent.id) || [];
+                    if (!list.some(existing => existing.id === p.id)) {
+                        list.push(p);
+                        childrenByParent.set(matchingParent.id, list);
+                    }
+                }
+            }
+        });
+
+        // Filtragem inteligente da lista
+        const cleanSearch = procSearch.toLowerCase().trim();
+
+        const filteredParents = parents.filter(parent => {
+            const children = childrenByParent.get(parent.id) || [];
+
+            // Tipo Filter
+            if (selectedTypeFilter !== 'Todos' && parent.type !== selectedTypeFilter) {
+                return false;
+            }
+
+            // Status Filter
+            if (selectedStatusFilter === 'Ativos' && parent.status !== 'Ativo') {
+                return false;
+            }
+            if (selectedStatusFilter === 'Suspensos' && parent.status === 'Ativo') {
+                return false;
+            }
+
+            // Busca de texto: por código pai, nome do procedimento, código do filho ou nome do médico
+            if (cleanSearch) {
+                const parentMatches = 
+                    (parent.code && parent.code.toLowerCase().includes(cleanSearch)) ||
+                    parent.name.toLowerCase().includes(cleanSearch) ||
+                    parent.type.toLowerCase().includes(cleanSearch);
+
+                const childMatches = children.some(child => {
+                    const espName = child.especialista?.nome || especialistas.find(e => e.id === child.especialista_id)?.nome || '';
+                    return (
+                        (child.code && child.code.toLowerCase().includes(cleanSearch)) ||
+                        child.name.toLowerCase().includes(cleanSearch) ||
+                        espName.toLowerCase().includes(cleanSearch)
+                    );
+                });
+
+                return parentMatches || childMatches;
+            }
+
+            return true;
+        });
+
+        return {
+            parents: filteredParents,
+            allParents: parents,
+            childrenByParent
+        };
+    }, [procedures, especialistas, procSearch, selectedTypeFilter, selectedStatusFilter]);
+
+    // Metrics summary (apenas procedimentos principais contabilizados nas métricas de procedimentos)
     const metrics = useMemo(() => {
-        const total = procedures.length;
-        const ativos = procedures.filter(p => p.status === 'Ativo').length;
-        const suspensos = procedures.filter(p => p.status !== 'Ativo').length;
+        const parents = procedures.filter(p => !p.parent_id && !p.especialista_id);
+        const total = parents.length;
+        const ativos = parents.filter(p => p.status === 'Ativo').length;
+        const suspensos = parents.filter(p => p.status !== 'Ativo').length;
         const totalCotas = procedures.reduce((sum, p) => sum + Math.max(0, p.available_quantity || 0), 0);
         return { total, ativos, suspensos, totalCotas };
     }, [procedures]);
 
-    // Modal Handlers
+    // Modal Handlers: Novo Procedimento Principal
     const handleOpenProcModal = (proc: ConsultaProcedimento | null = null) => {
         setEditingProc(proc);
         if (proc) {
@@ -310,22 +417,20 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
             setProcType(proc.type);
             setProcStatus(proc.status);
             setProcRecurso(proc.recurso || 'Não Se Aplica');
-            const hasEsp = !!proc.especialista_id;
-            setHasEspecialista(hasEsp);
-            setSelectedEspecialistaId(proc.especialista_id || '');
         } else {
             setProcName('');
-            // Auto-generate next 4-digit code
+            // Auto-generate next 4-digit code para procedimento principal
             const nextNum = procedures.reduce((max, p) => {
-                const codeNum = parseInt(p.code || '0', 10);
-                return isNaN(codeNum) ? max : Math.max(max, codeNum);
+                if (p.code && /^\d{4}$/.test(p.code)) {
+                    const codeNum = parseInt(p.code, 10);
+                    return isNaN(codeNum) ? max : Math.max(max, codeNum);
+                }
+                return max;
             }, 0) + 1;
             setProcCode(String(nextNum).padStart(4, '0'));
             setProcType(selectedTypeFilter !== 'Todos' ? selectedTypeFilter : 'Exame');
             setProcStatus('Ativo');
             setProcRecurso('Não Se Aplica');
-            setHasEspecialista(false);
-            setSelectedEspecialistaId('');
         }
         setProcError('');
         setIsProcModalOpen(true);
@@ -344,30 +449,26 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
         let finalCode = procCode;
         if (!finalCode || !/^\d{4}$/.test(finalCode)) {
             const nextNum = procedures.reduce((max, p) => {
-                const codeNum = parseInt(p.code || '0', 10);
-                return isNaN(codeNum) ? max : Math.max(max, codeNum);
+                if (p.code && /^\d{4}$/.test(p.code)) {
+                    const codeNum = parseInt(p.code, 10);
+                    return isNaN(codeNum) ? max : Math.max(max, codeNum);
+                }
+                return max;
             }, 0) + 1;
             finalCode = String(nextNum).padStart(4, '0');
             setProcCode(finalCode);
         }
 
-        if (hasEspecialista && !selectedEspecialistaId) {
-            setProcError('Selecione um profissional especialista cadastrado.');
-            return;
-        }
-
-        const especialistaIdPayload = hasEspecialista && selectedEspecialistaId ? selectedEspecialistaId : null;
-
-        // Check for duplicate name + type + especialista
+        // Check for duplicate name + type em procedimentos principais
         const isDuplicate = procedures.some(p => 
+            !p.parent_id &&
             p.name.trim().toUpperCase() === procName.trim().toUpperCase() &&
             p.type === procType &&
-            (p.especialista_id || null) === especialistaIdPayload &&
             (!editingProc || p.id !== editingProc.id)
         );
 
         if (isDuplicate) {
-            setProcError('Já existe um procedimento cadastrado com o mesmo nome, tipo e especialista.');
+            setProcError('Já existe um procedimento principal cadastrado com o mesmo nome e tipo.');
             return;
         }
 
@@ -379,8 +480,7 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                     code: finalCode,
                     type: procType,
                     status: procStatus,
-                    recurso: procRecurso || 'Não Se Aplica',
-                    especialista_id: especialistaIdPayload
+                    recurso: procRecurso || 'Não Se Aplica'
                 });
                 showToast(`Procedimento atualizado com sucesso!`);
             } else {
@@ -391,10 +491,9 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                     total_quantity: 0,
                     available_quantity: 0,
                     status: procStatus,
-                    recurso: 'Não Se Aplica',
-                    especialista_id: especialistaIdPayload
+                    recurso: 'Não Se Aplica'
                 });
-                showToast(`Procedimento cadastrado com sucesso!`);
+                showToast(`Procedimento principal cadastrado com sucesso!`);
             }
             setIsProcModalOpen(false);
             fetchProcedures();
@@ -404,6 +503,56 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
             } else {
                 setProcError(err.message || 'Erro ao salvar procedimento.');
             }
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    // Modal Handlers: Adicionar Especialista
+    const handleOpenAddEspecialistaModal = (defaultParentId?: string) => {
+        setSelectedParentProcId(defaultParentId || '');
+        setAddEspSearchParent('');
+        setIsParentDropdownOpen(false);
+        setSelectedAddEspecialistaId('');
+        setAddEspSearchMedico('');
+        setIsMedicoDropdownOpen(false);
+        setAddEspecialistaStatus('Ativo');
+        setAddEspecialistaError('');
+        setIsAddEspecialistaModalOpen(true);
+    };
+
+    const handleSaveEspecialistaVinculo = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setAddEspecialistaError('');
+
+        if (!selectedParentProcId) {
+            setAddEspecialistaError('Selecione o procedimento principal.');
+            return;
+        }
+        if (!selectedAddEspecialistaId) {
+            setAddEspecialistaError('Selecione o especialista responsável.');
+            return;
+        }
+
+        setActionLoading('save-vinculo-esp');
+        try {
+            const novoVinculo = await db.vincularEspecialistaProcedimento({
+                parentId: selectedParentProcId,
+                especialistaId: selectedAddEspecialistaId,
+                status: addEspecialistaStatus
+            });
+
+            // Expande automaticamente o pai na listagem para visualização imediata do novo especialista
+            setExpandedParentIds(prev => ({
+                ...prev,
+                [selectedParentProcId]: true
+            }));
+
+            setIsAddEspecialistaModalOpen(false);
+            showToast(`Especialista vinculado com sucesso! Código gerado: ${novoVinculo.code}`);
+            await fetchProcedures();
+        } catch (err: any) {
+            setAddEspecialistaError(err.message || 'Erro ao vincular especialista ao procedimento.');
         } finally {
             setActionLoading(null);
         }
@@ -468,25 +617,6 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
         } catch (err: any) {
             console.error('Erro ao popular procedimentos:', err);
             showToast(err.message || 'Erro ao cadastrar procedimentos padrão.', 'error');
-        } finally {
-            setActionLoading(null);
-        }
-    };
-
-    // Clear all procedures (Admin only)
-    const handleClearAllProcedures = async () => {
-        if (!window.confirm('PERIGO: Tem certeza que deseja apagar TODOS os procedimentos do sistema? Todas as configurações serão zeradas.')) return;
-        setActionLoading('clear-all');
-        try {
-            for (const proc of procedures) {
-                await db.deleteProcedimento(proc.id);
-            }
-            setProcedures([]);
-            setSelectedProc(null);
-            showToast('Todos os procedimentos foram removidos.');
-        } catch (err: any) {
-            console.error('Erro ao limpar procedimentos:', err);
-            showToast('Erro ao excluir procedimentos.', 'error');
         } finally {
             setActionLoading(null);
         }
@@ -942,20 +1072,19 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
 
                             {/* Action Buttons */}
                             <div className="flex items-center gap-2 shrink-0">
-                                {procedures.length > 0 && isAdmin && (
-                                    <button
-                                        onClick={handleClearAllProcedures}
-                                        disabled={actionLoading === 'clear-all'}
-                                        className="px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-extrabold rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
-                                        title="Apagar todos os procedimentos do sistema"
-                                    >
-                                        <Trash2 className="w-4 h-4 text-rose-600" />
-                                        <span>Zerar Lista</span>
-                                    </button>
-                                )}
+                                {/* Novo Botão de Destaque: Adicionar Especialista */}
+                                <button
+                                    onClick={() => handleOpenAddEspecialistaModal()}
+                                    className="px-3.5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-md hover:shadow-indigo-500/20 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-500/30"
+                                    title="Vincular profissional especialista a um procedimento principal existente"
+                                >
+                                    <Stethoscope className="w-4 h-4 text-indigo-200" />
+                                    <span>+ Adicionar Especialista</span>
+                                </button>
+
                                 <button
                                     onClick={() => handleOpenProcModal()}
-                                    className="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-md hover:shadow-sky-500/10 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
+                                    className="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-md hover:shadow-sky-500/15 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
                                 >
                                     <Plus className="w-4 h-4" />
                                     <span>Novo Procedimento</span>
@@ -970,146 +1099,282 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                             </div>
                         )}
 
-                        {/* Procedure Cards List */}
-                        {!loading && filteredProcedures.length > 0 ? (
-                            <div className="space-y-2.5">
-                                {filteredProcedures.map(p => {
+                        {/* Hierarchical Procedure List */}
+                        {!loading && hierarchicalProcedures.parents.length > 0 ? (
+                            <div className="space-y-3">
+                                {hierarchicalProcedures.parents.map(parent => {
+                                    const children = hierarchicalProcedures.childrenByParent.get(parent.id) || [];
+                                    const isExpanded = !!expandedParentIds[parent.id];
+                                    const isSuspended = parent.status !== 'Ativo';
+
                                     const typeConfig = (() => {
-                                        switch (p.type) {
+                                        switch (parent.type) {
                                             case 'Exame':
                                                 return {
                                                     icon: Activity,
                                                     colorClass: 'text-sky-600 bg-sky-50 border-sky-100',
-                                                    hoverColorClass: 'group-hover:border-sky-300 group-hover:bg-sky-50/50'
+                                                    badgeClass: 'bg-sky-50 text-sky-700 border-sky-200'
                                                 };
                                             case 'Consulta':
                                                 return {
                                                     icon: Stethoscope,
                                                     colorClass: 'text-indigo-600 bg-indigo-50 border-indigo-100',
-                                                    hoverColorClass: 'group-hover:border-indigo-300 group-hover:bg-indigo-50/50'
+                                                    badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200'
                                                 };
                                             case 'Cirurgia':
                                             default:
                                                 return {
                                                     icon: Sparkles,
                                                     colorClass: 'text-rose-600 bg-rose-50 border-rose-100',
-                                                    hoverColorClass: 'group-hover:border-rose-300 group-hover:bg-rose-50/50'
+                                                    badgeClass: 'bg-rose-50 text-rose-700 border-rose-200'
                                                 };
                                         }
                                     })();
                                     const IconComponent = typeConfig.icon;
-                                    const isSuspended = p.status !== 'Ativo';
 
                                     return (
                                         <div 
-                                            key={p.id} 
-                                            onClick={() => setSelectedProc(p)}
-                                            className={`group relative bg-white hover:bg-slate-50/40 border rounded-xl p-3 sm:py-2.5 sm:px-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 transition-all duration-200 cursor-pointer shadow-xs hover:shadow-md hover:-translate-y-0.5 ${
+                                            key={parent.id} 
+                                            className={`bg-white border rounded-2xl transition-all duration-200 shadow-xs overflow-hidden ${
                                                 isSuspended 
-                                                    ? 'border-amber-200/80 bg-amber-50/10' 
-                                                    : 'border-slate-200/80 hover:border-sky-300/80'
+                                                    ? 'border-amber-200/80 bg-amber-50/15' 
+                                                    : 'border-slate-200/90 hover:border-sky-300'
                                             }`}
                                         >
-                                            {/* Left side: Icon, Name and Code */}
-                                            <div className="flex items-center gap-3 min-w-0 flex-1">
-                                                <div className={`p-2 rounded-lg ${typeConfig.colorClass} border shrink-0 transition-transform duration-200 group-hover:scale-105 shadow-xs`}>
-                                                    <IconComponent className="w-4 h-4" />
+                                            {/* Card do Procedimento Principal (Pai) */}
+                                            <div 
+                                                onClick={() => setSelectedProc(parent)}
+                                                className="p-3.5 sm:px-4 sm:py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-slate-50/60 transition-colors"
+                                            >
+                                                {/* Esquerda: Ícone, Código Pai e Nome Principal */}
+                                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                                    <div className={`p-2.5 rounded-xl ${typeConfig.colorClass} border shrink-0 shadow-xs`}>
+                                                        <IconComponent className="w-4 h-4" />
+                                                    </div>
+
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                                                            {/* Código Principal */}
+                                                            <span className="text-[9px] font-black tracking-wider text-slate-700 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded-lg uppercase">
+                                                                Cód. {parent.code || '----'}
+                                                            </span>
+
+                                                            {/* Badge de Tipo */}
+                                                            <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider ${typeConfig.badgeClass} border`}>
+                                                                {parent.type}
+                                                            </span>
+
+                                                            {/* Badge Procedimento Principal */}
+                                                            <span className="px-2 py-0.5 rounded-lg text-[8.5px] font-extrabold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                                                                Procedimento Principal
+                                                            </span>
+
+                                                            {/* Badge Contador de Especialistas */}
+                                                            {children.length > 0 ? (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => toggleExpandParent(parent.id, e)}
+                                                                    className="px-2 py-0.5 rounded-lg text-[8.5px] font-extrabold uppercase tracking-wider bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1 transition-all cursor-pointer"
+                                                                    title="Clique para expandir/recolher especialistas vinculados"
+                                                                >
+                                                                    <Stethoscope className="w-2.5 h-2.5" />
+                                                                    <span>{children.length} especialista{children.length > 1 ? 's' : ''} vinculado{children.length > 1 ? 's' : ''}</span>
+                                                                    {isExpanded ? <ChevronUp className="w-3 h-3 ml-0.5" /> : <ChevronDown className="w-3 h-3 ml-0.5" />}
+                                                                </button>
+                                                            ) : (
+                                                                <span className="text-[8.5px] font-semibold text-slate-400">
+                                                                    Sem especialistas vinculados
+                                                                </span>
+                                                            )}
+                                                        </div>
+
+                                                        <h4 className="font-extrabold text-slate-900 text-xs sm:text-[13px] leading-snug truncate uppercase">
+                                                            {parent.name}
+                                                        </h4>
+                                                    </div>
                                                 </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
-                                                        <span className="text-[8px] font-black tracking-wider text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded uppercase">
-                                                            Cód. {p.code || '----'}
+
+                                                {/* Direita: Status, Ações e Botão Adicionar Especialista Direto */}
+                                                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 border-t border-slate-100 sm:border-t-0 pt-2 sm:pt-0">
+                                                    {/* Status Badge */}
+                                                    <div className="text-left sm:text-right">
+                                                        <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">Status</span>
+                                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide border ${
+                                                            !isSuspended 
+                                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                                                        }`}>
+                                                            {!isSuspended && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+                                                            {!isSuspended ? 'Ativo' : 'Suspenso'}
                                                         </span>
-                                                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${typeConfig.colorClass} border`}>
-                                                            {p.type}
-                                                        </span>
-                                                        {p.recurso && p.recurso !== 'Não Se Aplica' && (
-                                                            <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-amber-50 text-amber-600 border border-amber-100">
-                                                                {p.recurso}
-                                                            </span>
-                                                        )}
-                                                        {p.especialista_id && (
-                                                            <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center gap-1">
-                                                                <Stethoscope className="w-2.5 h-2.5" />
-                                                                {p.especialista?.nome || especialistas.find(e => e.id === p.especialista_id)?.nome || 'Especialista'}
-                                                            </span>
+                                                    </div>
+
+                                                    {/* Botão Rápido: + Especialista neste pai */}
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleOpenAddEspecialistaModal(parent.id);
+                                                        }}
+                                                        className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
+                                                        title={`Adicionar Especialista a ${parent.name}`}
+                                                    >
+                                                        <Plus className="w-3 h-3" />
+                                                        <span>Especialista</span>
+                                                    </button>
+
+                                                    {/* Actions Area */}
+                                                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                                        {/* Quick Suspend / Activate Button */}
+                                                        <button
+                                                            onClick={(e) => handleToggleSuspend(e, parent)}
+                                                            disabled={actionLoading === `suspend-${parent.id}`}
+                                                            className={`p-1.5 rounded-lg border transition-all cursor-pointer shadow-xs ${
+                                                                !isSuspended
+                                                                    ? 'text-amber-600 bg-amber-50/60 hover:bg-amber-100 border-amber-200'
+                                                                    : 'text-emerald-600 bg-emerald-50/60 hover:bg-emerald-100 border-emerald-200'
+                                                            }`}
+                                                            title={!isSuspended ? 'Suspender Procedimento Principal' : 'Reativar Procedimento Principal'}
+                                                        >
+                                                            {actionLoading === `suspend-${parent.id}` ? (
+                                                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                            ) : !isSuspended ? (
+                                                                <PauseCircle className="w-3.5 h-3.5" />
+                                                            ) : (
+                                                                <PlayCircle className="w-3.5 h-3.5" />
+                                                            )}
+                                                        </button>
+
+                                                        {/* Edit Button */}
+                                                        <button
+                                                            onClick={() => handleOpenProcModal(parent)}
+                                                            className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 border border-slate-200/80 rounded-lg transition-all cursor-pointer"
+                                                            title="Editar Procedimento Principal"
+                                                        >
+                                                            <Edit2 className="w-3.5 h-3.5" />
+                                                        </button>
+
+                                                        {/* Delete Button */}
+                                                        <button
+                                                            onClick={(e) => handleDeleteProcedure(e, parent.id, parent.name)}
+                                                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200/80 rounded-lg transition-all cursor-pointer"
+                                                            title="Excluir Procedimento Principal"
+                                                        >
+                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                        </button>
+
+                                                        {/* Accordion Toggle Chevron */}
+                                                        {children.length > 0 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => toggleExpandParent(parent.id, e)}
+                                                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200/80 rounded-lg transition-all cursor-pointer"
+                                                                title={isExpanded ? 'Recolher especialistas' : 'Expandir especialistas'}
+                                                            >
+                                                                {isExpanded ? (
+                                                                    <ChevronUp className="w-3.5 h-3.5" />
+                                                                ) : (
+                                                                    <ChevronDown className="w-3.5 h-3.5" />
+                                                                )}
+                                                            </button>
                                                         )}
                                                     </div>
-                                                    <h4 className="font-bold text-slate-800 text-xs sm:text-[13px] leading-snug truncate group-hover:text-sky-700 transition-colors">
-                                                        {formatProcedimentoLabel(p, especialistas)}
-                                                    </h4>
                                                 </div>
                                             </div>
 
-                                            {/* Middle/Right: Info Columns & Actions */}
-                                            <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 border-t border-slate-100 sm:border-t-0 pt-2 sm:pt-0">
-                                                {/* Status Badge */}
-                                                <div className="text-left sm:text-right">
-                                                    <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">Status</span>
-                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide border ${
-                                                        !isSuspended 
-                                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                                                            : 'bg-amber-50 text-amber-700 border-amber-200'
-                                                    }`}>
-                                                        {!isSuspended && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
-                                                        {!isSuspended ? 'Ativo' : 'Suspenso'}
-                                                    </span>
-                                                </div>
+                                            {/* Sub-lista Hierárquica: Especialistas Vinculados (Filhos) */}
+                                            {children.length > 0 && isExpanded && (
+                                                <div className="bg-slate-50/70 border-t border-slate-200/70 px-4 py-3 pl-8 sm:pl-12 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                                                    <div className="flex items-center justify-between pb-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                                        <span>Especialistas Vinculados a este Procedimento ({children.length})</span>
+                                                        <span className="text-[9px] text-slate-400">Códigos derivados de {parent.code}</span>
+                                                    </div>
 
-                                                {/* Cotas Counter */}
-                                                <div className="text-left sm:text-right min-w-[70px]">
-                                                    <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">Cotas</span>
-                                                    <div className="flex items-baseline gap-1 sm:justify-end">
-                                                        <span className="text-xs sm:text-sm font-black text-slate-800">{Math.max(0, p.available_quantity)}</span>
-                                                        <span className="text-[9px] font-semibold text-slate-400">livres</span>
+                                                    <div className="space-y-1.5">
+                                                        {children.map(child => {
+                                                            const isChildSuspended = child.status !== 'Ativo';
+                                                            const espObj = child.especialista || especialistas.find(e => e.id === child.especialista_id);
+                                                            const espNome = espObj?.nome || 'Especialista';
+
+                                                            return (
+                                                                <div 
+                                                                    key={child.id}
+                                                                    onClick={() => setSelectedProc(child)}
+                                                                    className={`p-2.5 sm:px-3 sm:py-2 bg-white rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs hover:border-indigo-300 ${
+                                                                        isChildSuspended ? 'border-amber-200 bg-amber-50/20' : 'border-slate-200/80'
+                                                                    }`}
+                                                                >
+                                                                    {/* Identificação do Especialista e Código Filho */}
+                                                                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                                                        <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 shrink-0">
+                                                                            <Stethoscope className="w-3.5 h-3.5" />
+                                                                        </div>
+                                                                        <div className="min-w-0 flex-1">
+                                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                                {/* Código do Especialista Filho (0397-10) */}
+                                                                                <span className="px-2 py-0.5 rounded-md text-[9px] font-black tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">
+                                                                                    {child.code || '----'}
+                                                                                </span>
+                                                                                <span className="text-[8.5px] font-bold uppercase tracking-wider text-slate-400">
+                                                                                    Especialista Vinculado
+                                                                                </span>
+                                                                                {espObj?.especialidade && (
+                                                                                    <span className="px-1.5 py-0.2 rounded text-[8px] font-semibold uppercase bg-slate-100 text-slate-600">
+                                                                                        {espObj.especialidade}
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                            <h5 className="font-extrabold text-slate-800 text-xs truncate mt-0.5 uppercase">
+                                                                                {child.name}
+                                                                            </h5>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* Status do Filho e Ações */}
+                                                                    <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8.5px] font-black uppercase tracking-wide border ${
+                                                                            !isChildSuspended 
+                                                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                                                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                                                                        }`}>
+                                                                            {!isChildSuspended ? 'Ativo' : 'Suspenso'}
+                                                                        </span>
+
+                                                                        {/* Ações do Especialista Vinculado */}
+                                                                        <div className="flex items-center gap-1">
+                                                                            <button
+                                                                                onClick={(e) => handleToggleSuspend(e, child)}
+                                                                                disabled={actionLoading === `suspend-${child.id}`}
+                                                                                className={`p-1.5 rounded-lg border transition-all cursor-pointer shadow-xs ${
+                                                                                    !isChildSuspended
+                                                                                        ? 'text-amber-600 bg-amber-50/60 hover:bg-amber-100 border-amber-200'
+                                                                                        : 'text-emerald-600 bg-emerald-50/60 hover:bg-emerald-100 border-emerald-200'
+                                                                                }`}
+                                                                                title={!isChildSuspended ? 'Suspender Especialista neste procedimento' : 'Reativar Especialista'}
+                                                                            >
+                                                                                {actionLoading === `suspend-${child.id}` ? (
+                                                                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                                                                ) : !isChildSuspended ? (
+                                                                                    <PauseCircle className="w-3 h-3" />
+                                                                                ) : (
+                                                                                    <PlayCircle className="w-3 h-3" />
+                                                                                )}
+                                                                            </button>
+
+                                                                            <button
+                                                                                onClick={(e) => handleDeleteProcedure(e, child.id, child.name)}
+                                                                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200/80 rounded-lg transition-all cursor-pointer"
+                                                                                title="Remover Especialista Vinculado"
+                                                                            >
+                                                                                <Trash2 className="w-3 h-3" />
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
-
-                                                {/* Actions Area */}
-                                                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                                    {/* Quick Suspend / Activate Button */}
-                                                    <button
-                                                        onClick={(e) => handleToggleSuspend(e, p)}
-                                                        disabled={actionLoading === `suspend-${p.id}`}
-                                                        className={`p-1.5 rounded-lg border transition-all cursor-pointer shadow-xs ${
-                                                            !isSuspended
-                                                                ? 'text-amber-600 bg-amber-50/60 hover:bg-amber-100 border-amber-200'
-                                                                : 'text-emerald-600 bg-emerald-50/60 hover:bg-emerald-100 border-emerald-200'
-                                                        }`}
-                                                        title={!isSuspended ? 'Suspender Procedimento (Ficará inativo para novos agendamentos)' : 'Reativar Procedimento'}
-                                                    >
-                                                        {actionLoading === `suspend-${p.id}` ? (
-                                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                                        ) : !isSuspended ? (
-                                                            <PauseCircle className="w-3.5 h-3.5" />
-                                                        ) : (
-                                                            <PlayCircle className="w-3.5 h-3.5" />
-                                                        )}
-                                                    </button>
-
-                                                    {/* Edit Button */}
-                                                    <button
-                                                        onClick={() => handleOpenProcModal(p)}
-                                                        className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 border border-slate-200/80 rounded-lg transition-all cursor-pointer"
-                                                        title="Editar Procedimento"
-                                                    >
-                                                        <Edit2 className="w-3.5 h-3.5" />
-                                                    </button>
-
-                                                    {/* Delete Button */}
-                                                    <button
-                                                        onClick={(e) => handleDeleteProcedure(e, p.id, p.name)}
-                                                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200/80 rounded-lg transition-all cursor-pointer"
-                                                        title="Excluir Procedimento"
-                                                    >
-                                                        <Trash2 className="w-3.5 h-3.5" />
-                                                    </button>
-
-                                                    <div className="hidden sm:flex p-1 text-slate-300 group-hover:text-sky-500 transition-colors">
-                                                        <ChevronRight className="w-4 h-4 transform group-hover:translate-x-0.5 transition-transform" />
-                                                    </div>
-                                                </div>
-                                            </div>
+                                            )}
                                         </div>
                                     );
                                 })}
@@ -1245,73 +1510,6 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                 </div>
                             </div>
 
-                            {/* Bloco de Especialista Integrado */}
-                            <div className="p-4 bg-slate-50/80 border border-slate-200/80 rounded-2xl space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <Stethoscope className="w-4 h-4 text-indigo-600" />
-                                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-800">
-                                            Possui Especialista
-                                        </span>
-                                    </div>
-                                    
-                                    {/* Toggle Switch */}
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            const nextVal = !hasEspecialista;
-                                            setHasEspecialista(nextVal);
-                                            if (nextVal) {
-                                                if (especialistas.length > 0 && !selectedEspecialistaId) {
-                                                    setSelectedEspecialistaId(especialistas[0].id);
-                                                }
-                                            } else {
-                                                setSelectedEspecialistaId('');
-                                            }
-                                        }}
-                                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                                            hasEspecialista ? 'bg-indigo-600' : 'bg-slate-300'
-                                        }`}
-                                    >
-                                        <span
-                                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                                hasEspecialista ? 'translate-x-5' : 'translate-x-0'
-                                            }`}
-                                        />
-                                    </button>
-                                </div>
-
-                                {/* Select de Especialista */}
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">
-                                        Especialista Responsável
-                                    </label>
-                                    <select
-                                        disabled={!hasEspecialista}
-                                        value={selectedEspecialistaId}
-                                        onChange={(e) => setSelectedEspecialistaId(e.target.value)}
-                                        className={`w-full rounded-xl border p-3 text-xs font-semibold outline-none transition-all ${
-                                            hasEspecialista
-                                                ? 'bg-white border-indigo-200 text-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 cursor-pointer'
-                                                : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                                        }`}
-                                    >
-                                        <option value="">
-                                            {hasEspecialista ? '-- Selecione um especialista --' : 'Desativado (Sem especialista)'}
-                                        </option>
-                                        {especialistas.map(esp => (
-                                            <option key={esp.id} value={esp.id}>
-                                                {esp.nome} — {esp.especialidade} ({esp.grupo || 'MÉDICOS'})
-                                            </option>
-                                        ))}
-                                    </select>
-                                    {hasEspecialista && especialistas.length === 0 && (
-                                        <p className="text-[10px] text-amber-600 font-bold mt-1">
-                                            Nenhum especialista cadastrado. Cadastre em /Regulacao/DADOS/Dashboard/Especialistas
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
 
                             <div className="pt-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
                                 <button
@@ -1514,6 +1712,291 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                     </div>
                 </div>
             )}
+
+            {/* ======================================================= */}
+            {/* MODAL: ADICIONAR ESPECIALISTA AO PROCEDIMENTO PRINCIPAL  */}
+            {/* ======================================================= */}
+            {isAddEspecialistaModalOpen && (() => {
+                const parentObj = hierarchicalProcedures.allParents.find(p => p.id === selectedParentProcId);
+                const espObj = especialistas.find(e => e.id === selectedAddEspecialistaId);
+
+                // Geração automática do código filho (0397-10...)
+                const existingChildren = parentObj 
+                    ? (hierarchicalProcedures.childrenByParent.get(parentObj.id) || [])
+                    : [];
+                const childCodes = existingChildren.map(c => c.code || '');
+                const autoGeneratedCode = parentObj 
+                    ? db.getNextEspecialistaCode(parentObj.code || '0000', childCodes)
+                    : '----';
+
+                // Nome do procedimento vinculado gerado automaticamente
+                const autoGeneratedName = (parentObj && espObj)
+                    ? `${parentObj.name.trim().toUpperCase()} — ${espObj.nome.trim().toUpperCase()}`
+                    : parentObj ? `${parentObj.name.trim().toUpperCase()} — (Selecione o Especialista)` : '----';
+
+                // Filtragem do select de procedimento principal
+                const filteredParentOptions = hierarchicalProcedures.allParents.filter(p => {
+                    if (!addEspSearchParent.trim()) return true;
+                    const query = addEspSearchParent.toLowerCase().trim();
+                    return (
+                        (p.code && p.code.toLowerCase().includes(query)) ||
+                        p.name.toLowerCase().includes(query)
+                    );
+                });
+
+                // Filtragem do select de especialista
+                const filteredMedicoOptions = especialistas.filter(e => {
+                    if (!addEspSearchMedico.trim()) return true;
+                    const query = addEspSearchMedico.toLowerCase().trim();
+                    return (
+                        e.nome.toLowerCase().includes(query) ||
+                        (e.especialidade && e.especialidade.toLowerCase().includes(query)) ||
+                        (e.grupo && e.grupo.toLowerCase().includes(query))
+                    );
+                });
+
+                return (
+                    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100 flex flex-col max-h-[92vh]">
+                            {/* Modal Header */}
+                            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-indigo-50/70 via-slate-50 to-white shrink-0">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-xs">
+                                        <Stethoscope className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">
+                                            Adicionar Especialista ao Procedimento
+                                        </h3>
+                                        <p className="text-[10px] text-slate-500 font-medium">
+                                            Crie um procedimento vinculado com código próprio derivado
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setIsAddEspecialistaModalOpen(false)}
+                                    className="p-1.5 hover:bg-slate-200/70 rounded-xl text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                                    title="Fechar"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            {/* Modal Body */}
+                            <form onSubmit={handleSaveEspecialistaVinculo} className="p-6 overflow-y-auto custom-scrollbar space-y-4 flex-1">
+                                {addEspecialistaError && (
+                                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-700 flex items-center gap-2 animate-in fade-in">
+                                        <AlertTriangle className="w-4 h-4 shrink-0" />
+                                        <span>{addEspecialistaError}</span>
+                                    </div>
+                                )}
+
+                                {/* Campo 1: Procedimento Principal (SELECT pesquisável) */}
+                                <div className="space-y-1">
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 ml-1">
+                                        1. Procedimento Principal *
+                                    </label>
+                                    <div className="relative">
+                                        <div 
+                                            onClick={() => setIsParentDropdownOpen(!isParentDropdownOpen)}
+                                            className="w-full bg-slate-50/80 hover:bg-slate-50 border border-slate-200/90 rounded-xl p-3 text-xs font-semibold text-slate-800 flex items-center justify-between cursor-pointer transition-all focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20"
+                                        >
+                                            <span className="truncate">
+                                                {parentObj 
+                                                    ? `${parentObj.code} — ${parentObj.name}`
+                                                    : '-- Selecione o procedimento principal --'}
+                                            </span>
+                                            <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
+                                        </div>
+
+                                        {isParentDropdownOpen && (
+                                            <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-56 animate-in fade-in duration-150">
+                                                <div className="p-2 border-b border-slate-100 bg-slate-50/50">
+                                                    <div className="relative">
+                                                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                                                        <input
+                                                            type="text"
+                                                            autoFocus
+                                                            placeholder="Buscar por código ou nome..."
+                                                            value={addEspSearchParent}
+                                                            onChange={(e) => setAddEspSearchParent(e.target.value)}
+                                                            className="w-full bg-white border border-slate-200 rounded-lg pl-8 pr-2 py-1.5 text-xs outline-none focus:border-indigo-500"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="overflow-y-auto custom-scrollbar flex-1 p-1">
+                                                    {filteredParentOptions.length > 0 ? (
+                                                        filteredParentOptions.map(p => (
+                                                            <div
+                                                                key={p.id}
+                                                                onClick={() => {
+                                                                    setSelectedParentProcId(p.id);
+                                                                    setIsParentDropdownOpen(false);
+                                                                    setAddEspSearchParent('');
+                                                                }}
+                                                                className={`px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-colors flex items-center justify-between ${
+                                                                    selectedParentProcId === p.id 
+                                                                        ? 'bg-indigo-50 text-indigo-700 font-bold' 
+                                                                        : 'hover:bg-slate-100 text-slate-700'
+                                                                }`}
+                                                            >
+                                                                <span className="truncate">
+                                                                    <strong className="font-mono text-indigo-600 mr-2">{p.code}</strong>
+                                                                    {p.name}
+                                                                </span>
+                                                                {selectedParentProcId === p.id && <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0" />}
+                                                            </div>
+                                                        ))
+                                                    ) : (
+                                                        <div className="p-3 text-center text-xs text-slate-400">
+                                                            Nenhum procedimento encontrado.
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Campo 2: Especialista Responsável (SELECT pesquisável) */}
+                                <div className="space-y-1">
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 ml-1">
+                                        2. Especialista Responsável *
+                                    </label>
+                                    <div className="relative">
+                                        <div 
+                                            onClick={() => setIsMedicoDropdownOpen(!isMedicoDropdownOpen)}
+                                            className="w-full bg-slate-50/80 hover:bg-slate-50 border border-slate-200/90 rounded-xl p-3 text-xs font-semibold text-slate-800 flex items-center justify-between cursor-pointer transition-all focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20"
+                                        >
+                                            <span className="truncate">
+                                                {espObj 
+                                                    ? `${espObj.nome} — ${espObj.especialidade || 'MÉDICO'} (${espObj.grupo || 'MÉDICOS'})`
+                                                    : '-- Selecione o especialista --'}
+                                            </span>
+                                            <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
+                                        </div>
+
+                                        {isMedicoDropdownOpen && (
+                                            <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-56 animate-in fade-in duration-150">
+                                                <div className="p-2 border-b border-slate-100 bg-slate-50/50">
+                                                    <div className="relative">
+                                                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                                                        <input
+                                                            type="text"
+                                                            autoFocus
+                                                            placeholder="Buscar por nome, especialidade ou grupo..."
+                                                            value={addEspSearchMedico}
+                                                            onChange={(e) => setAddEspSearchMedico(e.target.value)}
+                                                            className="w-full bg-white border border-slate-200 rounded-lg pl-8 pr-2 py-1.5 text-xs outline-none focus:border-indigo-500"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="overflow-y-auto custom-scrollbar flex-1 p-1">
+                                                    {filteredMedicoOptions.length > 0 ? (
+                                                        filteredMedicoOptions.map(e => (
+                                                            <div
+                                                                key={e.id}
+                                                                onClick={() => {
+                                                                    setSelectedAddEspecialistaId(e.id);
+                                                                    setIsMedicoDropdownOpen(false);
+                                                                    setAddEspSearchMedico('');
+                                                                }}
+                                                                className={`px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-colors flex items-center justify-between ${
+                                                                    selectedAddEspecialistaId === e.id 
+                                                                        ? 'bg-indigo-50 text-indigo-700 font-bold' 
+                                                                        : 'hover:bg-slate-100 text-slate-700'
+                                                                }`}
+                                                            >
+                                                                <div className="truncate">
+                                                                    <span className="block font-bold text-slate-800">{e.nome}</span>
+                                                                    <span className="text-[10px] text-slate-400">{e.especialidade || 'MÉDICO'} ({e.grupo || 'MÉDICOS'})</span>
+                                                                </div>
+                                                                {selectedAddEspecialistaId === e.id && <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0" />}
+                                                            </div>
+                                                        ))
+                                                    ) : (
+                                                        <div className="p-3 text-center text-xs text-slate-400">
+                                                            Nenhum especialista encontrado.
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Campo 3: Código do Especialista (Gerado automaticamente) */}
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1 flex items-center justify-between">
+                                        <span>3. Código do Especialista</span>
+                                        <span className="text-[9px] text-indigo-600 font-bold lowercase italic">(automático derivado)</span>
+                                    </label>
+                                    <div className="p-3 bg-indigo-50/50 border border-indigo-200/70 rounded-xl flex items-center justify-between">
+                                        <span className="text-xs font-mono font-black text-indigo-800 tracking-wider">
+                                            {autoGeneratedCode}
+                                        </span>
+                                        <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-widest bg-indigo-100/70 px-2 py-0.5 rounded">
+                                            {parentObj ? `Prefixo: ${parentObj.code}` : 'Aguardando Pai'}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Campo 4: Nome do Procedimento Vinculado (Gerado automaticamente) */}
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1 flex items-center justify-between">
+                                        <span>4. Nome do Procedimento Vinculado</span>
+                                        <span className="text-[9px] text-slate-400 font-bold lowercase italic">(gerado automaticamente)</span>
+                                    </label>
+                                    <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-bold text-slate-800 uppercase leading-snug break-words">
+                                        {autoGeneratedName}
+                                    </div>
+                                </div>
+
+                                {/* Campo 5: Status Operacional */}
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">
+                                        5. Status Operacional
+                                    </label>
+                                    <div className="flex items-center gap-6 p-3 bg-slate-50 border border-slate-200/80 rounded-xl">
+                                        {(['Ativo', 'Inativo'] as const).map(st => (
+                                            <label key={st} className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700 select-none">
+                                                <input
+                                                    type="radio"
+                                                    name="addEspStatus"
+                                                    value={st}
+                                                    checked={addEspecialistaStatus === st}
+                                                    onChange={() => setAddEspecialistaStatus(st)}
+                                                    className="w-4 h-4 text-indigo-600 border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                                                />
+                                                <span>{st === 'Ativo' ? 'Ativo' : 'Suspenso'}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Botões do Rodapé */}
+                                <div className="pt-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsAddEspecialistaModalOpen(false)}
+                                        className="px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-extrabold rounded-xl text-xs uppercase tracking-wider cursor-pointer transition-colors"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={actionLoading === 'save-vinculo-esp' || !selectedParentProcId || !selectedAddEspecialistaId}
+                                        className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-extrabold rounded-xl shadow-md active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+                                    >
+                                        {actionLoading === 'save-vinculo-esp' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                                        <span>Salvar Especialista</span>
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                );
+            })()}
 
         </div>
     );

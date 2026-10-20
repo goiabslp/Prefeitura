@@ -677,6 +677,7 @@ export interface ConsultaProcedimento {
   total_quantity: number;
   status: 'Ativo' | 'Inativo';
   recurso?: 'Não Se Aplica' | 'FM' | 'PPI';
+  parent_id?: string | null;
   especialista_id?: string | null;
   especialista?: ConsultaEspecialista | null;
   created_at?: string;

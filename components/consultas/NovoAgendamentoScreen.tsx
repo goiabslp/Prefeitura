@@ -128,8 +128,8 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         }
         // Se já havia um procedimento selecionado que é incompatível com o novo tipo, limpa-o
         if (selectedProcedure) {
-            const hasEsp = !!selectedProcedure.especialista_id;
-            if ((tipo === 'retorno' && !hasEsp) || (tipo === 'nao_retorno' && hasEsp)) {
+            const isVinculado = !!selectedProcedure.parent_id || !!selectedProcedure.especialista_id;
+            if ((tipo === 'retorno' && !isVinculado) || (tipo === 'nao_retorno' && isVinculado)) {
                 setSelectedProcedure(null);
             }
         }
@@ -910,14 +910,14 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         str ? str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() : '';
 
     const filteredProcedures = procedures.filter(p => {
-        // Regra Estrita de Retorno vs Especialista:
-        // Retorno: SOMENTE procedimentos com 'Possui Especialista' ativado (possui especialista_id)
-        // Não Retorno: SOMENTE procedimentos com 'Possui Especialista' desativado (sem especialista_id)
-        const hasEspecialista = !!p.especialista_id;
-        if (atendimentoTipo === 'retorno' && !hasEspecialista) {
+        // Regra Hierárquica de Retorno vs Especialista:
+        // Retorno: SOMENTE procedimentos vinculados a especialistas (procedimento filho com parent_id ou especialista_id)
+        // Não Retorno (Novo Agendamento): SOMENTE procedimentos principais (sem parent_id e sem especialista_id)
+        const isEspecialistaVinculado = !!p.parent_id || !!p.especialista_id;
+        if (atendimentoTipo === 'retorno' && !isEspecialistaVinculado) {
             return false;
         }
-        if (atendimentoTipo === 'nao_retorno' && hasEspecialista) {
+        if (atendimentoTipo === 'nao_retorno' && isEspecialistaVinculado) {
             return false;
         }
 
