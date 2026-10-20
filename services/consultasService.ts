@@ -730,7 +730,10 @@ export const formatProcedimentoLabel = (
 const PROCEDIMENTO_COLUMNS = 'id, name, code, type, available_quantity, total_quantity, status, recurso, created_at, updated_at';
 const PROCEDIMENTO_COLUMNS_FALLBACK = 'id, name, code, type, available_quantity, total_quantity, status, recurso, created_at, updated_at';
 
-export const getProcedimentos = async (onlyActive: boolean = false): Promise<ConsultaProcedimento[]> => {
+export const getProcedimentos = async (
+    onlyActive: boolean = false,
+    hasEspecialistaFilter?: boolean
+): Promise<ConsultaProcedimento[]> => {
     try {
         let query = supabase.from('consultas_procedimentos').select(PROCEDIMENTO_COLUMNS).order('name', { ascending: true });
         
@@ -752,7 +755,7 @@ export const getProcedimentos = async (onlyActive: boolean = false): Promise<Con
         const especialistas = await getEspecialistas();
         const espMap = new Map<string, ConsultaEspecialista>(especialistas.map(e => [e.id, e]));
 
-        return procs.map(p => {
+        const mapped = procs.map(p => {
             const espId = p.especialista_id || getProcEspecialistaMapping(p.id);
             const espObj = (espId ? espMap.get(espId) : null) || p.especialista || null;
             return {
@@ -761,6 +764,12 @@ export const getProcedimentos = async (onlyActive: boolean = false): Promise<Con
                 especialista: espObj
             };
         });
+
+        if (hasEspecialistaFilter !== undefined) {
+            return mapped.filter(p => hasEspecialistaFilter ? !!p.especialista_id : !p.especialista_id);
+        }
+
+        return mapped;
     } catch (error) {
         const appError = handleSupabaseError(error);
         console.error('[consultasService] getProcedimentos Error:', appError.message);
@@ -1426,11 +1435,12 @@ export const searchRemoteAgendamentos = async (
             responsavel:profiles(id, name)
         `;
 
+        const codePrefixMatch = raw.match(/^(c[oó]digo|cod\.?|c[oó]d\.?):?\s*(.+)$/i);
         const cleanDigits = raw.replace(/\D/g, '');
-        const isOnlyDigits = cleanDigits.length >= 3 && /^[0-9.\-/ ]+$/.test(raw);
+        const isOnlyDigits = cleanDigits.length >= 2 && /^[0-9.\-/ ]+$/.test(raw);
         const isProtocol = raw.startsWith('#') || /^[a-fA-F0-9]{6,8}$/.test(raw);
 
-        // Se for protocolo direto (#id)
+        // 1. Busca por protocolo direto (#id)
         if (isProtocol) {
             const cleanId = raw.replace(/^#/, '').toLowerCase();
             let q = supabase
@@ -1448,27 +1458,30 @@ export const searchRemoteAgendamentos = async (
             return data as unknown as ConsultaAgendamento[];
         }
 
-        // Se for busca numérica por CPF ou SUS
-        if (isOnlyDigits) {
-            let patientQuery = supabase
-                .from('consultas_pacientes')
+        // 2. Busca explícita por Código de Procedimento (ex: "codigo 0279", "cod 0279")
+        if (codePrefixMatch) {
+            const targetCode = codePrefixMatch[2].trim().replace(/[%_]/g, '');
+            if (!targetCode) return [];
+
+            let procQuery = supabase
+                .from('consultas_procedimentos')
                 .select('id')
-                .or(`cpf.ilike.%${cleanDigits}%,sus_number.ilike.%${cleanDigits}%`)
-                .limit(options?.limit || 20);
+                .or(`code.ilike.%${targetCode}%,code.ilike.${targetCode}%`)
+                .limit(30);
 
             if (options?.signal) {
-                patientQuery = patientQuery.abortSignal(options.signal);
+                procQuery = procQuery.abortSignal(options.signal);
             }
 
-            const { data: patients, error: patErr } = await patientQuery;
-            if (patErr || !patients || patients.length === 0) return [];
+            const { data: procs, error: procErr } = await procQuery;
+            if (procErr || !procs || procs.length === 0) return [];
 
-            const patientIds = patients.map(p => p.id);
+            const procIds = procs.map(p => p.id);
             let q = supabase
                 .from('consultas_agendamentos')
                 .select(fullColumns)
-                .in('patient_id', patientIds)
-                .limit(options?.limit || 30);
+                .in('procedimento_id', procIds)
+                .limit(options?.limit || 50);
 
             if (options?.signal) {
                 q = q.abortSignal(options.signal);
@@ -1479,35 +1492,130 @@ export const searchRemoteAgendamentos = async (
             return data as unknown as ConsultaAgendamento[];
         }
 
-        // Busca por Nome do Paciente (prefixo sequencial da primeira palavra ou de palavras compostas)
-        const queryNorm = raw.replace(/[%_]/g, '');
+        // 3. Busca puramente numérica (ex: "0279", "0007" ou CPF / SUS)
+        if (isOnlyDigits) {
+            // Busca primeiramente por procedimentos com este código
+            let procQuery = supabase
+                .from('consultas_procedimentos')
+                .select('id')
+                .or(`code.eq.${cleanDigits},code.ilike.%${cleanDigits}%`)
+                .limit(20);
+
+            if (options?.signal) procQuery = procQuery.abortSignal(options.signal);
+            const { data: procs } = await procQuery;
+            const procIds = procs && procs.length > 0 ? procs.map(p => p.id) : [];
+
+            // Se tiver pelo menos 6 dígitos ou pontuação explícita de CPF, busca também em pacientes por CPF/SUS
+            let patientIds: string[] = [];
+            const hasCpfFormatting = /[.\-]/.test(raw);
+            if (cleanDigits.length >= 6 || hasCpfFormatting) {
+                let patientQuery = supabase
+                    .from('consultas_pacientes')
+                    .select('id')
+                    .or(`cpf.ilike.%${cleanDigits}%,sus_number.ilike.%${cleanDigits}%`)
+                    .limit(options?.limit || 20);
+
+                if (options?.signal) patientQuery = patientQuery.abortSignal(options.signal);
+                const { data: patients } = await patientQuery;
+                if (patients && patients.length > 0) {
+                    patientIds = patients.map(p => p.id);
+                }
+            }
+
+            if (procIds.length === 0 && patientIds.length === 0) return [];
+
+            // Monta query combinada
+            let orConditions: string[] = [];
+            if (procIds.length > 0) orConditions.push(`procedimento_id.in.(${procIds.join(',')})`);
+            if (patientIds.length > 0) orConditions.push(`patient_id.in.(${patientIds.join(',')})`);
+
+            let q = supabase
+                .from('consultas_agendamentos')
+                .select(fullColumns)
+                .or(orConditions.join(','))
+                .limit(options?.limit || 40);
+
+            if (options?.signal) q = q.abortSignal(options.signal);
+            const { data, error } = await q;
+            if (error || !data) return [];
+            return data as unknown as ConsultaAgendamento[];
+        }
+
+        // 4. Busca por Texto Geral (Nome do Procedimento, Nome do Paciente, Prestador, Município)
+        const queryClean = raw.replace(/[%_]/g, '');
+        const queryNoAccent = queryClean.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+        // A) Busca em Procedimentos (por código ou nome, com e sem acentos)
+        let procOr = [`name.ilike.%${queryClean}%`, `code.ilike.%${queryClean}%`];
+        if (queryNoAccent.toLowerCase() !== queryClean.toLowerCase()) {
+            procOr.push(`name.ilike.%${queryNoAccent}%`, `code.ilike.%${queryNoAccent}%`);
+        }
+        let procQuery = supabase
+            .from('consultas_procedimentos')
+            .select('id')
+            .or(procOr.join(','))
+            .limit(40);
+        if (options?.signal) procQuery = procQuery.abortSignal(options.signal);
+        const { data: procs } = await procQuery;
+        const procIds = procs && procs.length > 0 ? procs.map(p => p.id) : [];
+
+        // B) Busca em Pacientes (por nome ou apelido, com e sem acentos)
+        let patOr = [`name.ilike.%${queryClean}%`, `nickname.ilike.%${queryClean}%`];
+        if (queryNoAccent.toLowerCase() !== queryClean.toLowerCase()) {
+            patOr.push(`name.ilike.%${queryNoAccent}%`, `nickname.ilike.%${queryNoAccent}%`);
+        }
         let patientQuery = supabase
             .from('consultas_pacientes')
             .select('id')
-            .ilike('name', `${queryNorm}%`)
-            .limit(options?.limit || 30);
+            .or(patOr.join(','))
+            .limit(40);
+        if (options?.signal) patientQuery = patientQuery.abortSignal(options.signal);
+        const { data: patients } = await patientQuery;
+        const patientIds = patients && patients.length > 0 ? patients.map(p => p.id) : [];
 
-        if (options?.signal) {
-            patientQuery = patientQuery.abortSignal(options.signal);
+        const combinedResults: Map<string, ConsultaAgendamento> = new Map();
+
+        // 1. Busca agendamentos pelos procedimentos encontrados
+        if (procIds.length > 0) {
+            let qProc = supabase
+                .from('consultas_agendamentos')
+                .select(fullColumns)
+                .in('procedimento_id', procIds.slice(0, 50))
+                .limit(options?.limit || 40);
+            if (options?.signal) qProc = qProc.abortSignal(options.signal);
+            const { data: procBookings } = await qProc;
+            if (procBookings) {
+                procBookings.forEach((b: any) => combinedResults.set(b.id, b));
+            }
         }
 
-        const { data: patients, error: patErr } = await patientQuery;
-        if (patErr || !patients || patients.length === 0) return [];
+        // 2. Busca agendamentos pelos pacientes encontrados
+        if (patientIds.length > 0) {
+            let qPat = supabase
+                .from('consultas_agendamentos')
+                .select(fullColumns)
+                .in('patient_id', patientIds.slice(0, 50))
+                .limit(options?.limit || 40);
+            if (options?.signal) qPat = qPat.abortSignal(options.signal);
+            const { data: patBookings } = await qPat;
+            if (patBookings) {
+                patBookings.forEach((b: any) => combinedResults.set(b.id, b));
+            }
+        }
 
-        const patientIds = patients.map(p => p.id);
-        let q = supabase
+        // 3. Busca direta por prestador ou município
+        let qOther = supabase
             .from('consultas_agendamentos')
             .select(fullColumns)
-            .in('patient_id', patientIds)
-            .limit(options?.limit || 40);
-
-        if (options?.signal) {
-            q = q.abortSignal(options.signal);
+            .or(`prestador.ilike.%${queryClean}%,municipio.ilike.%${queryClean}%`)
+            .limit(options?.limit || 30);
+        if (options?.signal) qOther = qOther.abortSignal(options.signal);
+        const { data: otherBookings } = await qOther;
+        if (otherBookings) {
+            otherBookings.forEach((b: any) => combinedResults.set(b.id, b));
         }
 
-        const { data, error } = await q;
-        if (error || !data) return [];
-        return data as unknown as ConsultaAgendamento[];
+        return Array.from(combinedResults.values());
     } catch (err: any) {
         if (err?.name === 'AbortError' || err?.message?.includes('aborted')) {
             return [];
@@ -1536,11 +1644,41 @@ export const createAgendamento = async (agendamento: Omit<ConsultaAgendamento, '
             }
         }
 
+        // 1.1 Validação de Especialista vs Retorno
+        if (agendamento.procedimento_id) {
+            const procEspId = getProcEspecialistaMapping(agendamento.procedimento_id);
+            const isProcComEspecialista = !!procEspId;
+            if (agendamento.is_retorno && !isProcComEspecialista) {
+                // Verificar também direto na tabela de procedimentos
+                const { data: procCheck } = await supabase
+                    .from('consultas_procedimentos')
+                    .select('id, especialista_id, status')
+                    .eq('id', agendamento.procedimento_id)
+                    .maybeSingle();
+                if (procCheck && !procCheck.especialista_id && !procEspId) {
+                    throw new Error('Procedimento incompatível com retorno: Este procedimento não possui especialista vinculado.');
+                }
+            } else if (!agendamento.is_retorno && isProcComEspecialista) {
+                const { data: procCheck } = await supabase
+                    .from('consultas_procedimentos')
+                    .select('id, especialista_id, status')
+                    .eq('id', agendamento.procedimento_id)
+                    .maybeSingle();
+                if (procCheck?.especialista_id || procEspId) {
+                    throw new Error('Procedimento incompatível: Procedimentos com especialista são exclusivos para agendamentos de retorno.');
+                }
+            }
+        }
+
         // 2. Insert agendamento com suporte a fallback resiliente para novas colunas
         let insertPayload: any = { ...agendamento };
         
         // Limpar propriedades com valor null ou undefined que sejam opcionais para evitar erros de schema cache
         const optionalCols = [
+            'confirmation_origin',
+            'confirmed_at',
+            'confirmed_by',
+            'confirmed_by_name',
             'convenio',
             'prestador',
             'municipio',
@@ -1575,33 +1713,51 @@ export const createAgendamento = async (agendamento: Omit<ConsultaAgendamento, '
             .single();
 
         if (error && (error.code === '42703' || error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('does not exist') || error.message?.includes('schema cache'))) {
-            console.warn('[consultasService] Colunas opcionais ausentes na tabela consultas_agendamentos (createAgendamento). Tentando fallback...', error.message);
+            console.warn('[consultasService] Colunas opcionais ausentes na tabela consultas_agendamentos (createAgendamento). Tentando fallback adaptativo...', error.message);
             let fallbackPayload = { ...insertPayload };
-            let lastError = error;
+            let lastError: any = error;
+            let attempts = 0;
+            const maxAttempts = 20;
 
-            // Extrair dinamicamente coluna ausente mencionada no erro
-            const matchCol = lastError.message?.match(/Could not find the '([^']+)' column/) || lastError.message?.match(/column "([^"]+)" of relation/);
-            if (matchCol && matchCol[1]) {
-                delete fallbackPayload[matchCol[1]];
-            }
+            while (lastError && attempts < maxAttempts && (lastError.code === '42703' || lastError.code === 'PGRST204' || lastError.message?.includes('column') || lastError.message?.includes('does not exist') || lastError.message?.includes('schema cache'))) {
+                attempts++;
+                const colMatch = lastError.message?.match(/Could not find the '([^']+)' column/i)
+                              || lastError.message?.match(/column ["']([^"']+)["'] of relation/i)
+                              || lastError.message?.match(/column ["']([^"']+)["'] does not exist/i);
 
-            for (const col of optionalCols) {
-                if (lastError && (lastError.code === '42703' || lastError.code === 'PGRST204' || lastError.message?.includes('column') || lastError.message?.includes('does not exist') || lastError.message?.includes('schema cache'))) {
-                    delete fallbackPayload[col];
-                    const retryRes = await supabase
-                        .from('consultas_agendamentos')
-                        .insert([fallbackPayload])
-                        .select(`
-                            *,
-                            paciente:consultas_pacientes(*),
-                            procedimento:consultas_procedimentos(*),
-                            responsavel:profiles(name)
-                        `)
-                        .single();
+                let colToRemove: string | null = null;
+                if (colMatch && (colMatch[1] || colMatch[2] || colMatch[3])) {
+                    const detected = colMatch[1] || colMatch[2] || colMatch[3];
+                    if (detected in fallbackPayload) {
+                        colToRemove = detected;
+                    }
+                }
 
-                    data = retryRes.data;
-                    lastError = retryRes.error;
-                    if (!lastError) break;
+                if (!colToRemove) {
+                    colToRemove = optionalCols.find(c => c in fallbackPayload) || null;
+                }
+
+                if (!colToRemove) break;
+
+                console.warn(`[consultasService] Removendo coluna '${colToRemove}' do payload de createAgendamento (tentativa ${attempts}) e tentando novamente...`);
+                delete fallbackPayload[colToRemove];
+
+                const retryRes = await supabase
+                    .from('consultas_agendamentos')
+                    .insert([fallbackPayload])
+                    .select(`
+                        *,
+                        paciente:consultas_pacientes(*),
+                        procedimento:consultas_procedimentos(*),
+                        responsavel:profiles(name)
+                    `)
+                    .single();
+
+                data = retryRes.data;
+                lastError = retryRes.error;
+                if (!lastError) {
+                    console.log('[consultasService] createAgendamento recuperado com sucesso no fallback!');
+                    break;
                 }
             }
             error = lastError;
@@ -1699,13 +1855,13 @@ export const confirmarComparecimentoAgendamento = async (
     currentUser: User
 ): Promise<ConsultaAgendamento> => {
     const agoraIso = new Date().toISOString();
-    const serverName = currentUser.name || 'Servidor Municipal';
+    const serverName = currentUser?.name || 'Servidor Municipal';
 
     // 1. Atualizar agendamento no Supabase
     const payload: Partial<ConsultaAgendamento> = {
         status: situacao,
         confirmed_at: agoraIso,
-        confirmed_by: currentUser.id,
+        confirmed_by: currentUser?.id || null,
         confirmed_by_name: serverName,
         confirmation_origin: 'Regulação - Confirmação Automática de Atendimentos'
     };
@@ -2474,11 +2630,15 @@ export const updateAgendamento = async (
             `)
             .single();
 
-        // Fallback progressivo: se alguma coluna não existir ou houver mismatch de schema
+        // Fallback progressivo e adaptativo: se alguma coluna não existir ou houver mismatch de schema
         if (error && (error.code === '42703' || error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('does not exist') || error.message?.includes('schema cache'))) {
-            console.warn('[consultasService] Coluna(s) ausente(s) no Supabase (updateAgendamento). Tentando fallback progressivo...', error.message);
+            console.warn('[consultasService] Coluna(s) ausente(s) no Supabase (updateAgendamento). Iniciando fallback adaptativo...', error.message);
 
             const optionalCols = [
+                'confirmation_origin',
+                'confirmed_at',
+                'confirmed_by',
+                'confirmed_by_name',
                 'convenio',
                 'prestador',
                 'municipio',
@@ -2505,35 +2665,56 @@ export const updateAgendamento = async (
                 'pause_history'
             ];
             let fallbackUpdates = { ...cleanUpdates };
-            let lastError = error;
+            let lastError: any = error;
+            let attempts = 0;
+            const maxAttempts = 20;
 
-            // Extrair dinamicamente coluna ausente mencionada no erro
-            const matchCol = lastError.message?.match(/Could not find the '([^']+)' column/) || lastError.message?.match(/column "([^"]+)" of relation/);
-            if (matchCol && matchCol[1]) {
-                delete fallbackUpdates[matchCol[1]];
-            }
+            while (lastError && attempts < maxAttempts && (lastError.code === '42703' || lastError.code === 'PGRST204' || lastError.message?.includes('column') || lastError.message?.includes('does not exist') || lastError.message?.includes('schema cache'))) {
+                attempts++;
 
-            for (const col of optionalCols) {
-                if (lastError && (lastError.code === '42703' || lastError.code === 'PGRST204' || lastError.message?.includes('column') || lastError.message?.includes('does not exist') || lastError.message?.includes('schema cache'))) {
-                    console.warn(`[consultasService] Removendo coluna '${col}' do payload de updateAgendamento e tentando novamente...`);
-                    delete fallbackUpdates[col];
+                // Extrai dinamicamente a coluna ausente mencionada no erro da tentativa atual
+                const colMatch = lastError.message?.match(/Could not find the '([^']+)' column/i)
+                              || lastError.message?.match(/column ["']([^"']+)["'] of relation/i)
+                              || lastError.message?.match(/column ["']([^"']+)["'] does not exist/i);
 
-                    const retryRes = await supabase
-                        .from('consultas_agendamentos')
-                        .update(fallbackUpdates)
-                        .eq('id', id)
-                        .select(`
-                            *,
-                            paciente:consultas_pacientes(*),
-                            procedimento:consultas_procedimentos(*),
-                            responsavel:profiles(name)
-                        `)
-                        .single();
+                let colToRemove: string | null = null;
+                if (colMatch && (colMatch[1] || colMatch[2] || colMatch[3])) {
+                    const detected = colMatch[1] || colMatch[2] || colMatch[3];
+                    if (detected in fallbackUpdates) {
+                        colToRemove = detected;
+                    }
+                }
 
-                    data = retryRes.data;
-                    lastError = retryRes.error;
+                // Se não extraiu pelo erro ou já foi removida, remove a próxima coluna opcional presente no payload
+                if (!colToRemove) {
+                    colToRemove = optionalCols.find(c => c in fallbackUpdates) || null;
+                }
 
-                    if (!lastError) break;
+                if (!colToRemove) {
+                    break;
+                }
+
+                console.warn(`[consultasService] Removendo coluna '${colToRemove}' do payload de updateAgendamento (tentativa ${attempts}) e tentando novamente...`);
+                delete fallbackUpdates[colToRemove];
+
+                const retryRes = await supabase
+                    .from('consultas_agendamentos')
+                    .update(fallbackUpdates)
+                    .eq('id', id)
+                    .select(`
+                        *,
+                        paciente:consultas_pacientes(*),
+                        procedimento:consultas_procedimentos(*),
+                        responsavel:profiles(name)
+                    `)
+                    .single();
+
+                data = retryRes.data;
+                lastError = retryRes.error;
+
+                if (!lastError) {
+                    console.log(`[consultasService] updateAgendamento concluído com sucesso após adaptação de colunas!`);
+                    break;
                 }
             }
 
@@ -2541,6 +2722,14 @@ export const updateAgendamento = async (
         }
 
         if (error) throw error;
+
+        // Se data foi recuperado com sucesso, mescla as propriedades originais para que o estado da UI mantenha os dados
+        if (data) {
+            data = {
+                ...cleanUpdates,
+                ...data
+            };
+        }
 
         // Se o status solicitado for 'Agendado' e a resposta do banco retornou 'Fila de espera' (por causa de trigger legada)
         if (data && cleanUpdates.status === 'Agendado' && data.status !== 'Agendado') {

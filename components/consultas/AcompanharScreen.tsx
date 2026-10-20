@@ -588,7 +588,7 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
 
                 <div className="flex flex-col wide:flex-row items-stretch min-h-[72px] sm:min-h-[76px]">
                     {/* CARD DE PRIMEIRA INFORMAÇÃO - POSIÇÃO E DADOS DO PACIENTE */}
-                    <div className={`border-b wide:border-b-0 wide:border-r p-2 sm:p-2.5 sm:px-4 flex items-center gap-3 shrink-0 self-stretch wide:w-[290px] transition-all relative ${
+                    <div className={`border-b wide:border-b-0 wide:border-r p-2 sm:p-2.5 sm:px-4 flex items-center gap-3 shrink-0 self-stretch wide:w-[305px] transition-all relative ${
                         isPaused
                         ? 'bg-amber-100/50 border-amber-200'
                         : isEligibleForVaga 
@@ -599,7 +599,7 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                     }`}>
                         {/* Bloco de Destaque: POSIÇÃO */}
                         <div 
-                            className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex flex-col items-center justify-center shrink-0 border transition-all duration-300 shadow-xs relative overflow-hidden ${
+                            className={`min-w-[72px] sm:min-w-[80px] h-14 sm:h-16 px-1.5 py-1 rounded-2xl flex flex-col items-center justify-center shrink-0 border transition-all duration-300 shadow-xs relative overflow-hidden ${
                                 isPaused
                                     ? 'bg-gradient-to-br from-amber-100 via-yellow-100 to-amber-200 border-amber-400 text-amber-950 ring-1 ring-amber-400/40'
                                     : isEligibleForVaga
@@ -635,8 +635,8 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                     <span className="text-[7.5px] font-black uppercase tracking-wider text-amber-800 leading-none">
                                         FILA ({queuePosition ? `${queuePosition}º` : (booking.queue_position ? `${booking.queue_position}º` : '—')})
                                     </span>
-                                    <span className="text-[11px] sm:text-xs font-black uppercase tracking-tight text-amber-950 my-0.5 text-center px-0.5 leading-tight flex items-center justify-center gap-0.5">
-                                        <Pause className="w-3 h-3 fill-amber-700 text-amber-700 shrink-0" />
+                                    <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-tight text-amber-950 my-0.5 text-center leading-none flex items-center justify-center gap-0.5 whitespace-nowrap">
+                                        <Pause className="w-2.5 h-2.5 fill-amber-700 text-amber-700 shrink-0" />
                                         PAUSADA
                                     </span>
                                     <span className="text-[6.5px] font-bold uppercase tracking-wider text-amber-800 leading-none">
@@ -686,10 +686,10 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                     <span className="text-[7.5px] font-black uppercase tracking-wider text-emerald-700 leading-none">
                                         STATUS
                                     </span>
-                                    <span className="text-xs sm:text-[13px] font-black uppercase tracking-tight text-emerald-950 my-0.5 text-center px-0.5 leading-tight">
+                                    <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-tight text-emerald-950 my-0.5 text-center leading-none whitespace-nowrap">
                                         AGENDADO
                                     </span>
-                                    <span className="text-[7px] font-bold uppercase tracking-wider text-emerald-600 leading-none">
+                                    <span className="text-[6.5px] font-bold uppercase tracking-wider text-emerald-600 leading-none whitespace-nowrap">
                                         CONFIRMADO
                                     </span>
                                 </>
@@ -698,7 +698,7 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                     <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-400 leading-none">
                                         STATUS
                                     </span>
-                                    <span className="text-[11px] sm:text-xs font-black uppercase tracking-tight text-slate-800 my-0.5 text-center px-0.5 leading-tight">
+                                    <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-tight text-slate-800 my-0.5 text-center leading-none whitespace-nowrap px-0.5">
                                         {booking.status}
                                     </span>
                                     {queuePosition ? (
@@ -1516,8 +1516,35 @@ function getSequentialNameMatchScore(fullName: string, queryNorm: string): numbe
 /**
  * Avalia se o registro bate com a busca e atribui um score de relevância:
  * Retorna score >= 0 se houve correspondência, ou -1 se não houver correspondência.
- * O filtro textual é aplicado EXCLUSIVAMENTE sobre o Paciente (Nome, Apelido, CPF, Cartão SUS ou Protocolo).
- * JAMAIS pesquisa em responsável, procedimento, observações ou outros campos.
+ * 
+ * Regras:
+ * 1. Busca explícita por código (ex: "codigo 0279", "cod 0279", "cód 0279"):
+ *    Retorna ESTRITAMENTE itens cujo código do procedimento corresponda ao buscado.
+ * 2. Busca puramente numérica (ex: "0279", "0001"):
+ *    Prioriza código de procedimento (match exato ou prefixo).
+ *    Para CPF / SUS: exige correspondência exata ou prefixo de pelo menos 6 dígitos / CPF formatado,
+ *    evitando que códigos numéricos curtos de procedimentos tragam pacientes aleatórios pelo CPF.
+ * 3. Busca por Procedimento / Especialidade:
+ *    Retorna correspondências com o nome ou código do procedimento.
+ * 4. Busca por Paciente (Nome oficial, apelido).
+ * 5. Busca por Protocolo / ID do agendamento (#12345678).
+ * 6. Busca por Prestador / Município.
+ */
+/**
+ * Avalia se o registro bate com a busca e atribui um score de relevância:
+ * Retorna score >= 0 se houve correspondência, ou -1 se não houver correspondência.
+ * 
+ * Regras:
+ * 1. Busca explícita por código (ex: "codigo 0279", "cod 0279", "cód 0279"):
+ *    Retorna ESTRITAMENTE itens cujo código do procedimento corresponda ao buscado.
+ * 2. Busca puramente numérica (ex: "0279", "0001"):
+ *    Prioriza código de procedimento (match exato ou prefixo).
+ *    Para CPF / SUS: exige correspondência exata ou prefixo de pelo menos 6 dígitos / CPF formatado.
+ * 3. Busca por Procedimento / Especialidade (ex: "ressonância", "neurologia", "ultrassom"):
+ *    Pesquisa instantânea em todo o nome do procedimento (inclusive palavras compostas como ANGIORESSONÂNCIA).
+ * 4. Busca por Paciente (Nome oficial, sobrenome, apelido).
+ * 5. Busca por Protocolo / ID do agendamento (#12345678).
+ * 6. Busca por Prestador / Município / Convênio.
  */
 function evaluateBookingSearch(
     booking: ConsultaAgendamento,
@@ -1525,9 +1552,66 @@ function evaluateBookingSearch(
     queryNorm: string,
     isOnlyDigits: boolean,
     cleanDigits: string,
-    isProtocolSearch: boolean
+    isProtocolSearch: boolean,
+    procedureMap?: Map<string, ConsultaProcedimento>
 ): number {
-    // 1. Busca por Protocolo explícito (#12345678 ou padrão hexadecimal/id curto)
+    if (!queryNorm) return 0;
+
+    // Resolução resiliente do procedimento
+    let procObj: any = booking.procedimento;
+    if (Array.isArray(procObj)) {
+        procObj = procObj[0] || null;
+    }
+    if (!procObj && booking.procedimento_id && procedureMap) {
+        procObj = procedureMap.get(booking.procedimento_id) || null;
+    }
+
+    const procCode = (procObj?.code || '').trim().toLowerCase();
+    const procCodeClean = procCode.replace(/\D/g, '');
+    const procName = procObj?.name || '';
+    const procLabel = formatProcedimentoLabel(procObj) || procName;
+    const procLabelNorm = normalizeSearchText(procLabel || procName);
+
+    // Resolução resiliente do paciente
+    let patientObj: any = booking.paciente;
+    if (Array.isArray(patientObj)) {
+        patientObj = patientObj[0] || null;
+    }
+    const patientName = patientObj?.name || '';
+    const patientNickname = patientObj?.nickname || '';
+    const patientNameNorm = normalizeSearchText(patientName);
+    const patientNickNorm = normalizeSearchText(patientNickname);
+
+    // =========================================================================
+    // CASO 1: Busca Explícita por Código de Procedimento (ex: "codigo 0279", "cod 0279")
+    // =========================================================================
+    const codePrefixMatch = queryNorm.match(/^(c[oó]digo|cod\.?|c[oó]d\.?):?\s*(.+)$/i);
+    if (codePrefixMatch) {
+        const targetCode = codePrefixMatch[2].trim();
+        const targetDigits = targetCode.replace(/\D/g, '');
+
+        if (!targetCode) return -1;
+
+        if (procCode === targetCode || (targetDigits && procCodeClean === targetDigits)) {
+            return 0; // Match Exato no Código
+        }
+        if (procCode.startsWith(targetCode) || (targetDigits && procCodeClean.startsWith(targetDigits))) {
+            return 1; // Prefixo no Código
+        }
+        if (procCode.includes(targetCode) || (targetDigits && procCodeClean.includes(targetDigits))) {
+            return 2;
+        }
+
+        if (procLabelNorm && procLabelNorm.includes(targetCode)) {
+            return 2.5;
+        }
+
+        return -1; // Não é deste procedimento
+    }
+
+    // =========================================================================
+    // CASO 2: Busca por Protocolo explícito (#12345678 ou padrão hexadecimal/id curto)
+    // =========================================================================
     if (isProtocolSearch) {
         const fullId = (booking.id || '').toLowerCase();
         const shortId = fullId.substring(0, 8);
@@ -1538,26 +1622,98 @@ function evaluateBookingSearch(
         return -1;
     }
 
-    // 2. Busca puramente numérica (ou formato de CPF/SUS): busca exclusiva em CPF e Cartão SUS do Paciente
-    if (isOnlyDigits && cleanDigits.length >= 3) {
-        const cpfDigits = (booking.paciente?.cpf || '').replace(/\D/g, '');
-        const susDigits = (booking.paciente?.sus_number || '').replace(/\D/g, '');
+    // =========================================================================
+    // CASO 3: Busca Numérica (Código de Procedimento ou CPF/SUS)
+    // Ex: "0279", "0001", "279", "70383478618"
+    // =========================================================================
+    if (isOnlyDigits) {
+        // Prioridade A: Código de Procedimento
+        if (procCode === queryNorm || (cleanDigits && procCodeClean === cleanDigits)) {
+            return 0; // Match Exato no Código do Procedimento
+        }
+        if (cleanDigits && procCodeClean.replace(/^0+/, '') === cleanDigits.replace(/^0+/, '')) {
+            return 0.05;
+        }
+        if (procCode.startsWith(queryNorm) || (cleanDigits && procCodeClean.startsWith(cleanDigits))) {
+            return 0.1;
+        }
+        if (procCode.includes(queryNorm) || (cleanDigits && procCodeClean.includes(cleanDigits))) {
+            return 0.2;
+        }
 
-        if (cpfDigits === cleanDigits || susDigits === cleanDigits) return 0;
-        if (cpfDigits.startsWith(cleanDigits) || susDigits.startsWith(cleanDigits)) return 1;
-        if (cpfDigits.includes(cleanDigits) || susDigits.includes(cleanDigits)) return 2;
+        // Prioridade B: CPF ou Cartão SUS
+        const cpfDigits = (patientObj?.cpf || '').replace(/\D/g, '');
+        const susDigits = (patientObj?.sus_number || '').replace(/\D/g, '');
+
+        if (cpfDigits === cleanDigits || susDigits === cleanDigits) {
+            return 0.5;
+        }
+
+        const hasCpfFormatting = /[.\-]/.test(rawQuery);
+        if (cleanDigits.length >= 6 || hasCpfFormatting) {
+            if (cpfDigits.startsWith(cleanDigits) || susDigits.startsWith(cleanDigits)) {
+                return 1.5;
+            }
+            if (cpfDigits.includes(cleanDigits) || susDigits.includes(cleanDigits)) {
+                return 2;
+            }
+        }
+
         return -1;
     }
 
-    // 3. Busca EXCLUSIVA por Nome do Paciente (Nome oficial ou apelido)
-    const patientName = booking.paciente?.name || '';
-    const nameScore = getSequentialNameMatchScore(patientName, queryNorm);
-    if (nameScore !== -1) return nameScore;
+    // =========================================================================
+    // CASO 4: Busca Textual (Nome de Procedimento, Paciente, Especialidade, Prestador)
+    // =========================================================================
 
-    const patientNickname = booking.paciente?.nickname || '';
-    if (patientNickname) {
-        const nickScore = getSequentialNameMatchScore(patientNickname, queryNorm);
-        if (nickScore !== -1) return nickScore + 0.5; // Apelido válido com leve desempate após nome oficial
+    // A) Procedimento / Exame / Especialidade (ex: "ressonância", "neurologia", "ultrassom", "artro")
+    if (procLabelNorm) {
+        if (procLabelNorm === queryNorm) return 0.01;
+        if (procLabelNorm.startsWith(queryNorm)) return 0.05;
+        if (procLabelNorm.includes(queryNorm)) return 0.1;
+
+        const words = queryNorm.split(/\s+/).filter(Boolean);
+        if (words.length > 1 && words.every(w => procLabelNorm.includes(w))) {
+            return 0.15;
+        }
+    }
+
+    // B) Código alfanumérico do Procedimento
+    if (procCode && (procCode === queryNorm || procCode.startsWith(queryNorm) || procCode.includes(queryNorm))) {
+        return 0.02;
+    }
+
+    // C) Nome do Paciente (Nome completo, primeiro nome ou sobrenome)
+    if (patientNameNorm) {
+        if (patientNameNorm === queryNorm) return 0;
+        if (patientNameNorm.startsWith(queryNorm)) return 0.05;
+        if (patientNameNorm.includes(queryNorm)) return 0.2;
+
+        const words = queryNorm.split(/\s+/).filter(Boolean);
+        if (words.length > 1 && words.every(w => patientNameNorm.includes(w))) {
+            return 0.25;
+        }
+    }
+
+    // D) Apelido do Paciente
+    if (patientNickNorm && patientNickNorm.includes(queryNorm)) {
+        return 0.3;
+    }
+
+    // E) Prestador, Município, Convênio ou Agente de Saúde
+    const prestadorNorm = normalizeSearchText(booking.prestador || '');
+    if (prestadorNorm && (prestadorNorm === queryNorm || prestadorNorm.includes(queryNorm))) {
+        return 3;
+    }
+
+    const municipioNorm = normalizeSearchText(booking.municipio || '');
+    if (municipioNorm && (municipioNorm === queryNorm || municipioNorm.includes(queryNorm))) {
+        return 3.2;
+    }
+
+    const agenteNorm = normalizeSearchText(patientObj?.agente_saude || '');
+    if (agenteNorm && (agenteNorm === queryNorm || agenteNorm.includes(queryNorm))) {
+        return 3.4;
     }
 
     return -1;
@@ -1644,6 +1800,15 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         });
         return map;
     }, [agentesSaudeItems]);
+
+    // Lookup Map O(1) de Procedimentos para resolução ultra rápida
+    const procedureMap = useMemo(() => {
+        const map = new Map<string, ConsultaProcedimento>();
+        procedures.forEach(p => {
+            if (p.id) map.set(p.id, p);
+        });
+        return map;
+    }, [procedures]);
 
     useEffect(() => {
         const handleResize = () => {
@@ -2520,7 +2685,8 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     queryNorm,
                     isOnlyDigits,
                     cleanDigits,
-                    isProtocolSearch
+                    isProtocolSearch,
+                    procedureMap
                 );
 
                 if (score >= 0) {
@@ -2595,7 +2761,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
             return timeB - timeA;
         });
-    }, [allBookings, eligibilityMap, filterDate, filterStatus, filterTipoAtendimento, globalSearch, isMobile, queuePositions]);
+    }, [allBookings, eligibilityMap, filterDate, filterStatus, filterTipoAtendimento, globalSearch, isMobile, queuePositions, procedureMap]);
 
     const visibleBookings = useMemo(() => {
         return filteredAndSortedBookings.slice(0, displayLimit);
@@ -2666,7 +2832,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     <div className="relative w-full animate-in fade-in duration-200">
                         <input
                             type="text"
-                            placeholder="Buscar por Paciente, CPF, Cartão SUS ou Protocolo..."
+                            placeholder="Buscar por Paciente, Código (ex: 0279), Procedimento, CPF..."
                             className="w-full bg-slate-50 border border-slate-200/90 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 rounded-2xl pl-9 pr-9 py-2 text-xs font-bold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
                             value={globalSearch}
                             onChange={(e) => setGlobalSearch(e.target.value)}
@@ -2720,7 +2886,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     <div className="relative flex-1 min-w-[200px] max-w-md shrink-0">
                         <input
                             type="text"
-                            placeholder="Buscar por Paciente, CPF, Cartão SUS ou Protocolo..."
+                            placeholder="Buscar por Paciente, Código (ex: 0279), Procedimento, CPF..."
                             className="w-full bg-slate-50/90 hover:bg-slate-100/80 focus:bg-white border border-slate-200/90 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 rounded-2xl pl-9 pr-8 py-1.5 text-xs font-semibold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
                             value={globalSearch}
                             onChange={(e) => setGlobalSearch(e.target.value)}
@@ -2843,7 +3009,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 Qual agendamento você procura?
                             </h3>
                             <p className="text-xs sm:text-sm font-semibold text-slate-500 max-w-sm mb-5 leading-relaxed">
-                                Pesquise instantaneamente por nome do paciente, CPF, Cartão SUS ou número do protocolo.
+                                Pesquise instantaneamente por paciente, código do procedimento (ex: 0279), especialidade, CPF ou protocolo.
                             </p>
 
                             {/* Campo de Pesquisa Maior no Centro da Tela Mobile */}
@@ -2851,7 +3017,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 <input
                                     type="text"
                                     autoFocus
-                                    placeholder="Buscar por Paciente, CPF, Cartão SUS ou Protocolo..."
+                                    placeholder="Buscar por Paciente, Código (ex: 0279), Procedimento, CPF..."
                                     className="w-full bg-white border-2 border-slate-200/90 hover:border-sky-300 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15 rounded-2xl pl-12 pr-11 py-3.5 sm:py-4 text-sm font-extrabold text-slate-900 placeholder:text-slate-400 placeholder:font-medium transition-all shadow-xs"
                                     value={globalSearch}
                                     onChange={(e) => setGlobalSearch(e.target.value)}
@@ -2989,11 +3155,11 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                             <UserX className="w-7 h-7" />
                         </div>
                         <h4 className="text-sm sm:text-base font-black text-slate-900 uppercase tracking-tight mb-1">
-                            {globalSearch.trim() ? 'Nenhum paciente encontrado para esta pesquisa.' : 'Sem agendamentos no momento'}
+                            {globalSearch.trim() ? 'Nenhum agendamento encontrado para esta pesquisa.' : 'Sem agendamentos no momento'}
                         </h4>
                         <p className="text-xs font-semibold text-slate-500 max-w-sm mb-4">
                             {globalSearch.trim()
-                                ? `Nenhum paciente corresponde à sequência "${globalSearch.trim()}". Verifique a grafia ou limpe o campo.`
+                                ? `Nenhum registro corresponde a "${globalSearch.trim()}". Verifique o paciente, código ou procedimento.`
                                 : 'Nenhum registro corresponde aos filtros selecionados'}
                         </p>
                         {globalSearch.trim() && (
@@ -3965,13 +4131,12 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
 
                                     <div>
                                         <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">
-                                            Status {!isGestorOrAdmin && <span className="text-amber-600 font-bold ml-1">(Bloqueado)</span>}
+                                            Status
                                         </label>
                                         <select
                                             value={editStatus}
                                             onChange={(e) => setEditStatus(e.target.value as ConsultaAgendamento['status'])}
-                                            disabled={!isGestorOrAdmin}
-                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none disabled:opacity-75 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none"
                                         >
                                             <option value="Solicitado">Solicitado</option>
                                             <option value="Agendado">Agendado</option>

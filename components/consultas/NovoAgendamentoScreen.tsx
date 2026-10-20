@@ -101,6 +101,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
             setIsValidationModalOpen(true);
         } else {
             setSelectedPatient(patientObj);
+            setIsRetornoQuestionModalOpen(true);
             onNavigate('consultas:novo-agendamento-paciente');
         }
     };
@@ -109,7 +110,30 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         setSelectedPatient(updated);
         setIsValidationModalOpen(false);
         setIncompletePatient(null);
+        setIsRetornoQuestionModalOpen(true);
         onNavigate('consultas:novo-agendamento-paciente');
+    };
+
+    const handleSelectAtendimentoTipo = (tipo: 'retorno' | 'nao_retorno') => {
+        setAtendimentoTipo(tipo);
+        setIsRetornoQuestionModalOpen(false);
+        if (tipo === 'retorno') {
+            setIsRetorno(true);
+            if (!retornoTipo) {
+                setRetornoTipo('1º Retorno');
+            }
+        } else {
+            setIsRetorno(false);
+            setRetornoTipo(null);
+        }
+        // Se já havia um procedimento selecionado que é incompatível com o novo tipo, limpa-o
+        if (selectedProcedure) {
+            const hasEsp = !!selectedProcedure.especialista_id;
+            if ((tipo === 'retorno' && !hasEsp) || (tipo === 'nao_retorno' && hasEsp)) {
+                setSelectedProcedure(null);
+            }
+        }
+        onNavigate('consultas:novo-agendamento-procedimento');
     };
 
     // Fetch patient history when selectedPatient changes
@@ -153,7 +177,9 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         return `${y}-${m}-${day}`;
     });
 
-    // Estados para Pacientes de Retorno (1º ao 5º Retorno)
+    // Estados para Pacientes de Retorno (1º ao 5º Retorno) e Pergunta Obrigatória de Retorno
+    const [atendimentoTipo, setAtendimentoTipo] = useState<'retorno' | 'nao_retorno' | null>(null);
+    const [isRetornoQuestionModalOpen, setIsRetornoQuestionModalOpen] = useState<boolean>(false);
     const [isRetorno, setIsRetorno] = useState<boolean>(false);
     const [retornoTipo, setRetornoTipo] = useState<'1º Retorno' | '2º Retorno' | '3º Retorno' | '4º Retorno' | '5º Retorno' | null>(null);
     const [isRetornoModalOpen, setIsRetornoModalOpen] = useState<boolean>(false);
@@ -634,6 +660,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
 
             if (newPatient) {
                 setSelectedPatient(newPatient);
+                setIsRetornoQuestionModalOpen(true);
                 setIsRegistering(false);
                 setShowCpfNotFoundModal(false);
                 setNewPatientName('');
@@ -883,6 +910,22 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         str ? str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() : '';
 
     const filteredProcedures = procedures.filter(p => {
+        // Regra Estrita de Retorno vs Especialista:
+        // Retorno: SOMENTE procedimentos com 'Possui Especialista' ativado (possui especialista_id)
+        // Não Retorno: SOMENTE procedimentos com 'Possui Especialista' desativado (sem especialista_id)
+        const hasEspecialista = !!p.especialista_id;
+        if (atendimentoTipo === 'retorno' && !hasEspecialista) {
+            return false;
+        }
+        if (atendimentoTipo === 'nao_retorno' && hasEspecialista) {
+            return false;
+        }
+
+        // Procedimentos suspensos ou inativos não aparecem
+        if (p.status !== 'Ativo') {
+            return false;
+        }
+
         const cleanQuery = normalizeStr(procedureQuery);
         if (!cleanQuery) return true;
 
@@ -1149,6 +1192,10 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                 type="button"
                                 onClick={() => {
                                     if (isClickable) {
+                                        if (tab.stepNum === 2 && !atendimentoTipo) {
+                                            setIsRetornoQuestionModalOpen(true);
+                                            return;
+                                        }
                                         onNavigate(tab.route);
                                     }
                                 }}
@@ -1315,6 +1362,10 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             if (selectedPatient && !isPatientComplete(selectedPatient)) {
                                                 setIncompletePatient(selectedPatient);
                                                 setIsValidationModalOpen(true);
+                                                return;
+                                            }
+                                            if (!atendimentoTipo) {
+                                                setIsRetornoQuestionModalOpen(true);
                                                 return;
                                             }
                                             onNavigate('consultas:novo-agendamento-procedimento');
@@ -1570,9 +1621,33 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                         <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Aba 2: Procedimento</h4>
                                         <h3 className="text-base font-black text-slate-800 uppercase tracking-tight mt-0.5">Selecione o Exame ou Consulta</h3>
                                     </div>
-                                    <div className="px-3.5 py-2 bg-sky-50 border border-sky-100 rounded-xl flex items-center gap-2 shrink-0">
-                                        <UserIcon className="w-4 h-4 text-sky-600" />
-                                        <span className="text-[10px] text-sky-700 font-extrabold uppercase tracking-wide">Paciente: {formatPatientName(selectedPatient)}</span>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        {/* Identificação Discreta do Tipo de Atendimento */}
+                                        <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-2 text-xs font-bold shadow-xs ${
+                                            atendimentoTipo === 'retorno'
+                                                ? 'bg-teal-50 border-teal-200 text-teal-800'
+                                                : 'bg-indigo-50 border-indigo-200 text-indigo-800'
+                                        }`}>
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                                Tipo de atendimento:
+                                            </span>
+                                            <span className="font-extrabold uppercase text-[11px]">
+                                                {atendimentoTipo === 'retorno' ? 'Retorno' : 'Não retorno'}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsRetornoQuestionModalOpen(true)}
+                                                className="ml-1 px-2 py-0.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
+                                                title="Alterar tipo de atendimento"
+                                            >
+                                                Alterar
+                                            </button>
+                                        </div>
+
+                                        <div className="px-3.5 py-2 bg-sky-50 border border-sky-100 rounded-xl flex items-center gap-2 shrink-0">
+                                            <UserIcon className="w-4 h-4 text-sky-600" />
+                                            <span className="text-[10px] text-sky-700 font-extrabold uppercase tracking-wide">Paciente: {formatPatientName(selectedPatient)}</span>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -1697,14 +1772,37 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             <h3 className="text-sm sm:text-base font-black text-slate-900 uppercase tracking-tight mt-0.5">{formatProcedimentoLabel(selectedProcedure)}</h3>
                                         </div>
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => setSelectedProcedure(null)}
-                                        className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-extrabold transition-all shadow-sm active:scale-95 flex items-center gap-1.5 cursor-pointer shrink-0"
-                                    >
-                                        <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
-                                        Trocar Procedimento
-                                    </button>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <div className={`px-2.5 py-1 rounded-xl border flex items-center gap-1.5 text-xs font-bold shadow-xs ${
+                                            atendimentoTipo === 'retorno'
+                                                ? 'bg-teal-50 border-teal-200 text-teal-800'
+                                                : 'bg-indigo-50 border-indigo-200 text-indigo-800'
+                                        }`}>
+                                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-500">
+                                                Tipo:
+                                            </span>
+                                            <span className="font-extrabold uppercase text-[10px]">
+                                                {atendimentoTipo === 'retorno' ? 'Retorno' : 'Não retorno'}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsRetornoQuestionModalOpen(true)}
+                                                className="ml-1 px-1.5 py-0.5 rounded bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
+                                                title="Alterar tipo de atendimento"
+                                            >
+                                                Alterar
+                                            </button>
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedProcedure(null)}
+                                            className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-extrabold transition-all shadow-sm active:scale-95 flex items-center gap-1.5 cursor-pointer shrink-0"
+                                        >
+                                            <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
+                                            Trocar Procedimento
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {/* Form Grid da Tela do Procedimento */}
