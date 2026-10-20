@@ -1100,6 +1100,10 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                     setSelectedProcedure(null);
                                     setBookingQty(1);
                                     setBookingPriority('Normal');
+                                    setAtendimentoTipo(null);
+                                    setIsRetorno(false);
+                                    setRetornoTipo(null);
+                                    setIsRetornoQuestionModalOpen(false);
                                     setErrorMessage('');
                                     setSuccessMessage('');
                                     setCreatedBooking(null);
@@ -1261,6 +1265,11 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                     <button
                                         onClick={() => {
                                             setSelectedPatient(null);
+                                            setAtendimentoTipo(null);
+                                            setIsRetorno(false);
+                                            setRetornoTipo(null);
+                                            setSelectedProcedure(null);
+                                            setIsRetornoQuestionModalOpen(false);
                                             onNavigate('consultas:novo-agendamento');
                                         }}
                                         className="px-2.5 py-1 bg-white border border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 text-slate-600 rounded-lg text-[11px] font-extrabold transition-all shadow-sm active:scale-95 flex items-center gap-1 cursor-pointer shrink-0"
@@ -3130,6 +3139,120 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* MODAL OBRIGATÓRIO: IDENTIFICAÇÃO DE RETORNO DO AGENDAMENTO */}
+            {isRetornoQuestionModalOpen && typeof document !== 'undefined' && createPortal(
+                <div 
+                    className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md animate-in fade-in duration-200 font-sans"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="retorno-modal-title"
+                >
+                    <div className="bg-white rounded-[2rem] shadow-[0_30px_100px_rgba(0,0,0,0.25)] w-full max-w-lg overflow-hidden border border-slate-100 flex flex-col transform transition-all animate-in zoom-in-95 duration-200">
+                        {/* Header com Gradiente Moderno */}
+                        <div className="relative overflow-hidden bg-gradient-to-r from-sky-600 via-indigo-600 to-teal-600 p-6 pb-7 flex flex-col text-white shrink-0">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+                            <div className="absolute bottom-0 left-0 w-24 h-24 bg-teal-300/20 rounded-full blur-xl translate-y-1/2 -translate-x-1/2 pointer-events-none" />
+
+                            <div className="flex justify-between items-start relative z-10">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-lg ring-1 ring-white/30 shrink-0">
+                                        <RotateCcw className="w-6 h-6 text-white" />
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-sky-100 bg-white/15 px-2.5 py-0.5 rounded-full inline-block">
+                                            Regulação Municipal
+                                        </span>
+                                        <h3 id="retorno-modal-title" className="text-lg font-black text-white leading-tight mt-1 uppercase tracking-tight">
+                                            Este agendamento é um retorno?
+                                        </h3>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsRetornoQuestionModalOpen(false)}
+                                    className="p-2 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all hover:rotate-90 duration-300 cursor-pointer"
+                                    title="Fechar"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+
+                            <p className="text-sky-50 text-xs font-semibold mt-3 relative z-10 leading-relaxed">
+                                Informe se o paciente está retornando para atendimento com especialista ou se deseja realizar um novo agendamento.
+                            </p>
+                        </div>
+
+                        {/* Corpo com as duas opções de destaque */}
+                        <div className="p-6 space-y-3.5 bg-slate-50/50">
+                            {/* Opção 1: SIM, É RETORNO */}
+                            <button
+                                type="button"
+                                onClick={() => handleSelectAtendimentoTipo('retorno')}
+                                className="w-full p-4 rounded-2xl border-2 border-teal-200/80 bg-gradient-to-r from-teal-50/70 via-emerald-50/50 to-white hover:border-teal-500 hover:shadow-lg hover:shadow-teal-500/10 hover:-translate-y-0.5 active:scale-[0.99] transition-all text-left flex items-center justify-between group cursor-pointer focus:outline-none focus:ring-4 focus:ring-teal-500/20"
+                            >
+                                <div className="flex items-center gap-3.5">
+                                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 text-white flex items-center justify-center shadow-md shadow-teal-500/25 shrink-0 group-hover:scale-105 transition-transform">
+                                        <Check className="w-6 h-6 stroke-[3]" />
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-black uppercase text-teal-950 tracking-tight">
+                                                Sim, é Retorno
+                                            </span>
+                                            <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 text-[9px] font-black uppercase tracking-wider">
+                                                Com Especialista
+                                            </span>
+                                        </div>
+                                        <p className="text-[11px] font-semibold text-slate-500 mt-0.5 leading-snug">
+                                            Exibe exclusivamente os procedimentos com <strong>Possui Especialista</strong> ativado.
+                                        </p>
+                                    </div>
+                                </div>
+                                <ChevronRight className="w-5 h-5 text-teal-600 group-hover:translate-x-1 transition-transform shrink-0" />
+                            </button>
+
+                            {/* Opção 2: NÃO, NÃO É RETORNO */}
+                            <button
+                                type="button"
+                                onClick={() => handleSelectAtendimentoTipo('nao_retorno')}
+                                className="w-full p-4 rounded-2xl border-2 border-slate-200/90 bg-white hover:border-indigo-400 hover:bg-gradient-to-r hover:from-indigo-50/50 hover:to-white hover:shadow-lg hover:shadow-indigo-500/10 hover:-translate-y-0.5 active:scale-[0.99] transition-all text-left flex items-center justify-between group cursor-pointer focus:outline-none focus:ring-4 focus:ring-indigo-500/20"
+                            >
+                                <div className="flex items-center gap-3.5">
+                                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-600 to-indigo-700 text-white flex items-center justify-center shadow-md shadow-indigo-600/25 shrink-0 group-hover:scale-105 transition-transform">
+                                        <Calendar className="w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-black uppercase text-slate-900 tracking-tight">
+                                                Não, não é Retorno
+                                            </span>
+                                            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[9px] font-black uppercase tracking-wider">
+                                                Sem Especialista
+                                            </span>
+                                        </div>
+                                        <p className="text-[11px] font-semibold text-slate-500 mt-0.5 leading-snug">
+                                            Exibe exclusivamente os procedimentos com <strong>Possui Especialista</strong> desativado.
+                                        </p>
+                                    </div>
+                                </div>
+                                <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-1 transition-transform shrink-0" />
+                            </button>
+                        </div>
+
+                        {/* Rodapé informativo */}
+                        <div className="px-6 py-4 bg-white border-t border-slate-100 flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                Paciente: <strong className="text-slate-700 font-black">{formatPatientName(selectedPatient)}</strong>
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-400">
+                                Escolha alterável a qualquer momento
+                            </span>
+                        </div>
                     </div>
                 </div>,
                 document.body
