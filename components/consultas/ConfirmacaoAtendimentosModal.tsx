@@ -15,9 +15,40 @@ import {
     Loader2, 
     Sparkles, 
     Filter,
-    ArrowUpDown
+    ArrowUpDown,
+    Phone,
+    MessageCircle,
+    Edit2,
+    Plus
 } from 'lucide-react';
-import { formatProcedimentoLabel } from '../../services/consultasService';
+import { formatProcedimentoLabel, updatePaciente } from '../../services/consultasService';
+
+// Helpers para formatação e máscara de telefone
+const formatPhoneNumber = (phone?: string | null): string => {
+    if (!phone) return '';
+    const clean = phone.replace(/\D/g, '');
+    if (clean.length === 11) {
+        return clean.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+    }
+    if (clean.length === 10) {
+        return clean.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
+    }
+    return phone;
+};
+
+const maskPhoneInput = (val: string): string => {
+    const digits = val.replace(/\D/g, '').slice(0, 11);
+    if (digits.length > 10) {
+        return digits.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+    }
+    if (digits.length > 6) {
+        return digits.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
+    }
+    if (digits.length > 2) {
+        return digits.replace(/(\d{2})(\d{0,5})/, '($1) $2');
+    }
+    return digits;
+};
 
 interface ConfirmacaoAtendimentosModalProps {
     isOpen: boolean;
@@ -49,6 +80,53 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
     // Controle de Linhas em Processamento (loading individual por linha)
     const [processingIds, setProcessingIds] = useState<Record<string, 'Realizado' | 'Não Realizado' | undefined>>({});
     const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
+
+    // Controle de Edição Rápida de Telefone do Paciente
+    const [patientPhoneOverrides, setPatientPhoneOverrides] = useState<Record<string, string>>({});
+    const [editingPhonePatientId, setEditingPhonePatientId] = useState<string | null>(null);
+    const [phoneInputValue, setPhoneInputValue] = useState('');
+    const [isSavingPhone, setIsSavingPhone] = useState(false);
+    const [phoneSaveError, setPhoneSaveError] = useState<string | null>(null);
+
+    const handleStartEditPhone = (pId: string, currentVal: string) => {
+        setEditingPhonePatientId(pId);
+        setPhoneInputValue(formatPhoneNumber(currentVal));
+        setPhoneSaveError(null);
+    };
+
+    const handleCancelEditPhone = () => {
+        setEditingPhonePatientId(null);
+        setPhoneInputValue('');
+        setPhoneSaveError(null);
+    };
+
+    const handleSavePhone = async (pId: string) => {
+        const digits = phoneInputValue.replace(/\D/g, '');
+        if (digits.length > 0 && digits.length < 10) {
+            setPhoneSaveError('Informe DDD + Número (ao menos 10 dígitos).');
+            return;
+        }
+
+        setIsSavingPhone(true);
+        setPhoneSaveError(null);
+        try {
+            const masked = formatPhoneNumber(digits);
+            await updatePaciente(pId, { phone: masked });
+            setPatientPhoneOverrides(prev => ({
+                ...prev,
+                [pId]: masked
+            }));
+            setEditingPhonePatientId(null);
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('consultas-pacientes-changed'));
+            }
+        } catch (err: any) {
+            console.error('Erro ao salvar telefone do paciente:', err);
+            setPhoneSaveError(err.message || 'Falha ao salvar telefone.');
+        } finally {
+            setIsSavingPhone(false);
+        }
+    };
 
     // Grupos recolhidos (por data)
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -123,12 +201,20 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
             });
         }
 
-        // 3. Pesquisa Dinâmica (Paciente, Procedimento, Especialidade, Responsável/Profissional)
+        // 3. Pesquisa Dinâmica (Paciente, Procedimento, Especialidade, Responsável/Profissional, Telefone, CPF, SUS)
         const q = normalizeStr(searchTerm);
         if (q) {
             const qWords = q.split(/\s+/).filter(Boolean);
 
             result = result.filter(item => {
+                const pacId = item.patient_id || item.paciente?.id;
+                const pacPhoneRaw = (pacId && patientPhoneOverrides[pacId] !== undefined)
+                    ? patientPhoneOverrides[pacId]
+                    : (item.paciente?.phone || '');
+                const pacPhoneDigits = pacPhoneRaw.replace(/\D/g, '');
+                const pacCpfDigits = (item.paciente?.cpf || '').replace(/\D/g, '');
+                const pacSusDigits = (item.paciente?.sus_number || '').replace(/\D/g, '');
+
                 const pacNome = normalizeStr(item.paciente?.name || '');
                 const procNome = normalizeStr(item.procedimento?.name || '');
                 const espNome = normalizeStr(item.procedimento?.especialista?.nome || '');
@@ -137,8 +223,14 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
 
                 const targetTexts = [pacNome, procNome, espNome, espEspec, respNome];
 
-                // Exige correspondência por início de palavra
+                // Permite busca textual ou por dígitos de telefone/documento
                 return qWords.every(word => {
+                    const cleanWord = word.replace(/\D/g, '');
+                    if (cleanWord.length >= 3) {
+                        if (pacPhoneDigits.includes(cleanWord) || pacCpfDigits.includes(cleanWord) || pacSusDigits.includes(cleanWord)) {
+                            return true;
+                        }
+                    }
                     return targetTexts.some(text => {
                         const words = text.split(/\s+/);
                         return words.some(w => w.startsWith(word));
@@ -457,21 +549,143 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
                                                                 isProcessing ? 'opacity-60 pointer-events-none bg-slate-50' : ''
                                                             }`}
                                                         >
-                                                            {/* Coluna 1: Paciente */}
-                                                            <div className="md:col-span-4 flex items-center gap-2 min-w-0">
-                                                                <div className="w-6 h-6 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center shrink-0 border border-sky-200/60 font-black text-[10px]">
-                                                                    <UserIcon className="w-3.5 h-3.5" />
-                                                                </div>
-                                                                <div className="min-w-0">
-                                                                    <div className="text-xs sm:text-[13px] font-black text-slate-900 truncate" title={booking.paciente?.name}>
-                                                                        {booking.paciente?.name || 'Paciente Não Identificado'}
+                                                            {/* Coluna 1: Paciente com Telefone/WhatsApp */}
+                                                            {(() => {
+                                                                const pId = booking.patient_id || booking.paciente?.id;
+                                                                const isEditingPhone = !!(pId && editingPhonePatientId === pId);
+                                                                const rawPhone = (pId && patientPhoneOverrides[pId] !== undefined)
+                                                                    ? patientPhoneOverrides[pId]
+                                                                    : (booking.paciente?.phone || '');
+                                                                const formattedPhone = formatPhoneNumber(rawPhone);
+                                                                const cleanPhoneDigits = rawPhone.replace(/\D/g, '');
+
+                                                                return (
+                                                                    <div className="md:col-span-4 flex items-start gap-2.5 min-w-0">
+                                                                        <div className="w-7 h-7 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0 border border-sky-200/60 font-black text-[11px] mt-0.5">
+                                                                            <UserIcon className="w-3.5 h-3.5" />
+                                                                        </div>
+                                                                        <div className="min-w-0 flex-1">
+                                                                            <div className="text-xs sm:text-[13px] font-black text-slate-900 truncate" title={booking.paciente?.name}>
+                                                                                {booking.paciente?.name || 'Paciente Não Identificado'}
+                                                                            </div>
+                                                                            <div className="text-[10px] font-semibold text-slate-400 truncate flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                                                                                <span>CPF: {booking.paciente?.cpf || 'Não informado'}</span>
+                                                                                {booking.paciente?.sus_number && (
+                                                                                    <>
+                                                                                        <span className="text-slate-300">•</span>
+                                                                                        <span>SUS: {booking.paciente.sus_number}</span>
+                                                                                    </>
+                                                                                )}
+                                                                            </div>
+
+                                                                            {/* Exibição e Inserção de Telefone do Paciente */}
+                                                                            <div className="mt-1 flex items-center flex-wrap gap-1.5">
+                                                                                {isEditingPhone ? (
+                                                                                    <div className="flex flex-col gap-1 w-full max-w-[240px] bg-sky-50/90 border border-sky-200 rounded-xl p-1.5 shadow-xs animate-in fade-in duration-150">
+                                                                                        <div className="flex items-center gap-1.5">
+                                                                                            <input
+                                                                                                type="text"
+                                                                                                autoFocus
+                                                                                                placeholder="(00) 00000-0000"
+                                                                                                value={phoneInputValue}
+                                                                                                onChange={(e) => setPhoneInputValue(maskPhoneInput(e.target.value))}
+                                                                                                onKeyDown={(e) => {
+                                                                                                    if (e.key === 'Enter') {
+                                                                                                        e.preventDefault();
+                                                                                                        if (pId) handleSavePhone(pId);
+                                                                                                    } else if (e.key === 'Escape') {
+                                                                                                        handleCancelEditPhone();
+                                                                                                    }
+                                                                                                }}
+                                                                                                className="flex-1 min-w-0 bg-white border border-sky-300 focus:border-sky-500 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 outline-none"
+                                                                                            />
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                onClick={() => pId && handleSavePhone(pId)}
+                                                                                                disabled={isSavingPhone}
+                                                                                                className="p-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg transition-all cursor-pointer disabled:opacity-50"
+                                                                                                title="Salvar telefone"
+                                                                                            >
+                                                                                                {isSavingPhone ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                                                                            </button>
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                onClick={handleCancelEditPhone}
+                                                                                                disabled={isSavingPhone}
+                                                                                                className="p-1.5 bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-600 rounded-lg transition-all cursor-pointer"
+                                                                                                title="Cancelar"
+                                                                                            >
+                                                                                                <X className="w-3.5 h-3.5" />
+                                                                                            </button>
+                                                                                        </div>
+                                                                                        {phoneSaveError && (
+                                                                                            <span className="text-[9px] font-bold text-rose-600 leading-tight">
+                                                                                                {phoneSaveError}
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                ) : formattedPhone ? (
+                                                                                    <div className="flex items-center gap-1">
+                                                                                        {/* Atalho WhatsApp */}
+                                                                                        <a
+                                                                                            href={`https://wa.me/55${cleanPhoneDigits}`}
+                                                                                            target="_blank"
+                                                                                            rel="noopener noreferrer"
+                                                                                            onClick={(e) => e.stopPropagation()}
+                                                                                            className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 active:scale-95 border border-emerald-200/90 px-2 py-0.5 rounded-lg transition-all shadow-2xs group"
+                                                                                            title="Abrir WhatsApp para confirmar atendimento"
+                                                                                        >
+                                                                                            <MessageCircle className="w-3 h-3 text-emerald-600 group-hover:scale-110 transition-transform" />
+                                                                                            <span>{formattedPhone}</span>
+                                                                                        </a>
+
+                                                                                        {/* Ligação Direta */}
+                                                                                        <a
+                                                                                            href={`tel:${cleanPhoneDigits}`}
+                                                                                            onClick={(e) => e.stopPropagation()}
+                                                                                            className="p-1 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors"
+                                                                                            title="Ligar para o paciente"
+                                                                                        >
+                                                                                            <Phone className="w-3 h-3" />
+                                                                                        </a>
+
+                                                                                        {/* Editar Telefone */}
+                                                                                        {pId && (
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                onClick={(e) => {
+                                                                                                    e.stopPropagation();
+                                                                                                    handleStartEditPhone(pId, formattedPhone);
+                                                                                                }}
+                                                                                                className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                                                                                                title="Editar telefone do paciente"
+                                                                                            >
+                                                                                                <Edit2 className="w-2.5 h-2.5" />
+                                                                                            </button>
+                                                                                        )}
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    /* Botão Inserir Telefone */
+                                                                                    pId && (
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={(e) => {
+                                                                                                e.stopPropagation();
+                                                                                                handleStartEditPhone(pId, '');
+                                                                                            }}
+                                                                                            className="inline-flex items-center gap-1 text-[10px] font-extrabold text-amber-700 bg-amber-50 hover:bg-amber-100 hover:border-amber-300 active:scale-95 border border-amber-200/90 px-2 py-0.5 rounded-lg transition-all cursor-pointer shadow-2xs"
+                                                                                            title="Inserir telefone de contato do paciente para facilitar a confirmação"
+                                                                                        >
+                                                                                            <Plus className="w-3 h-3 text-amber-600" />
+                                                                                            <span>Inserir Telefone</span>
+                                                                                        </button>
+                                                                                    )
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
                                                                     </div>
-                                                                    <div className="text-[10px] font-semibold text-slate-400 truncate">
-                                                                        CPF: {booking.paciente?.cpf || 'Não informado'}
-                                                                        {booking.paciente?.sus_number && ` • SUS: ${booking.paciente.sus_number}`}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
+                                                                );
+                                                            })()}
 
                                                             {/* Coluna 2: Procedimento / Especialidade */}
                                                             <div className="md:col-span-4 min-w-0">
