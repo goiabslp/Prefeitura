@@ -4,7 +4,7 @@ import * as db from '../../services/farmaciaService';
 import {
     ArrowLeft, TrendingUp, TrendingDown, Users, Package, AlertTriangle, Activity, 
     Calendar, CheckCircle2, AlertCircle, ShoppingCart, Info, PieChart, FileDown,
-    Plus, Search, X, MoreVertical, Settings, Sparkles, Brain, Clock, Flame, Thermometer, Zap
+    Plus, Search, X, MoreVertical, Settings, Sparkles, Brain, Clock, Flame, Thermometer, Zap, Filter
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -19,6 +19,7 @@ import { savePurchaseOrder } from '../../services/comprasService';
 import { useNotification } from '../../contexts/NotificationContext';
 import { PacientesTab } from '../common/PacientesTab';
 import { MedicosDashboardTab } from './dashboard/MedicosDashboardTab';
+import { FarmaciaConfigRelatorioModal } from './FarmaciaConfigRelatorioModal';
 
 interface DashboardScreenProps {
     currentUser?: User | null;
@@ -53,6 +54,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     const [globalAlertPercentage, setGlobalAlertPercentage] = useState<number>(20);
     const [savingConfig, setSavingConfig] = useState(false);
     const [configSearch, setConfigSearch] = useState('');
+    const [configDiagnosticoFilter, setConfigDiagnosticoFilter] = useState<'TODOS' | 'RISCO_DESABASTECIMENTO' | 'RISCO_VENCIMENTO' | 'SUPERESTOCAGEM' | 'EQUILIBRADO'>('TODOS');
+    const [isConfigRelatorioModalOpen, setIsConfigRelatorioModalOpen] = useState(false);
     const [loading, setLoading] = useState(true);
 
     // Estado para filtro de período do Horário de Pico (Temperatura de Atendimento)
@@ -193,7 +196,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         }
     };
 
-    const configPreviewList = useMemo(() => {
+    const allConfigItems = useMemo(() => {
         // Agrupamento de medicamentos por Nome + Dosagem + Tipo
         const groups: Record<string, {
             id: string;
@@ -401,10 +404,26 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 parecerIA,
                 isEstoqueAtivo
             };
-        }).filter(med => {
-            // Oculta da tela medicamentos sem análise (estoque === 0)
-            if (!med.isEstoqueAtivo) return false;
+        }).filter(med => med.isEstoqueAtivo);
+    }, [medicamentos, movimentacoes, globalAlertPercentage]);
 
+    // Lista da Tabela de Configuração ordenada por Tipo de Diagnóstico e Ordem Alfabética
+    const configPreviewList = useMemo(() => {
+        const DIAGNOSTICO_ORDER: Record<string, number> = {
+            'RISCO_DESABASTECIMENTO': 1, // Comprar Urgente
+            'RISCO_VENCIMENTO': 2,        // Risco Vencimento
+            'SUPERESTOCAGEM': 3,          // Superestocado
+            'EQUILIBRADO': 4,             // Ideal
+            'ANALISANDO': 5
+        };
+
+        return allConfigItems.filter(med => {
+            // Filtro por Diagnóstico
+            if (configDiagnosticoFilter !== 'TODOS' && med.statusIA !== configDiagnosticoFilter) {
+                return false;
+            }
+
+            // Filtro por Busca de Texto
             if (!configSearch.trim()) return true;
             const q = configSearch.toLowerCase().trim();
             return (
@@ -413,17 +432,24 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 med.dosagem?.toLowerCase().includes(q) ||
                 (med.tipo && med.tipo.toLowerCase().includes(q))
             );
-        }).sort((a, b) => a.nome.localeCompare(b.nome));
-    }, [medicamentos, movimentacoes, globalAlertPercentage, configSearch]);
+        }).sort((a, b) => {
+            const rankA = DIAGNOSTICO_ORDER[a.statusIA] || 99;
+            const rankB = DIAGNOSTICO_ORDER[b.statusIA] || 99;
+            if (rankA !== rankB) {
+                return rankA - rankB;
+            }
+            return (a.nome || '').localeCompare(b.nome || '');
+        });
+    }, [allConfigItems, configDiagnosticoFilter, configSearch]);
 
-    // Resumo Preditivo KPI da IA (analisa APENAS medicamentos que contenham estoque > 0)
+    // Resumo Preditivo KPI da IA (calculado sobre o universo total de medicamentos com estoque ativo)
     const iaKpiSummary = useMemo(() => {
         let totalSugestaoCompra = 0;
         let qtdRiscoDesabastecimento = 0;
         let qtdRiscoVencimento = 0;
         let qtdEquilibrados = 0;
 
-        configPreviewList.forEach(item => {
+        allConfigItems.forEach(item => {
             if (item.quantidade > 0) {
                 totalSugestaoCompra += item.sugestaoCompra;
                 if (item.statusIA === 'RISCO_DESABASTECIMENTO') {
@@ -442,7 +468,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             qtdRiscoVencimento,
             qtdEquilibrados
         };
-    }, [configPreviewList]);
+    }, [allConfigItems]);
 
     const handleExportCSV = () => {
         const headers = ['Medicamento', 'Princípio Ativo', 'Categoria', 'Tipo', 'Dosagem', 'Lote', 'Validade', 'Fornecedor', 'Situação', 'Estoque', 'Unidade', 'Limite Mínimo'];
@@ -2840,15 +2866,55 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                 </div>
                             </div>
 
-                            <div className="relative w-full md:w-72">
-                                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                                <input
-                                    type="text"
-                                    placeholder="Buscar medicamento..."
-                                    value={configSearch}
-                                    onChange={e => setConfigSearch(e.target.value)}
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:border-purple-500 outline-none transition-all shadow-sm"
-                                />
+                            <div className="flex flex-wrap items-center gap-2.5">
+                                {/* Filtro por Diagnóstico */}
+                                <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-2xs">
+                                    <Filter className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                                    <span className="text-[10px] font-black uppercase text-slate-400 hidden sm:inline">Diagnóstico:</span>
+                                    <select
+                                        value={configDiagnosticoFilter}
+                                        onChange={(e) => setConfigDiagnosticoFilter(e.target.value as any)}
+                                        className="text-xs font-bold text-slate-800 bg-transparent border-none p-0 outline-none cursor-pointer"
+                                    >
+                                        <option value="TODOS">Todos os Diagnósticos</option>
+                                        <option value="RISCO_DESABASTECIMENTO">Comprar Urgente</option>
+                                        <option value="RISCO_VENCIMENTO">Risco Vencimento</option>
+                                        <option value="SUPERESTOCAGEM">Superestocado</option>
+                                        <option value="EQUILIBRADO">Ideal</option>
+                                    </select>
+                                </div>
+
+                                {/* Busca de medicamento */}
+                                <div className="relative w-full sm:w-60">
+                                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                    <input
+                                        type="text"
+                                        placeholder="Buscar medicamento..."
+                                        value={configSearch}
+                                        onChange={e => setConfigSearch(e.target.value)}
+                                        className="w-full bg-white border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:border-purple-500 outline-none transition-all shadow-2xs"
+                                    />
+                                    {configSearch && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setConfigSearch('')}
+                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Botão Emitir Relatório PDF */}
+                                <button
+                                    type="button"
+                                    onClick={() => setIsConfigRelatorioModalOpen(true)}
+                                    className="px-3.5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 active:scale-95 text-white font-extrabold text-xs rounded-xl transition-all shadow-md shadow-purple-600/20 flex items-center gap-1.5 cursor-pointer uppercase tracking-wider shrink-0"
+                                    title="Emitir Relatório consolidado em PDF com filtros por diagnóstico"
+                                >
+                                    <FileDown className="w-4 h-4" />
+                                    <span>Emitir Relatório PDF</span>
+                                </button>
                             </div>
                         </div>
 
@@ -3288,6 +3354,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     </div>
                 </div>
             )}
+
+            {/* Modal de Emissão de Relatório em PDF da Tabela de Configuração e IA */}
+            <FarmaciaConfigRelatorioModal
+                isOpen={isConfigRelatorioModalOpen}
+                onClose={() => setIsConfigRelatorioModalOpen(false)}
+                allItems={allConfigItems}
+                currentUser={currentUser}
+                initialDiagnosticoFilter={configDiagnosticoFilter}
+            />
         </div>
     );
 };
