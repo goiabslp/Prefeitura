@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
 
-type AlertType = 'success' | 'error' | 'info';
+type AlertType = 'success' | 'error' | 'info' | 'warning';
 
 interface AlertState {
     isOpen: boolean;
@@ -69,16 +69,18 @@ export const FarmaciaAlertProvider: React.FC<{ children: ReactNode }> = ({ child
                             <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 ${
                                 alert.type === 'success' ? 'bg-emerald-50 text-emerald-500' :
                                 alert.type === 'error' ? 'bg-rose-50 text-rose-500' :
+                                alert.type === 'warning' ? 'bg-amber-50 text-amber-500' :
                                 'bg-blue-50 text-blue-500'
                             }`}>
                                 {alert.type === 'success' && <CheckCircle2 className="w-8 h-8" />}
-                                {alert.type === 'error' && <AlertTriangle className="w-8 h-8" />}
+                                {(alert.type === 'error' || alert.type === 'warning') && <AlertTriangle className="w-8 h-8" />}
                                 {alert.type === 'info' && <Info className="w-8 h-8" />}
                             </div>
                             
                             <h3 className="text-xl font-black text-slate-800 tracking-tight mb-2 uppercase">
                                 {alert.type === 'success' ? 'Sucesso!' :
-                                alert.type === 'error' ? 'Atenção!' :
+                                alert.type === 'error' ? 'Erro!' :
+                                alert.type === 'warning' ? 'Atenção!' :
                                 'Informação'}
                             </h3>
                             
@@ -91,6 +93,7 @@ export const FarmaciaAlertProvider: React.FC<{ children: ReactNode }> = ({ child
                                 className={`w-full py-3.5 px-6 rounded-2xl text-sm font-bold text-white transition-all transform active:scale-95 uppercase tracking-wider ${
                                     alert.type === 'success' ? 'bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/30' :
                                     alert.type === 'error' ? 'bg-rose-500 hover:bg-rose-600 shadow-lg shadow-rose-500/30' :
+                                    alert.type === 'warning' ? 'bg-amber-500 hover:bg-amber-600 shadow-lg shadow-amber-500/30' :
                                     'bg-blue-500 hover:bg-blue-600 shadow-lg shadow-blue-500/30'
                                 }`}
                             >
