@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga, ConsultaEspecialista } from '../../types';
 import { 
-    ArrowLeft, Settings, Plus, Edit2, Search, Check, AlertTriangle, 
+    ArrowLeft, Settings, Plus, Edit2, Search, Check, Copy, AlertTriangle, 
     Loader2, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Activity, Stethoscope, 
     Sparkles, Trash2, PauseCircle, PlayCircle, Calendar, Filter,
     CheckCircle2, Clock, Users, ShieldAlert, Layers, UserCheck, ToggleLeft, ToggleRight
@@ -38,7 +38,7 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
         fetchGestores();
     }, []);
 
-    const isAdmin = currentUser?.role === 'admin';
+    const isAdmin = currentUser?.role === 'admin' || currentUser?.realRole === 'admin';
     const isGestor = !!(currentUser && (
         gestorUserIds.includes(currentUser.id) || 
         currentUser.permissions?.includes('parent_consultas_gestor') || 
@@ -93,6 +93,9 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
     const [procBookings, setProcBookings] = useState<ConsultaAgendamento[]>([]);
     const [isAddVagasModalOpen, setIsAddVagasModalOpen] = useState(false);
 
+    // Estado do feedback de cópia rápida
+    const [copiedProcId, setCopiedProcId] = useState<string | null>(null);
+
     // Calendar Picker Modal States
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
@@ -105,6 +108,48 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
     const showToast = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
         setToastMessage({ type, text });
         setTimeout(() => setToastMessage(null), 3500);
+    };
+
+    // Ação de cópia rápida de código e nome do procedimento (Restrita a Administradores)
+    const handleCopyProcedure = async (e: React.MouseEvent, proc: ConsultaProcedimento) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Restrição rigorosa de autorização
+        if (!isAdmin) {
+            return;
+        }
+
+        const code = proc.code !== undefined && proc.code !== null ? String(proc.code).trim() : '';
+        const name = proc.name !== undefined && proc.name !== null ? String(proc.name).trim() : '';
+
+        // Formato obrigatório:
+        // Código: [código]
+        // Procedimento: [nome]
+        const textToCopy = `Código: ${code}\nProcedimento: ${name}`;
+
+        try {
+            if (navigator?.clipboard?.writeText) {
+                await navigator.clipboard.writeText(textToCopy);
+            } else {
+                const textarea = document.createElement('textarea');
+                textarea.value = textToCopy;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.focus();
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+            }
+
+            setCopiedProcId(proc.id);
+            setTimeout(() => {
+                setCopiedProcId(prev => (prev === proc.id ? null : prev));
+            }, 2000);
+        } catch (err) {
+            console.error('Erro ao copiar dados do procedimento:', err);
+        }
     };
 
     const matchTime = (timeA: string, timeB: string) => {
@@ -797,6 +842,32 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                         </button>
                                         <div>
                                             <div className="flex flex-wrap items-center gap-2">
+                                                {isAdmin && (
+                                                    <div className="relative inline-flex items-center shrink-0">
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => handleCopyProcedure(e, selectedProc)}
+                                                            className={`p-1.5 rounded-md transition-all cursor-pointer ${
+                                                                copiedProcId === selectedProc.id
+                                                                    ? 'text-emerald-600 bg-emerald-50 border border-emerald-200 shadow-2xs'
+                                                                    : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-100 border border-transparent hover:border-slate-200'
+                                                            }`}
+                                                            title={copiedProcId === selectedProc.id ? "Copiado!" : "Copiar dados do procedimento"}
+                                                            aria-label="Copiar código e nome do procedimento"
+                                                        >
+                                                            {copiedProcId === selectedProc.id ? (
+                                                                <Check className="w-4 h-4 text-emerald-600" />
+                                                            ) : (
+                                                                <Copy className="w-4 h-4" />
+                                                            )}
+                                                        </button>
+                                                        {copiedProcId === selectedProc.id && (
+                                                            <span className="absolute -top-7 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-900 text-white text-[10px] font-bold rounded-md shadow-md whitespace-nowrap z-30 animate-in fade-in zoom-in-95 duration-150 pointer-events-none">
+                                                                Copiado!
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
                                                 <h4 className="font-black text-slate-900 text-base sm:text-lg uppercase">
                                                     {formatProcedimentoLabel(selectedProc, especialistas)}
                                                 </h4>
@@ -1188,9 +1259,37 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                                             )}
                                                         </div>
 
-                                                        <h4 className="font-extrabold text-slate-900 text-xs sm:text-[13px] leading-snug truncate uppercase">
-                                                            {parent.name}
-                                                        </h4>
+                                                        <div className="flex items-center gap-1.5 min-w-0">
+                                                            {isAdmin && (
+                                                                <div className="relative inline-flex items-center shrink-0">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => handleCopyProcedure(e, parent)}
+                                                                        className={`p-1 rounded-md transition-all cursor-pointer ${
+                                                                            copiedProcId === parent.id
+                                                                                ? 'text-emerald-600 bg-emerald-50 border border-emerald-200 shadow-2xs'
+                                                                                : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-100 border border-transparent hover:border-slate-200'
+                                                                        }`}
+                                                                        title={copiedProcId === parent.id ? "Copiado!" : "Copiar dados do procedimento"}
+                                                                        aria-label="Copiar código e nome do procedimento"
+                                                                    >
+                                                                        {copiedProcId === parent.id ? (
+                                                                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                                                        ) : (
+                                                                            <Copy className="w-3.5 h-3.5" />
+                                                                        )}
+                                                                    </button>
+                                                                    {copiedProcId === parent.id && (
+                                                                        <span className="absolute -top-7 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-900 text-white text-[10px] font-bold rounded-md shadow-md whitespace-nowrap z-30 animate-in fade-in zoom-in-95 duration-150 pointer-events-none">
+                                                                            Copiado!
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                            <h4 className="font-extrabold text-slate-900 text-xs sm:text-[13px] leading-snug truncate uppercase">
+                                                                {parent.name}
+                                                            </h4>
+                                                        </div>
                                                     </div>
                                                 </div>
 
@@ -1323,9 +1422,37 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                                                                     </span>
                                                                                 )}
                                                                             </div>
-                                                                            <h5 className="font-extrabold text-slate-800 text-xs truncate mt-0.5 uppercase">
-                                                                                {child.name}
-                                                                            </h5>
+                                                                            <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
+                                                                                {isAdmin && (
+                                                                                    <div className="relative inline-flex items-center shrink-0">
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={(e) => handleCopyProcedure(e, child)}
+                                                                                            className={`p-1 rounded-md transition-all cursor-pointer ${
+                                                                                                copiedProcId === child.id
+                                                                                                    ? 'text-emerald-600 bg-emerald-50 border border-emerald-200 shadow-2xs'
+                                                                                                    : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-100 border border-transparent hover:border-slate-200'
+                                                                                            }`}
+                                                                                            title={copiedProcId === child.id ? "Copiado!" : "Copiar dados do procedimento"}
+                                                                                            aria-label="Copiar código e nome do procedimento"
+                                                                                        >
+                                                                                            {copiedProcId === child.id ? (
+                                                                                                <Check className="w-3 h-3 text-emerald-600" />
+                                                                                            ) : (
+                                                                                                <Copy className="w-3 h-3" />
+                                                                                            )}
+                                                                                        </button>
+                                                                                        {copiedProcId === child.id && (
+                                                                                            <span className="absolute -top-7 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-900 text-white text-[10px] font-bold rounded-md shadow-md whitespace-nowrap z-30 animate-in fade-in zoom-in-95 duration-150 pointer-events-none">
+                                                                                                Copiado!
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                )}
+                                                                                <h5 className="font-extrabold text-slate-800 text-xs truncate uppercase">
+                                                                                    {child.name}
+                                                                                </h5>
+                                                                            </div>
                                                                         </div>
                                                                     </div>
 
