@@ -279,6 +279,10 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
 
     // Patient history & registration UI states
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+    const [desistenciaTargetMov, setDesistenciaTargetMov] = useState<FarmaciaMovimentacao | null>(null);
+    const [desistenciaMotivo, setDesistenciaMotivo] = useState('');
+    const [desistenciaRetornoEstoque, setDesistenciaRetornoEstoque] = useState(true);
+    const [isSubmittingDesistencia, setIsSubmittingDesistencia] = useState(false);
     const [isRegModalOpen, setIsRegModalOpen] = useState(false);
     const [pendingCpf, setPendingCpf] = useState('');
     const [newPatientName, setNewPatientName] = useState('');
@@ -939,6 +943,52 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         const minutes = pad(dateObj.getMinutes());
         const seconds = pad(dateObj.getSeconds());
         return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+    };
+
+    // Confirmação e submissão da desistência de dispensação
+    const handleConfirmarDesistencia = async () => {
+        if (!desistenciaTargetMov) return;
+        if (!desistenciaMotivo.trim()) {
+            showAlert('O motivo da desistência é obrigatório para fins de auditoria.', 'warning');
+            return;
+        }
+
+        setIsSubmittingDesistencia(true);
+        try {
+            const res = await db.registrarDesistenciaDispensacao({
+                movimentacaoId: desistenciaTargetMov.id,
+                motivo: desistenciaMotivo.trim(),
+                retornoAoEstoque: desistenciaRetornoEstoque,
+                currentUser: currentUser ? {
+                    id: currentUser.id,
+                    name: currentUser.name,
+                    email: currentUser.email
+                } : null
+            });
+
+            if (!res.success) {
+                showAlert(res.error || 'Erro ao registrar desistência.', 'error');
+                return;
+            }
+
+            showAlert(
+                desistenciaRetornoEstoque
+                    ? 'Desistência registrada com sucesso! A quantidade retornou ao estoque disponível.'
+                    : 'Desistência registrada com sucesso! Medicamento encaminhado para Quarentena Sanitária.',
+                'success'
+            );
+
+            setDesistenciaTargetMov(null);
+            setDesistenciaMotivo('');
+            await loadData(true);
+            window.dispatchEvent(new CustomEvent('farmacia-movimentacoes-changed'));
+            window.dispatchEvent(new CustomEvent('farmacia-medicamentos-changed'));
+        } catch (err: any) {
+            console.error('[RetirarScreen] Erro ao registrar desistência:', err);
+            showAlert(err.message || 'Erro inesperado ao registrar desistência.', 'error');
+        } finally {
+            setIsSubmittingDesistencia(false);
+        }
     };
 
     return (
@@ -2088,7 +2138,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
             {/* PATIENT HISTORY MODAL */}
             {isHistoryModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden border border-slate-200/50 flex flex-col">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl lg:max-w-6xl max-h-[85vh] overflow-hidden border border-slate-200/50 flex flex-col">
                         {/* Modal Header */}
                         <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                             <div>
@@ -2107,7 +2157,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                             </div>
                             <button
                                 onClick={() => setIsHistoryModalOpen(false)}
-                                className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors"
+                                className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors cursor-pointer"
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -2126,49 +2176,91 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                                 <th className="p-3">Lote</th>
                                                 <th className="p-3 text-center">Quantidade</th>
                                                 <th className="p-3">Entregue Por</th>
+                                                <th className="p-3 text-center">Ações / Desistência</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100 text-[11px] font-semibold text-slate-700">
-                                            {patientWithdrawals.map(w => (
-                                                <tr key={w.id} className="hover:bg-slate-50/30 transition-colors">
-                                                    <td className="p-3 text-slate-500 font-mono">
-                                                        {formatDateTimeBr(w.data)}
-                                                    </td>
-                                                    <td className="p-3">
-                                                        <div className="font-extrabold text-slate-850 uppercase">{w.paciente_nome}</div>
-                                                        <div className="text-[9px] text-slate-400 font-mono font-bold mt-0.5">
-                                                            CPF: {w.paciente_cpf?.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-3">
-                                                        <div className="font-bold text-slate-800 uppercase">{w.medicamento_nome}</div>
-                                                        <div className="flex flex-wrap gap-1 mt-1">
-                                                            <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-600">
-                                                                {w.medicamento_categoria}
+                                            {patientWithdrawals.map(w => {
+                                                const isDesist = isDesistenciaMovimentacao(w);
+                                                const desistInfo = isDesist ? parseDesistenciaInfo(w) : null;
+                                                return (
+                                                    <tr 
+                                                        key={w.id} 
+                                                        className={`transition-colors ${isDesist ? 'bg-rose-50/30 text-slate-500' : 'hover:bg-slate-50/30'}`}
+                                                    >
+                                                        <td className="p-3 text-slate-500 font-mono">
+                                                            {formatDateTimeBr(w.data)}
+                                                        </td>
+                                                        <td className="p-3">
+                                                            <div className="font-extrabold text-slate-850 uppercase">{w.paciente_nome}</div>
+                                                            <div className="text-[9px] text-slate-400 font-mono font-bold mt-0.5">
+                                                                CPF: {w.paciente_cpf ? maskCpf(w.paciente_cpf) : '---'}
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-3">
+                                                            <div className={`font-bold uppercase ${isDesist ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                                                                {w.medicamento_nome}
+                                                            </div>
+                                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                                <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-600">
+                                                                    {w.medicamento_categoria}
+                                                                </span>
+                                                                {w.medicamento_dosagem && (
+                                                                    <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-700 border border-pink-100">
+                                                                        {w.medicamento_dosagem}
+                                                                    </span>
+                                                                )}
+                                                                {w.medicamento_tipo && (
+                                                                    <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-slate-100 text-slate-500">
+                                                                        {w.medicamento_tipo}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-3 font-mono font-bold text-slate-600">
+                                                            {w.lote}
+                                                        </td>
+                                                        <td className="p-3 text-center text-slate-900 font-black">
+                                                            <span className={isDesist ? 'line-through text-slate-400' : ''}>
+                                                                {w.quantidade}
                                                             </span>
-                                                            {w.medicamento_dosagem && (
-                                                                <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-700 border border-pink-100">
-                                                                    {w.medicamento_dosagem}
-                                                                </span>
+                                                        </td>
+                                                        <td className="p-3 text-slate-500 font-bold">
+                                                            {w.responsavel_nome}
+                                                        </td>
+                                                        <td className="p-3 text-center">
+                                                            {isDesist ? (
+                                                                <div className="inline-flex flex-col items-center gap-0.5">
+                                                                    <span 
+                                                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-rose-100/90 text-rose-800 border border-rose-300 shadow-2xs"
+                                                                        title={desistInfo?.motivo ? `Motivo: ${desistInfo.motivo}` : 'Desistência registrada'}
+                                                                    >
+                                                                        <Undo2 className="w-3 h-3 text-rose-600" />
+                                                                        Desistência
+                                                                    </span>
+                                                                    <span className="text-[8px] font-extrabold text-rose-600 uppercase tracking-tight">
+                                                                        {desistInfo?.situacaoRetorno || 'Revertido'}
+                                                                    </span>
+                                                                </div>
+                                                            ) : (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setDesistenciaTargetMov(w);
+                                                                        setDesistenciaMotivo('');
+                                                                        setDesistenciaRetornoEstoque(true);
+                                                                    }}
+                                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 border border-rose-200 hover:border-rose-300 transition-all shadow-2xs active:scale-95 cursor-pointer"
+                                                                    title="Registrar desistência do paciente e estornar medicamento"
+                                                                >
+                                                                    <Undo2 className="w-3.5 h-3.5" />
+                                                                    Registrar Desistência
+                                                                </button>
                                                             )}
-                                                            {w.medicamento_tipo && (
-                                                                <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-slate-100 text-slate-500">
-                                                                    {w.medicamento_tipo}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-3 font-mono font-bold text-slate-600">
-                                                        {w.lote}
-                                                    </td>
-                                                    <td className="p-3 text-center text-slate-900 font-black">
-                                                        {w.quantidade}
-                                                    </td>
-                                                    <td className="p-3 text-slate-500 font-bold">
-                                                        {w.responsavel_nome}
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
@@ -2177,10 +2269,200 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                     <ClipboardList className="w-12 h-12 mb-2 opacity-20 text-slate-500" />
                                     <h4 className="text-xs font-extrabold text-slate-700">Nenhum registro encontrado hoje</h4>
                                     <p className="text-[9px] text-slate-500 text-center mt-0.5 font-medium">
-                                        {patientName ? `Não encontramos retiradas de hoje para o paciente "${patientName}".` : "Nenhuma retirada realizada na data de hoje."}
+                                        {patientName ? `Não encontramos retiradas de hoje para o paciente "${patientName}".` : 'Nenhuma retirada realizada na data de hoje.'}
                                     </p>
                                 </div>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* DESISTÊNCIA CONFIRMATION MODAL */}
+            {desistenciaTargetMov && (
+                <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200/80 flex flex-col animate-in zoom-in-95 duration-200">
+                        {/* Header */}
+                        <div className="p-5 border-b border-rose-100 flex justify-between items-center bg-rose-50/60 shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-rose-500 text-white flex items-center justify-center shadow-md shadow-rose-500/20">
+                                    <Undo2 className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="font-black text-slate-800 uppercase text-xs tracking-wider">
+                                        Registrar Desistência de Dispensação
+                                    </h3>
+                                    <p className="text-[10px] text-rose-600 font-bold uppercase mt-0.5">
+                                        Reversão Segura e Auditada no Estoque
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (!isSubmittingDesistencia) {
+                                        setDesistenciaTargetMov(null);
+                                        setDesistenciaMotivo('');
+                                    }
+                                }}
+                                disabled={isSubmittingDesistencia}
+                                className="p-1.5 hover:bg-rose-100 rounded-lg text-slate-500 transition-colors disabled:opacity-50 cursor-pointer"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-6 space-y-4 text-xs">
+                            {/* Card Resumo do Medicamento / Paciente */}
+                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">
+                                            Medicamento Dispensado
+                                        </span>
+                                        <h4 className="font-black text-slate-800 text-sm uppercase">
+                                            {desistenciaTargetMov.medicamento_nome}
+                                        </h4>
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                            <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-pink-100/80 text-pink-700 uppercase">
+                                                {desistenciaTargetMov.medicamento_categoria}
+                                            </span>
+                                            {desistenciaTargetMov.medicamento_dosagem && (
+                                                <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-slate-200/70 text-slate-700 uppercase">
+                                                    {desistenciaTargetMov.medicamento_dosagem}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">
+                                            Quantidade
+                                        </span>
+                                        <span className="text-xl font-black text-rose-600 font-mono">
+                                            {desistenciaTargetMov.quantidade}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="pt-2 border-t border-slate-200/60 grid grid-cols-2 gap-2 text-[10px]">
+                                    <div>
+                                        <span className="text-slate-400 font-bold block uppercase text-[8px]">Paciente</span>
+                                        <span className="font-extrabold text-slate-700 uppercase truncate block">
+                                            {desistenciaTargetMov.paciente_nome}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-400 font-bold block uppercase text-[8px]">Lote / Validade</span>
+                                        <span className="font-mono font-bold text-slate-700 block">
+                                            {desistenciaTargetMov.lote} (Val: {desistenciaTargetMov.validade || '---'})
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Destino do Medicamento */}
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-600 uppercase tracking-wider block">
+                                    Destino do Medicamento após Desistência
+                                </label>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setDesistenciaRetornoEstoque(true)}
+                                        className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                                            desistenciaRetornoEstoque
+                                                ? 'bg-emerald-50/80 border-emerald-400 shadow-2xs'
+                                                : 'bg-white border-slate-200 hover:border-slate-300 opacity-70'
+                                        }`}
+                                    >
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-[10px] font-black text-emerald-800 uppercase flex items-center gap-1.5">
+                                                <RotateCcw className="w-3.5 h-3.5 text-emerald-600" />
+                                                Devolver ao Estoque
+                                            </span>
+                                            {desistenciaRetornoEstoque && (
+                                                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                            )}
+                                        </div>
+                                        <p className="text-[9px] text-slate-500 font-medium leading-relaxed">
+                                            O paciente desistiu no balcão e o produto não saiu da farmácia. O saldo retorna ao lote original.
+                                        </p>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setDesistenciaRetornoEstoque(false)}
+                                        className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                                            !desistenciaRetornoEstoque
+                                                ? 'bg-amber-50/80 border-amber-400 shadow-2xs'
+                                                : 'bg-white border-slate-200 hover:border-slate-300 opacity-70'
+                                        }`}
+                                    >
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-[10px] font-black text-amber-800 uppercase flex items-center gap-1.5">
+                                                <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
+                                                Quarentena Sanitária
+                                            </span>
+                                            {!desistenciaRetornoEstoque && (
+                                                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                                            )}
+                                        </div>
+                                        <p className="text-[9px] text-slate-500 font-medium leading-relaxed">
+                                            O medicamento saiu da unidade e retornou. Ficará segregado e não voltará para nova dispensação.
+                                        </p>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Motivo Obrigatório */}
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                                    <span>Motivo da Desistência <span className="text-rose-500">*</span></span>
+                                    <span className="text-[9px] font-bold text-slate-400 lowercase">obrigatório para auditoria</span>
+                                </label>
+                                <textarea
+                                    value={desistenciaMotivo}
+                                    onChange={(e) => setDesistenciaMotivo(e.target.value)}
+                                    placeholder="Ex: Paciente informou que já possui o medicamento em casa; Recusou a posologia prescrita; Não quis aguardar..."
+                                    rows={3}
+                                    disabled={isSubmittingDesistencia}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-rose-400 focus:bg-white transition-all resize-none"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setDesistenciaTargetMov(null);
+                                    setDesistenciaMotivo('');
+                                }}
+                                disabled={isSubmittingDesistencia}
+                                className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmarDesistencia}
+                                disabled={isSubmittingDesistencia || !desistenciaMotivo.trim()}
+                                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white font-black text-xs uppercase tracking-wider transition-all shadow-md shadow-rose-500/20 active:scale-95 disabled:opacity-50 disabled:pointer-events-none flex items-center gap-2 cursor-pointer"
+                            >
+                                {isSubmittingDesistencia ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Processando...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Undo2 className="w-4 h-4" />
+                                        Confirmar Desistência
+                                    </>
+                                )}
+                            </button>
                         </div>
                     </div>
                 </div>
