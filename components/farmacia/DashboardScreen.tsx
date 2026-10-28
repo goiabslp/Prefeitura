@@ -2,9 +2,17 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { User, FarmaciaMedicamento, FarmaciaMovimentacao } from '../../types';
 import * as db from '../../services/farmaciaService';
 import {
+    calculateMedicamentoReposicaoIA,
+    getReposicaoConfig,
+    saveReposicaoConfig,
+    IndicadorReposicaoIA,
+    SituacaoOperacionalReposicao
+} from '../../services/farmaciaPredictiveService';
+import {
     ArrowLeft, TrendingUp, TrendingDown, Users, Package, AlertTriangle, Activity, 
     Calendar, CheckCircle2, AlertCircle, ShoppingCart, Info, PieChart, FileDown,
-    Plus, Search, X, MoreVertical, Settings, Sparkles, Brain, Clock, Flame, Thermometer, Zap, Filter
+    Plus, Search, X, MoreVertical, Settings, Sparkles, Brain, Clock, Flame, Thermometer, Zap, Filter,
+    Truck, ShieldCheck, HelpCircle, Layers
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -17,7 +25,7 @@ import html2canvas from 'html2canvas';
 import { FarmaciaPdfGenerator } from './FarmaciaPdfGenerator';
 import { savePurchaseOrder } from '../../services/comprasService';
 import { useNotification } from '../../contexts/NotificationContext';
-import { PacientesTab } from '../common/PacientesTab';
+
 import { MedicosDashboardTab } from './dashboard/MedicosDashboardTab';
 import { FarmaciaConfigRelatorioModal } from './FarmaciaConfigRelatorioModal';
 
@@ -34,14 +42,20 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     onNavigate,
     subView
 }) => {
-    const initialTab = subView ? subView.replace('dashboard-', '').replace('dashboard', 'geral') : 'geral';
-    const [activeTab, setActiveTab] = useState(initialTab === 'dashboard' ? 'geral' : initialTab);
+    const normalizeTab = (raw?: string) => {
+        if (!raw) return 'geral';
+        const clean = raw.replace('dashboard-', '').replace('dashboard', 'geral');
+        if (clean === 'configuracao' || clean === 'analise-inteligente') return 'analise-inteligente';
+        if (['medicamentos', 'pacientes', 'relatorios', 'alto-custo'].includes(clean)) return 'geral';
+        return clean;
+    };
+
+    const [activeTab, setActiveTab] = useState(normalizeTab(subView));
     
     // Sincronizar activeTab quando o subView mudar
     useEffect(() => {
         if (subView && subView.startsWith('dashboard')) {
-            const tab = subView.replace('dashboard-', '').replace('dashboard', 'geral');
-            setActiveTab(tab === 'dashboard' ? 'geral' : tab);
+            setActiveTab(normalizeTab(subView));
         }
     }, [subView]);
 
@@ -52,9 +66,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     const [medicamentos, setMedicamentos] = useState<FarmaciaMedicamento[]>([]);
     const [movimentacoes, setMovimentacoes] = useState<FarmaciaMovimentacao[]>([]);
     const [globalAlertPercentage, setGlobalAlertPercentage] = useState<number>(20);
+    const [reposicaoLeadTime, setReposicaoLeadTime] = useState<number>(30); // Prazo de reposição em dias (Lead time)
+    const [reposicaoMargemSeguranca, setReposicaoMargemSeguranca] = useState<number>(15); // Margem de segurança preventiva em dias
     const [savingConfig, setSavingConfig] = useState(false);
     const [configSearch, setConfigSearch] = useState('');
-    const [configDiagnosticoFilter, setConfigDiagnosticoFilter] = useState<'TODOS' | 'RISCO_DESABASTECIMENTO' | 'RISCO_VENCIMENTO' | 'SUPERESTOCAGEM' | 'EQUILIBRADO'>('TODOS');
+    const [configDiagnosticoFilter, setConfigDiagnosticoFilter] = useState<'TODOS' | 'RISCO_DESABASTECIMENTO' | 'INICIAR_REPOSICAO' | 'PLANEJAR_COMPRA' | 'NO_PRAZO' | 'RISCO_VENCIMENTO' | 'SUPERESTOCAGEM' | 'DADOS_INSUFICIENTES'>('TODOS');
     const [isConfigRelatorioModalOpen, setIsConfigRelatorioModalOpen] = useState(false);
     const [loading, setLoading] = useState(true);
 
@@ -164,14 +180,19 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     const loadData = async () => {
         try {
             setLoading(true);
-            const [medData, movData, alertPct] = await Promise.all([
+            const [medData, movData, alertPct, reposicaoParams] = await Promise.all([
                 db.getMedicamentos(),
                 db.getMovimentacoes(),
-                db.getGlobalAlertPercentage()
+                db.getGlobalAlertPercentage(),
+                getReposicaoConfig()
             ]);
             setMedicamentos(medData);
             setMovimentacoes(movData);
             setGlobalAlertPercentage(alertPct);
+            if (reposicaoParams) {
+                setReposicaoLeadTime(reposicaoParams.leadTimeDias);
+                setReposicaoMargemSeguranca(reposicaoParams.margemSegurancaDias);
+            }
         } catch (error) {
             console.error('Erro ao carregar dados do dashboard:', error);
         } finally {
@@ -182,15 +203,21 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     const handleSaveConfig = async () => {
         setSavingConfig(true);
         try {
-            const success = await db.saveGlobalAlertPercentage(globalAlertPercentage);
-            if (success) {
-                addNotification('Sucesso', `Porcentagem de alerta atualizada para ${globalAlertPercentage}%.`, 'success');
+            const [successAlert, successReposicao] = await Promise.all([
+                db.saveGlobalAlertPercentage(globalAlertPercentage),
+                saveReposicaoConfig({
+                    leadTimeDias: reposicaoLeadTime,
+                    margemSegurancaDias: reposicaoMargemSeguranca
+                })
+            ]);
+            if (successAlert || successReposicao) {
+                addNotification('Sucesso', `Parâmetros salvos: Alerta em ${globalAlertPercentage}%, Prazo de Reposição ${reposicaoLeadTime} dias e Margem de Segurança ${reposicaoMargemSeguranca} dias.`, 'success');
             } else {
-                addNotification('Aviso', 'Configuração salva localmente.', 'info');
+                addNotification('Aviso', 'Configuração salva localmente no navegador.', 'info');
             }
         } catch (error) {
-            console.error('Erro ao salvar porcentagem de alerta:', error);
-            addNotification('Erro', 'Falha ao salvar configuração.', 'error');
+            console.error('Erro ao salvar parâmetros da Análise Inteligente:', error);
+            addNotification('Erro', 'Falha ao salvar configurações administrativas.', 'error');
         } finally {
             setSavingConfig(false);
         }
@@ -267,15 +294,37 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             const thresholdLow = Math.round(estoqueDia05 * (globalAlertPercentage / 100));
             const thresholdCritical = Math.round(thresholdLow / 2);
 
+            // Lotes do medicamento agrupado para análise de validade e descarte de vencidos
+            const lotesDoMed = medicamentos.filter(med => 
+                (med.nome || '').trim().toUpperCase() === group.nome.toUpperCase() &&
+                (med.dosagem || '').trim().toUpperCase() === (group.dosagem || '').toUpperCase()
+            );
+
+            // Movimentações de saída exclusivas
+            const saidasGroup = groupMovs.filter(m => isSaidaTipo(m.tipo));
+
+            // --- NOVO MOTOR DE PREDIÇÃO: DATA ESTIMADA DE NECESSIDADE DE REPOSIÇÃO (IA) ---
+            // Cruza 7, 30 e 90 dias, deduz lotes vencidos, calcula lead time e margem de segurança
+            const reposicaoIA: IndicadorReposicaoIA = calculateMedicamentoReposicaoIA({
+                medNome: group.nome,
+                estoqueTotal: group.quantidadeTotal,
+                lotes: lotesDoMed,
+                movimentacoesSaida: saidasGroup,
+                now,
+                leadTimeDias: reposicaoLeadTime,
+                margemSegurancaDias: reposicaoMargemSeguranca,
+                limiteMinimo: group.limite_minimo || 10,
+                unidade: group.unidade
+            });
+
             // --- CÁLCULO DE INTELIGÊNCIA ARTIFICIAL (IA) ---
-            // A IA analisa APENAS medicamentos que contenham estoque > 0. Medicamentos com estoque zerado são ignorados.
             const isEstoqueAtivo = group.quantidadeTotal > 0;
 
-            let consumoDiarioMedio = 0;
-            let demandaMensal = 0;
-            let estoqueIdealIA = 0;
-            let sugestaoCompra = 0;
-            let diasCobertura = 999;
+            let consumoDiarioMedio = reposicaoIA.consumoDiarioProjetado;
+            let demandaMensal = reposicaoIA.demandaMensalProjetada;
+            let estoqueIdealIA = Math.round(reposicaoIA.consumoDiarioProjetado * (30 + reposicaoMargemSeguranca)) || Math.max(group.quantidadeTotal, (group.limite_minimo || 10) * 2);
+            let sugestaoCompra = reposicaoIA.quantidadeSugerida;
+            let diasCobertura = reposicaoIA.diasCobertura !== null ? reposicaoIA.diasCobertura : 999;
             let statusIA: 'SEM_ESTOQUE_CADASTRADO' | 'ANALISANDO' | 'RISCO_DESABASTECIMENTO' | 'RISCO_VENCIMENTO' | 'SUPERESTOCAGEM' | 'EQUILIBRADO' = 'SEM_ESTOQUE_CADASTRADO';
             let parecerIA = '';
 
@@ -283,104 +332,46 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 statusIA = 'SEM_ESTOQUE_CADASTRADO';
                 parecerIA = 'Medicamento sem estoque cadastrado no sistema (saldo 0). A análise por IA será iniciada automaticamente assim que for adicionado novo estoque.';
             } else {
-                // Verifica a data da primeira movimentação/entrada para contar o período de 3 meses
-                let primeiraMovData: Date | null = null;
-                if (groupMovs.length > 0) {
-                    const dates = groupMovs.map(m => new Date(m.data).getTime()).filter(t => !isNaN(t));
-                    if (dates.length > 1) {
-                        primeiraMovData = new Date(Math.min(...dates));
+                // Análise de Vencimento dos Lotes
+                let menorValidade: Date | null = null;
+                lotesDoMed.forEach(l => {
+                    if (l.validade && l.quantidade > 0) {
+                        const valDate = new Date(l.validade);
+                        if (!isNaN(valDate.getTime())) {
+                            if (!menorValidade || valDate < menorValidade) {
+                                menorValidade = valDate;
+                            }
+                        }
+                    }
+                });
+
+                let diasAteVencer = 999;
+                let temRiscoVencimento = false;
+                let unidadesEmRiscoVencimento = 0;
+
+                if (menorValidade) {
+                    diasAteVencer = Math.max(0, Math.ceil((menorValidade.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+                    if (diasAteVencer <= 90 && consumoDiarioMedio > 0) {
+                        const consumoAteVencer = Math.round(consumoDiarioMedio * diasAteVencer);
+                        if (group.quantidadeTotal > consumoAteVencer) {
+                            temRiscoVencimento = true;
+                            unidadesEmRiscoVencimento = group.quantidadeTotal - consumoAteVencer;
+                        }
                     }
                 }
 
-                let diasDecorridos = 0;
-                let mesesDecorridos = 0;
-                if (primeiraMovData) {
-                    const diffMs = now.getTime() - primeiraMovData.getTime();
-                    diasDecorridos = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
-                    mesesDecorridos = Math.floor(diasDecorridos / 30);
-                }
-
-                const emAnalise3Meses = mesesDecorridos < 3;
-
-                if (emAnalise3Meses) {
-                    const mesAtualAnalise = Math.min(3, mesesDecorridos + 1);
-                    statusIA = 'ANALISANDO';
-                    parecerIA = `Em período inicial de aprendizado da IA (Mês ${mesAtualAnalise} de 3). O algoritmo está acumulando o histórico de retiradas entre o dia 01 e o último dia do mês. O Estoque Ideal IA será liberado após o término dos 3 meses.`;
+                if (reposicaoIA.situacaoOperacional === 'RISCO_DESABASTECIMENTO' || (diasCobertura < 10 && consumoDiarioMedio > 0)) {
+                    statusIA = 'RISCO_DESABASTECIMENTO';
+                    parecerIA = reposicaoIA.explicacaoObjetiva || `Atenção Crítica: Estoque utilizável cobre apenas ${diasCobertura} dias de uso. Recomenda-se comprar ${sugestaoCompra} ${group.unidade}.`;
+                } else if (temRiscoVencimento) {
+                    statusIA = 'RISCO_VENCIMENTO';
+                    parecerIA = `Alerta de Validade: Aproximadamente ${unidadesEmRiscoVencimento} ${group.unidade} correm risco de vencer em ${diasAteVencer} dias antes de serem dispensadas no ritmo atual.`;
+                } else if (group.quantidadeTotal > estoqueIdealIA * 2 && group.quantidadeTotal > 50) {
+                    statusIA = 'SUPERESTOCAGEM';
+                    parecerIA = `Superestocagem: O saldo atual cobre cerca de ${diasCobertura} dias de uso. Pausar compras para evitar imobilização de recursos.`;
                 } else {
-                    // Após 3 meses concluídos: calcula o consumo médio trimestral e atualiza mensalmente
-                    const saidaMovs = groupMovs.filter(m => m.tipo === 'Saída');
-                    const totalSaidas = saidaMovs.reduce((acc, m) => acc + (m.quantidade || 0), 0);
-
-                    let periodoDias = 90; // Janela trimestral de aprendizado concluída
-                    if (saidaMovs.length > 1) {
-                        const dates = saidaMovs.map(m => new Date(m.data).getTime()).filter(t => !isNaN(t));
-                        if (dates.length > 1) {
-                            const minDate = Math.min(...dates);
-                            const maxDate = Math.max(...dates);
-                            const diffDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24));
-                            periodoDias = Math.max(90, diffDays);
-                        }
-                    }
-
-                    consumoDiarioMedio = totalSaidas > 0 ? (totalSaidas / periodoDias) : 0;
-                    demandaMensal = Math.round(consumoDiarioMedio * 30);
-
-                    // Estoque Mensal Ideal IA (Demanda Mensal + 20% Margem de Segurança)
-                    if (demandaMensal > 0) {
-                        estoqueIdealIA = Math.round(demandaMensal * 1.20);
-                    } else {
-                        estoqueIdealIA = Math.max(group.quantidadeTotal, group.limite_minimo ? group.limite_minimo * 2 : 10);
-                    }
-
-                    sugestaoCompra = Math.max(0, estoqueIdealIA - group.quantidadeTotal);
-                    diasCobertura = consumoDiarioMedio > 0 ? Math.round(group.quantidadeTotal / consumoDiarioMedio) : 999;
-
-                    // Análise de Vencimento dos Lotes
-                    const lotesDoMed = medicamentos.filter(med => 
-                        (med.nome || '').trim().toUpperCase() === group.nome.toUpperCase() &&
-                        (med.dosagem || '').trim().toUpperCase() === (group.dosagem || '').toUpperCase()
-                    );
-
-                    let menorValidade: Date | null = null;
-                    lotesDoMed.forEach(l => {
-                        if (l.validade && l.quantidade > 0) {
-                            const valDate = new Date(l.validade);
-                            if (!isNaN(valDate.getTime())) {
-                                if (!menorValidade || valDate < menorValidade) {
-                                    menorValidade = valDate;
-                                }
-                            }
-                        }
-                    });
-
-                    let diasAteVencer = 999;
-                    let temRiscoVencimento = false;
-                    let unidadesEmRiscoVencimento = 0;
-
-                    if (menorValidade) {
-                        diasAteVencer = Math.max(0, Math.ceil((menorValidade.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
-                        if (diasAteVencer <= 90 && consumoDiarioMedio > 0) {
-                            const consumoAteVencer = Math.round(consumoDiarioMedio * diasAteVencer);
-                            if (group.quantidadeTotal > consumoAteVencer) {
-                                temRiscoVencimento = true;
-                                unidadesEmRiscoVencimento = group.quantidadeTotal - consumoAteVencer;
-                            }
-                        }
-                    }
-
-                    if (diasCobertura < 10 && consumoDiarioMedio > 0) {
-                        statusIA = 'RISCO_DESABASTECIMENTO';
-                        parecerIA = `Atenção Crítica: Estoque atual cobre aproximadamente ${diasCobertura} dias de uso. Recomenda-se comprar ${sugestaoCompra} ${group.unidade}.`;
-                    } else if (temRiscoVencimento) {
-                        statusIA = 'RISCO_VENCIMENTO';
-                        parecerIA = `Alerta de Validade: Aproximadamente ${unidadesEmRiscoVencimento} ${group.unidade} correm risco de vencer em ${diasAteVencer} dias antes de serem dispensadas no ritmo atual.`;
-                    } else if (group.quantidadeTotal > estoqueIdealIA * 2 && group.quantidadeTotal > 50) {
-                        statusIA = 'SUPERESTOCAGEM';
-                        parecerIA = `Superestocagem: O saldo atual cobre cerca de ${diasCobertura} dias de uso. Pausar compras para evitar imobilização de recursos.`;
-                    } else {
-                        statusIA = 'EQUILIBRADO';
-                        parecerIA = `Estoque Equilibrado: O saldo atual de ${group.quantidadeTotal} ${group.unidade} atende com segurança a demanda estimada do mês.`;
-                    }
+                    statusIA = 'EQUILIBRADO';
+                    parecerIA = reposicaoIA.explicacaoObjetiva || `Estoque Equilibrado: O saldo atual de ${group.quantidadeTotal} ${group.unidade} atende com segurança a demanda estimada do mês.`;
                 }
             }
 
@@ -402,25 +393,34 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 diasCobertura,
                 statusIA,
                 parecerIA,
-                isEstoqueAtivo
+                isEstoqueAtivo,
+                reposicaoIA
             };
         }).filter(med => med.isEstoqueAtivo);
-    }, [medicamentos, movimentacoes, globalAlertPercentage]);
+    }, [medicamentos, movimentacoes, globalAlertPercentage, reposicaoLeadTime, reposicaoMargemSeguranca]);
 
-    // Lista da Tabela de Configuração ordenada por Tipo de Diagnóstico e Ordem Alfabética
+    // Lista da Tabela de Configuração ordenada por Diagnóstico Preditivo e Ordem de Prioridade
     const configPreviewList = useMemo(() => {
         const DIAGNOSTICO_ORDER: Record<string, number> = {
-            'RISCO_DESABASTECIMENTO': 1, // Comprar Urgente
-            'RISCO_VENCIMENTO': 2,        // Risco Vencimento
-            'SUPERESTOCAGEM': 3,          // Superestocado
-            'EQUILIBRADO': 4,             // Ideal
-            'ANALISANDO': 5
+            'RISCO_DESABASTECIMENTO': 1, // Risco de desabastecimento
+            'INICIAR_REPOSICAO': 2,       // Iniciar reposição estimada
+            'PLANEJAR_COMPRA': 3,         // Planejar compra preventiva
+            'RISCO_VENCIMENTO': 4,        // Risco Vencimento
+            'SUPERESTOCAGEM': 5,          // Superestocado
+            'NO_PRAZO': 6,                // No prazo
+            'EQUILIBRADO': 7,             // Ideal
+            'ANALISANDO': 8,
+            'DADOS_INSUFICIENTES': 9
         };
 
         return allConfigItems.filter(med => {
-            // Filtro por Diagnóstico
-            if (configDiagnosticoFilter !== 'TODOS' && med.statusIA !== configDiagnosticoFilter) {
-                return false;
+            // Filtro por Diagnóstico / Situação Operacional
+            if (configDiagnosticoFilter !== 'TODOS') {
+                const statusMatch = med.statusIA === configDiagnosticoFilter;
+                const situacaoMatch = med.reposicaoIA?.situacaoOperacional === configDiagnosticoFilter;
+                if (!statusMatch && !situacaoMatch) {
+                    return false;
+                }
             }
 
             // Filtro por Busca de Texto
@@ -433,10 +433,16 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 (med.tipo && med.tipo.toLowerCase().includes(q))
             );
         }).sort((a, b) => {
-            const rankA = DIAGNOSTICO_ORDER[a.statusIA] || 99;
-            const rankB = DIAGNOSTICO_ORDER[b.statusIA] || 99;
+            const rankA = DIAGNOSTICO_ORDER[a.reposicaoIA?.situacaoOperacional || a.statusIA] || 99;
+            const rankB = DIAGNOSTICO_ORDER[b.reposicaoIA?.situacaoOperacional || b.statusIA] || 99;
             if (rankA !== rankB) {
                 return rankA - rankB;
+            }
+            // Prioriza os que possuem menor dias de cobertura
+            const cobA = a.reposicaoIA?.diasCobertura ?? a.diasCobertura ?? 9999;
+            const cobB = b.reposicaoIA?.diasCobertura ?? b.diasCobertura ?? 9999;
+            if (cobA !== cobB) {
+                return cobA - cobB;
             }
             return (a.nome || '').localeCompare(b.nome || '');
         });
@@ -446,15 +452,28 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     const iaKpiSummary = useMemo(() => {
         let totalSugestaoCompra = 0;
         let qtdRiscoDesabastecimento = 0;
+        let qtdIniciarReposicao = 0;
+        let qtdPlanejarCompra = 0;
+        let qtdNoPrazo = 0;
         let qtdRiscoVencimento = 0;
         let qtdEquilibrados = 0;
 
         allConfigItems.forEach(item => {
             if (item.quantidade > 0) {
                 totalSugestaoCompra += item.sugestaoCompra;
-                if (item.statusIA === 'RISCO_DESABASTECIMENTO') {
+                
+                const sit = item.reposicaoIA?.situacaoOperacional;
+                if (sit === 'RISCO_DESABASTECIMENTO' || item.statusIA === 'RISCO_DESABASTECIMENTO') {
                     qtdRiscoDesabastecimento++;
-                } else if (item.statusIA === 'RISCO_VENCIMENTO') {
+                } else if (sit === 'INICIAR_REPOSICAO') {
+                    qtdIniciarReposicao++;
+                } else if (sit === 'PLANEJAR_COMPRA') {
+                    qtdPlanejarCompra++;
+                } else if (sit === 'NO_PRAZO') {
+                    qtdNoPrazo++;
+                }
+
+                if (item.statusIA === 'RISCO_VENCIMENTO') {
                     qtdRiscoVencimento++;
                 } else if (item.statusIA === 'EQUILIBRADO') {
                     qtdEquilibrados++;
@@ -465,6 +484,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         return {
             totalSugestaoCompra,
             qtdRiscoDesabastecimento,
+            qtdIniciarReposicao,
+            qtdPlanejarCompra,
+            qtdNoPrazo,
             qtdRiscoVencimento,
             qtdEquilibrados
         };
@@ -1238,7 +1260,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
             {/* Tabs */}
             <div className="flex overflow-x-auto gap-2 mb-6 pb-2 custom-scrollbar">
-                {['geral', 'medicos', 'medicamentos', 'pacientes', 'operacoes', 'relatorios', 'rename', 'alto-custo', 'configuracao'].map(tab => (
+                {['geral', 'medicos', 'operacoes', 'rename', 'analise-inteligente'].map(tab => (
                     <button
                         key={tab}
                         onClick={() => handleTabChange(tab)}
@@ -1248,7 +1270,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                 : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200/60 hover:text-slate-900'
                         }`}
                     >
-                        {tab === 'geral' ? 'Visão Geral' : tab === 'medicos' ? 'Médicos' : tab === 'operacoes' ? 'Operações' : tab === 'relatorios' ? 'Relatórios' : tab === 'rename' ? 'RENAME' : tab === 'alto-custo' ? 'ALTO CUSTO' : tab === 'configuracao' ? 'Configuração' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                        {tab === 'geral' ? 'Visão Geral' : tab === 'medicos' ? 'Médicos' : tab === 'operacoes' ? 'Operações' : tab === 'rename' ? 'RENAME' : tab === 'analise-inteligente' ? 'Análise Inteligente' : tab.charAt(0).toUpperCase() + tab.slice(1)}
                     </button>
                 ))}
             </div>
@@ -1607,140 +1629,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </>
             )}
 
-            {activeTab === 'medicamentos' && (
-            <>
-            {/* Predictive Analysis Section */}
-            <div className="bg-gradient-to-br from-indigo-50 to-white rounded-3xl p-6 border border-indigo-100 shadow-sm mb-8">
-                <div className="flex items-start justify-between mb-6">
-                    <div>
-                        <h3 className="text-lg font-black text-indigo-900 uppercase tracking-tight flex items-center gap-2 mb-1">
-                            <ShoppingCart className="w-5 h-5 text-indigo-600" />
-                            Previsão de Demanda e Compras Sugeridas
-                        </h3>
-                        <p className="text-indigo-600/70 text-xs font-semibold">
-                            Cálculo preditivo baseado na média de saídas diárias dos últimos 30 dias para garantir estoque de segurança.
-                        </p>
-                    </div>
-                    <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl hidden md:block">
-                        <Info className="w-5 h-5" />
-                    </div>
-                </div>
-
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-[600px]">
-                        <thead>
-                            <tr className="border-b border-indigo-200/50 text-indigo-800/60 text-[10px] font-black uppercase tracking-wider">
-                                <th className="p-3">Medicamento</th>
-                                <th className="p-3 text-center">Média de Saída/Dia</th>
-                                <th className="p-3 text-center">Estoque Atual</th>
-                                <th className="p-3 text-center">Necessidade Sugerida</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-indigo-50/50">
-                            {purchaseRecommendations.length > 0 ? (
-                                purchaseRecommendations.slice(0, 10).map((med, idx) => (
-                                    <tr key={idx} className="hover:bg-white/50 transition-colors">
-                                        <td className="p-3">
-                                            <div className="font-extrabold text-indigo-950 text-xs">{med.nome}</div>
-                                            <div className="text-[10px] text-indigo-900/50 uppercase font-semibold">{med.categoria} {med.tipo ? `• ${med.tipo}` : ''}</div>
-                                        </td>
-                                        <td className="p-3 text-center font-bold text-indigo-700 text-xs">
-                                            {med.dailyAverage} un/dia
-                                        </td>
-                                        <td className="p-3 text-center">
-                                            <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-black ${med.quantidade === 0 ? 'bg-rose-100 text-rose-700' : 'bg-indigo-100 text-indigo-700'}`}>
-                                                {med.quantidade}
-                                            </span>
-                                        </td>
-                                        <td className="p-3 text-center">
-                                            <span className="inline-flex items-center px-3 py-1 rounded-xl text-xs font-black bg-pink-100 text-pink-700 border border-pink-200">
-                                                Comprar +{med.toBuy}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                ))
-                            ) : (
-                                <tr>
-                                    <td colSpan={4} className="p-6 text-center text-indigo-400 font-medium text-sm">
-                                        Nenhuma compra sugerida no momento. O estoque está suprindo a demanda prevista.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                    {purchaseRecommendations.length > 10 && (
-                        <div className="text-center mt-4 text-xs font-bold text-indigo-400">
-                            + {purchaseRecommendations.length - 10} medicamentos necessitam de reposição. Acesse o relatório completo em 'Dados'.
-                        </div>
-                    )}
-                </div>
-            </div>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Medicamentos Zerados */}
-                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
-                    <h3 className="text-sm font-black text-rose-600 uppercase tracking-tight mb-4 flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4" />
-                        Estoque Zerado ({zeroStockAlerts.length})
-                    </h3>
-                    <div className="space-y-3 max-h-64 overflow-y-auto custom-scrollbar pr-2">
-                        {zeroStockAlerts.length > 0 ? (
-                            zeroStockAlerts.map(med => (
-                                <div key={med.id} className="flex justify-between items-center p-3 rounded-2xl bg-rose-50/50 border border-rose-100">
-                                    <div>
-                                        <div className="font-extrabold text-slate-800 text-xs">{med.nome}</div>
-                                        <div className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">{med.categoria} • Lote: {med.lote}</div>
-                                    </div>
-                                    <div className="text-rose-600 font-black text-xs px-2 py-1 bg-rose-100 rounded-lg">ZERADO</div>
-                                </div>
-                            ))
-                        ) : (
-                            <div className="text-center py-6 text-slate-400 text-xs font-semibold">
-                                Nenhum medicamento com estoque zerado!
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
-            </>
-            )}
-
-            {activeTab === 'pacientes' && (
-            <>
-            {/* Ultimos Pacientes Atendidos */}
-            <div className="grid grid-cols-1 gap-6">
-                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
-                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight mb-4 flex items-center gap-2">
-                        <Users className="w-4 h-4 text-emerald-500" />
-                        Últimos Pacientes Atendidos
-                    </h3>
-                    <div className="space-y-3 max-h-64 overflow-y-auto custom-scrollbar pr-2">
-                        {currentMonthDispenses.slice(-10).reverse().map((m, i) => (
-                            <div key={i} className="flex justify-between items-center p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                                <div>
-                                    <div className="font-extrabold text-slate-800 text-xs">{m.paciente_nome || 'Paciente não identificado'}</div>
-                                    <div className="text-[10px] font-bold text-slate-400 mt-0.5">{m.medicamento_nome} • {m.quantidade} un</div>
-                                </div>
-                                <div className="text-slate-400 font-bold text-[9px] uppercase">
-                                    {formatSafeDistanceToNow(m.data)}
-                                </div>
-                            </div>
-                        ))}
-                        {currentMonthDispenses.length === 0 && (
-                            <div className="text-center py-6 text-slate-400 text-xs font-semibold">
-                                Nenhuma retirada registrada neste mês.
-                            </div>
-                        )}
-                    </div>
-                </div>
-                
-                {/* Unified Pacientes Registration List */}
-                <div className="mt-6">
-                    <PacientesTab />
-                </div>
-            </div>
-            </>
-            )}
 
             {activeTab === 'medicos' && (
                 <MedicosDashboardTab
@@ -1968,185 +1856,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </div>
             )}
 
-            {activeTab === 'relatorios' && (
-            <div className="space-y-6">
-                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div>
-                        <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
-                            <Activity className="w-5 h-5 text-pink-500" />
-                            Relatórios Gerenciais
-                        </h3>
-                        <p className="text-slate-500 text-[10px] font-bold uppercase mt-1 tracking-widest">
-                            {reportView === 'alertas' ? 'Medicamentos Zerados ou em Alerta' : 'Novo Pedido de Reposição'}
-                        </p>
-                    </div>
-                    
-                    <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
-                        <button 
-                            onClick={() => setReportView('alertas')}
-                            className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${reportView === 'alertas' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                            Alertas de Estoque
-                        </button>
-                        <button 
-                            onClick={() => setReportView('compras')}
-                            className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${reportView === 'compras' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                            Pedido de Compras
-                        </button>
-                    </div>
-
-                    {reportView === 'alertas' ? (
-                        <button 
-                            onClick={handleExportCSV}
-                            className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2"
-                        >
-                            <FileDown className="w-4 h-4" />
-                            Baixar Relatório (CSV)
-                        </button>
-                    ) : (
-                        <button 
-                            onClick={handleOpenOrderModal}
-                            disabled={isSubmittingOrder || Object.keys(selectedCompras).length === 0}
-                            className={`px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2 ${Object.keys(selectedCompras).length > 0 ? 'bg-pink-600 hover:bg-pink-700 text-white shadow-md' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
-                        >
-                            {isSubmittingOrder ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <ShoppingCart className="w-4 h-4" />}
-                            Fechar Pedido ({Object.keys(selectedCompras).length})
-                        </button>
-                    )}
-                </div>
-
-                {reportView === 'alertas' ? (
-                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="border-b border-slate-100">
-                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Medicamento</th>
-                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Lote & Validade</th>
-                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Situação</th>
-                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Estoque</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {lowStockAlerts.map(med => (
-                                    <tr key={med.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                                        <td className="p-4">
-                                            <div className="font-extrabold text-slate-800 text-xs">{med.nome}</div>
-                                            {med.principio_ativo && <div className="text-[10px] text-slate-500 font-medium">{med.principio_ativo}</div>}
-                                            <div className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
-                                                {med.categoria} • {med.tipo} {med.dosagem ? `• ${med.dosagem}` : ''}
-                                            </div>
-                                        </td>
-                                        <td className="p-4">
-                                            <div className="text-xs font-bold text-slate-600">Lote: {med.lote}</div>
-                                            {med.validade && <div className="text-[10px] text-slate-400 mt-0.5">Val: {med.validade}</div>}
-                                            {med.fornecedor && <div className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">Forn: {med.fornecedor}</div>}
-                                        </td>
-                                        <td className="p-4 text-center">
-                                            {med.quantidade === 0 ? (
-                                                <span className="inline-flex items-center px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider bg-rose-100 text-rose-700">Zerado</span>
-                                            ) : (
-                                                <span className="inline-flex items-center px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-700">Estoque Baixo</span>
-                                            )}
-                                        </td>
-                                        <td className="p-4 text-right">
-                                            <div className="flex items-end justify-end gap-1">
-                                                <span className={`font-black text-sm ${med.quantidade === 0 ? 'text-rose-600' : 'text-amber-600'}`}>{med.quantidade}</span>
-                                                <span className="text-[9px] font-bold text-slate-400 mb-0.5 lowercase">{med.unidade || 'un'}</span>
-                                            </div>
-                                            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Mín: {med.limite_minimo}</div>
-                                        </td>
-                                    </tr>
-                                ))}
-                                {lowStockAlerts.length === 0 && (
-                                    <tr>
-                                        <td colSpan={4} className="p-8 text-center text-slate-400 text-xs font-bold uppercase tracking-wider">Nenhum medicamento em estado crítico.</td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                ) : (
-                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
-                    <div className="mb-4">
-                        <input
-                            type="text"
-                            placeholder="Buscar medicamentos para adicionar ao pedido..."
-                            value={comprasSearch}
-                            onChange={(e) => setComprasSearch(e.target.value)}
-                            className="w-full pl-4 pr-4 py-3 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:border-pink-500 bg-slate-50 focus:bg-white transition-all placeholder:text-slate-400"
-                        />
-                    </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="border-b border-slate-100">
-                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-12">Sel</th>
-                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Medicamento</th>
-                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Situação</th>
-                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Quantidade Solicitada</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {comprasFilteredMedicamentos.slice(0, 100).map(med => (
-                                    <tr key={med.id} className={`border-b border-slate-50 transition-colors ${selectedCompras[med.id] ? 'bg-pink-50/50' : 'hover:bg-slate-50/50'}`}>
-                                        <td className="p-4">
-                                            <input 
-                                                type="checkbox" 
-                                                checked={!!selectedCompras[med.id]}
-                                                onChange={() => handleToggleItemSelection(med)}
-                                                className="w-4 h-4 text-pink-600 rounded focus:ring-pink-500 border-slate-300"
-                                            />
-                                        </td>
-                                        <td className="p-4">
-                                            <div className="font-extrabold text-slate-800 text-xs">{med.nome}</div>
-                                            {med.principio_ativo && <div className="text-[10px] text-slate-500 font-medium">{med.principio_ativo}</div>}
-                                            <div className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
-                                                {med.categoria} • {med.tipo} {med.dosagem ? `• ${med.dosagem}` : ''}
-                                            </div>
-                                        </td>
-                                        <td className="p-4 text-center">
-                                            {med.quantidade === 0 ? (
-                                                <span className="inline-flex items-center px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider bg-rose-100 text-rose-700">Zerado</span>
-                                            ) : med.quantidade <= med.limite_minimo ? (
-                                                <span className="inline-flex items-center px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-700">Baixo</span>
-                                            ) : (
-                                                <span className="inline-flex items-center px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700">OK</span>
-                                            )}
-                                            <div className="text-[9px] font-bold text-slate-400 mt-1">Estoque atual: {med.quantidade}</div>
-                                        </td>
-                                        <td className="p-4 text-right">
-                                            {selectedCompras[med.id] ? (
-                                                <div className="flex items-center justify-end gap-2">
-                                                    <input 
-                                                        type="number"
-                                                        min="1"
-                                                        value={selectedCompras[med.id].quantidade}
-                                                        onChange={(e) => handleItemQuantityChange(med.id, parseInt(e.target.value) || 1)}
-                                                        className="w-20 p-2 text-sm font-bold border border-slate-200 rounded-lg text-right focus:outline-none focus:border-pink-500"
-                                                    />
-                                                    <span className="text-[9px] font-bold text-slate-400 uppercase">{med.unidade || 'un'}</span>
-                                                </div>
-                                            ) : (
-                                                <span className="text-xs text-slate-300 italic">Selecione para pedir</span>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                                {comprasFilteredMedicamentos.length === 0 && (
-                                    <tr>
-                                        <td colSpan={4} className="p-8 text-center text-slate-400 text-xs font-bold uppercase tracking-wider">Nenhum medicamento encontrado.</td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                )}
-            </div>
-            )}
             {activeTab === 'rename' && (
                 <div className="space-y-6">
                     <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -2331,7 +2040,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                         <th className="p-4 text-center">Lote / Validade</th>
                                         <th className="p-4 text-center">Estoque Atual</th>
                                         <th className="p-4 text-center">Status</th>
-                                        <th className="p-4 text-center">Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
@@ -2384,42 +2092,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                                         <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">Disponível</span>
                                                     )}
                                                 </td>
-                                                <td className="p-4 text-center relative">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setActiveMenuMedId(activeMenuMedId === med.id ? null : med.id);
-                                                        }}
-                                                        className="p-2 rounded-xl text-slate-400 hover:text-pink-600 hover:bg-pink-50 transition-all cursor-pointer font-bold border border-transparent hover:border-pink-100"
-                                                        title="Opções do medicamento"
-                                                    >
-                                                        <MoreVertical className="w-4 h-4" />
-                                                    </button>
-
-                                                    {activeMenuMedId === med.id && (
-                                                        <>
-                                                            <div 
-                                                                className="fixed inset-0 z-40" 
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    setActiveMenuMedId(null);
-                                                                }} 
-                                                            />
-                                                            <div className="absolute right-4 top-12 z-50 min-w-[210px] bg-white border border-slate-200 rounded-2xl shadow-xl p-1.5 animate-in fade-in slide-in-from-top-1 duration-100 text-left">
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleMoveToAltoCusto(med);
-                                                                    }}
-                                                                    className="w-full px-3.5 py-2.5 text-xs font-black text-slate-700 hover:bg-amber-50 hover:text-amber-700 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer"
-                                                                >
-                                                                    <Activity className="w-4 h-4 text-amber-500 shrink-0" />
-                                                                    <span>Mover para ALTO CUSTO</span>
-                                                                </button>
-                                                            </div>
-                                                        </>
-                                                    )}
-                                                </td>
                                             </tr>
                                         ))
                                     ) : (
@@ -2436,207 +2108,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 </div>
             )}
 
-            {activeTab === 'alto-custo' && (
-                <div className="space-y-6">
-                    {/* Header Card com botão de Inserir */}
-                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                        <div>
-                            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
-                                <Package className="w-6 h-6 text-pink-600" />
-                                Medicamentos de Alto Custo
-                            </h3>
-                            <p className="text-slate-500 text-xs font-semibold mt-1">
-                                Espaço exclusivo para cadastro, lançamento e gerenciamento da listagem de medicamentos de alto custo.
-                            </p>
-                        </div>
-                        <button
-                            onClick={() => {
-                                setAcNome('');
-                                setAcPrincipioAtivo('');
-                                setAcTipo('Comprimido');
-                                setAcDosagem('');
-                                setAcCategoria('CEAF');
-                                setAcLote('S/L');
-                                setAcValidade('2099-12-31');
-                                setAcQuantidade('0');
-                                setAcLimiteMinimo('10');
-                                setIsAltoCustoModalOpen(true);
-                            }}
-                            className="px-5 py-3 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-pink-500/20 transition-all flex items-center gap-2 shrink-0 active:scale-95 cursor-pointer"
-                        >
-                            <Plus className="w-4 h-4" />
-                            Inserir Medicamento de Alto Custo
-                        </button>
-                    </div>
-
-                    {/* Barra de Busca e Resumo */}
-                    <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
-                        <div className="relative w-full md:w-96">
-                            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                            <input
-                                type="text"
-                                placeholder="Buscar por nome ou princípio ativo..."
-                                value={altoCustoSearch}
-                                onChange={e => setAltoCustoSearch(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:border-pink-500 outline-none transition-all"
-                            />
-                        </div>
-
-                        <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-                            <span className="px-3 py-1.5 rounded-xl text-xs font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-                                {altoCustoStats.disponivel} Em Estoque
-                            </span>
-                            <span className="px-3 py-1.5 rounded-xl text-xs font-black uppercase bg-rose-50 text-rose-700 border border-rose-200/60">
-                                {altoCustoStats.zerados} Zerados
-                            </span>
-                            <span className="px-3 py-1.5 rounded-xl text-xs font-black uppercase bg-slate-100 text-slate-700 border border-slate-200">
-                                Total: {altoCustoStats.total}
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* Tabela de Listagem Completa de Medicamentos de Alto Custo */}
-                    <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-                        <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                            <h4 className="text-xs font-black text-slate-500 uppercase tracking-wider">
-                                Listagem de Medicamentos de Alto Custo ({altoCustoFilteredList.length})
-                            </h4>
-                        </div>
-
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse min-w-[700px]">
-                                <thead>
-                                    <tr className="border-b border-slate-100 text-slate-400 text-[10px] font-black uppercase tracking-wider bg-slate-50/50">
-                                        <th className="p-4">Medicamento</th>
-                                        <th className="p-4">Princípio Ativo</th>
-                                        <th className="p-4">Categoria / Forma</th>
-                                        <th className="p-4 text-center">Lote / Validade</th>
-                                        <th className="p-4 text-center">Estoque Atual</th>
-                                        <th className="p-4 text-center">Status</th>
-                                        <th className="p-4 text-center">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {altoCustoFilteredList.length > 0 ? (
-                                        altoCustoFilteredList.map(med => (
-                                            <tr key={med.id} className="hover:bg-slate-50/50 transition-colors">
-                                                <td className="p-4">
-                                                    <div className="font-extrabold text-slate-800 text-xs uppercase">{med.nome}</div>
-                                                    {med.dosagem && <div className="text-[10px] text-slate-400 font-semibold">{med.dosagem}</div>}
-                                                </td>
-                                                <td className="p-4">
-                                                    <span className="text-xs font-bold text-slate-600 uppercase">
-                                                        {med.principio_ativo || '—'}
-                                                    </span>
-                                                </td>
-                                                <td className="p-4">
-                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[9px] font-black uppercase bg-pink-50 text-pink-700 border border-pink-100">
-                                                        {med.categoria}
-                                                    </span>
-                                                    {med.tipo && <span className="text-xs text-slate-500 font-semibold ml-2">{med.tipo}</span>}
-                                                </td>
-                                                <td className="p-4 text-center">
-                                                    <div className="text-xs font-bold text-slate-700">{med.lote || 'S/L'}</div>
-                                                    <div className="text-[10px] text-slate-400 font-semibold">{formatSafeDate(med.validade, 'dd/MM/yyyy')}</div>
-                                                </td>
-                                                <td className="p-4 text-center">
-                                                    <span className={`inline-flex items-center px-3 py-1 rounded-xl text-xs font-black ${
-                                                        med.quantidade === 0 
-                                                            ? 'bg-rose-100 text-rose-700 border border-rose-200' 
-                                                            : med.quantidade <= med.limite_minimo 
-                                                            ? 'bg-amber-100 text-amber-700 border border-amber-200' 
-                                                            : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                                                    }`}>
-                                                        {med.quantidade} un
-                                                    </span>
-                                                </td>
-                                                <td className="p-4 text-center">
-                                                    {med.quantidade === 0 ? (
-                                                        <span className="text-[9px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-100">Zerado</span>
-                                                    ) : med.quantidade <= med.limite_minimo ? (
-                                                        <span className="text-[9px] font-black uppercase tracking-wider text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-100">Estoque Baixo</span>
-                                                    ) : (
-                                                        <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">Disponível</span>
-                                                    )}
-                                                </td>
-                                                <td className="p-4 text-center relative">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setActiveMenuMedId(activeMenuMedId === med.id ? null : med.id);
-                                                        }}
-                                                        className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer font-bold border border-transparent hover:border-rose-100"
-                                                        title="Opções do medicamento"
-                                                    >
-                                                        <MoreVertical className="w-4 h-4" />
-                                                    </button>
-
-                                                    {activeMenuMedId === med.id && (
-                                                        <>
-                                                            <div 
-                                                                className="fixed inset-0 z-40" 
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    setActiveMenuMedId(null);
-                                                                }} 
-                                                            />
-                                                            <div className="absolute right-4 top-12 z-50 min-w-[210px] bg-white border border-slate-200 rounded-2xl shadow-xl p-1.5 animate-in fade-in slide-in-from-top-1 duration-100 text-left">
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleRemoveFromAltoCusto(med);
-                                                                    }}
-                                                                    className="w-full px-3.5 py-2.5 text-xs font-black text-slate-700 hover:bg-rose-50 hover:text-rose-700 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer"
-                                                                >
-                                                                    <X className="w-4 h-4 text-rose-500 shrink-0" />
-                                                                    <span>Remover de ALTO CUSTO</span>
-                                                                </button>
-                                                            </div>
-                                                        </>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        ))
-                                    ) : (
-                                        <tr>
-                                            <td colSpan={6} className="p-12 text-center">
-                                                <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
-                                                    <div className="w-12 h-12 rounded-2xl bg-pink-50 text-pink-500 flex items-center justify-center mb-3">
-                                                        <Package className="w-6 h-6" />
-                                                    </div>
-                                                    <h5 className="font-extrabold text-slate-800 text-sm uppercase mb-1">Nenhum Medicamento de Alto Custo Encontrado</h5>
-                                                    <p className="text-slate-400 text-xs font-medium mb-4">
-                                                        Cadastre medicamentos marcados como Alto Custo para visualizá-los e gerenciá-los nesta lista.
-                                                    </p>
-                                                    <button
-                                                        onClick={() => {
-                                                            setAcNome('');
-                                                            setAcPrincipioAtivo('');
-                                                            setAcTipo('Comprimido');
-                                                            setAcDosagem('');
-                                                            setAcCategoria('CEAF');
-                                                            setAcLote('S/L');
-                                                            setAcValidade('2099-12-31');
-                                                            setAcQuantidade('0');
-                                                            setAcLimiteMinimo('10');
-                                                            setIsAltoCustoModalOpen(true);
-                                                        }}
-                                                        className="px-4 py-2.5 bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
-                                                    >
-                                                        <Plus className="w-4 h-4" />
-                                                        Inserir Primeiro Medicamento de Alto Custo
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            )}
-            {activeTab === 'configuracao' && (
+            {(activeTab === 'analise-inteligente' || activeTab === 'configuracao') && (
                 <div className="space-y-6 animate-in fade-in duration-300">
                     {/* Banner de Topo com Destaque de IA */}
                     <div className="bg-gradient-to-r from-slate-900 via-purple-950 to-slate-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
@@ -2648,7 +2120,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                     Motor de Inteligência Preditiva de Estoque (IA)
                                 </div>
                                 <h3 className="text-2xl font-black uppercase tracking-tight text-white flex items-center gap-3">
-                                    Configuração & Inteligência de Compras por IA
+                                    Análise Inteligente & Inteligência de Compras por IA
                                 </h3>
                                 <p className="text-slate-300 text-xs font-medium leading-relaxed">
                                     Nossa Inteligência Artificial analisa em tempo real a velocidade de retiradas, validade dos lotes e cobertura do estoque para sugerir o <strong className="text-purple-300">estoque mensal ideal a comprar</strong>, evitando falta de remédios ou perdas por vencimento.
@@ -2658,7 +2130,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     </div>
 
                     {/* Cards de Resumo Preditivo da IA */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div className="bg-white rounded-3xl p-5 border border-purple-100 shadow-sm flex items-center gap-4">
                             <div className="p-3.5 bg-purple-50 text-purple-600 rounded-2xl shrink-0">
                                 <ShoppingCart className="w-6 h-6" />
@@ -2668,7 +2140,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                 <div className="text-xl font-black text-slate-900 mt-0.5">
                                     {iaKpiSummary.totalSugestaoCompra.toLocaleString('pt-BR')} <span className="text-xs font-bold text-slate-400">unidades</span>
                                 </div>
-                                <p className="text-[10px] font-medium text-purple-600 mt-0.5">Sugerido para manter a farmácia abastecida no mês</p>
+                                <p className="text-[10px] font-medium text-purple-600 mt-0.5">Para manter a cobertura ideal do ciclo</p>
                             </div>
                         </div>
 
@@ -2681,7 +2153,22 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                 <div className="text-xl font-black text-rose-600 mt-0.5">
                                     {iaKpiSummary.qtdRiscoDesabastecimento} <span className="text-xs font-bold text-rose-400">medicamentos</span>
                                 </div>
-                                <p className="text-[10px] font-medium text-rose-600 mt-0.5">Estoque atual cobre menos de 10 dias de consumo</p>
+                                <p className="text-[10px] font-medium text-rose-600 mt-0.5">Cobertura menor que o prazo de reposição</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-3xl p-5 border border-indigo-100 shadow-sm flex items-center gap-4">
+                            <div className="p-3.5 bg-indigo-50 text-indigo-600 rounded-2xl shrink-0">
+                                <Clock className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Reposição Necessária</span>
+                                <div className="text-xl font-black text-indigo-950 mt-0.5">
+                                    {iaKpiSummary.qtdIniciarReposicao + iaKpiSummary.qtdPlanejarCompra} <span className="text-xs font-bold text-indigo-500">medicamentos</span>
+                                </div>
+                                <p className="text-[10px] font-medium text-indigo-600 mt-0.5">
+                                    {iaKpiSummary.qtdIniciarReposicao} comprar agora • {iaKpiSummary.qtdPlanejarCompra} planejar
+                                </p>
                             </div>
                         </div>
 
@@ -2694,85 +2181,103 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                 <div className="text-xl font-black text-amber-600 mt-0.5">
                                     {iaKpiSummary.qtdRiscoVencimento} <span className="text-xs font-bold text-amber-500">medicamentos</span>
                                 </div>
-                                <p className="text-[10px] font-medium text-amber-700 mt-0.5">Lotes com validade próxima vs. consumo estimado</p>
+                                <p className="text-[10px] font-medium text-amber-700 mt-0.5">Lotes com validade próxima vs. consumo</p>
                             </div>
                         </div>
                     </div>
 
-                    {/* Card de Formulário de Configuração */}
+                    {/* Card de Formulário de Configuração & Parâmetros Administrativos */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         {/* Formulário Principal */}
                         <div className="lg:col-span-1 bg-white rounded-3xl p-6 border border-slate-200/60 shadow-sm flex flex-col justify-between space-y-6">
-                            <div>
-                                <div className="flex items-center gap-3 mb-4">
+                            <div className="space-y-5">
+                                <div className="flex items-center gap-3">
                                     <div className="p-3 rounded-2xl bg-pink-50 text-pink-600">
-                                        <AlertTriangle className="w-6 h-6" />
+                                        <Settings className="w-6 h-6" />
                                     </div>
                                     <div>
-                                        <h4 className="font-extrabold text-slate-800 text-base uppercase tracking-tight">Porcentagem Global de Alerta</h4>
-                                        <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Aplica-se sobre o estoque do dia 05</p>
+                                        <h4 className="font-extrabold text-slate-800 text-base uppercase tracking-tight">Parâmetros Administrativos</h4>
+                                        <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Configuração preditiva & alertas de estoque</p>
                                     </div>
                                 </div>
 
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-2">
-                                            Valor da Porcentagem (%)
+                                {/* Porcentagem Global de Alerta */}
+                                <div className="space-y-3 bg-slate-50/70 p-4 rounded-2xl border border-slate-100">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[11px] font-black uppercase tracking-wider text-slate-600">
+                                            Porcentagem Global de Alerta
                                         </label>
-                                        <div className="relative flex items-center">
-                                            <input
-                                                type="number"
-                                                min="1"
-                                                max="100"
-                                                value={globalAlertPercentage}
-                                                onChange={e => {
-                                                    const val = Math.min(100, Math.max(1, parseInt(e.target.value, 10) || 1));
-                                                    setGlobalAlertPercentage(val);
-                                                }}
-                                                className="w-full text-2xl font-black text-slate-900 bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 focus:bg-white focus:border-pink-500 outline-none transition-all pr-12"
-                                            />
-                                            <span className="absolute right-4 font-black text-slate-400 text-lg">%</span>
-                                        </div>
+                                        <span className="text-xs font-black text-pink-600 bg-pink-50 px-2 py-0.5 rounded-md">
+                                            {globalAlertPercentage}%
+                                        </span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 font-semibold leading-tight">
+                                        Aplica-se sobre o estoque do dia 05 para determinar o limiar de alerta amarelo.
+                                    </p>
+                                    <input
+                                        type="range"
+                                        min="5"
+                                        max="50"
+                                        step="1"
+                                        value={globalAlertPercentage}
+                                        onChange={e => setGlobalAlertPercentage(Number(e.target.value))}
+                                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-pink-600"
+                                    />
+                                    <div className="flex justify-between text-[9px] font-bold text-slate-400">
+                                        <span>5% (Restritivo)</span>
+                                        <span>20% (Recomendado)</span>
+                                        <span>50% (Amplo)</span>
+                                    </div>
+                                </div>
+
+                                {/* Prazo de Reposição e Margem de Segurança */}
+                                <div className="space-y-3 bg-purple-50/40 p-4 rounded-2xl border border-purple-100/70">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <Truck className="w-4 h-4 text-purple-600" />
+                                        <span className="text-[11px] font-black uppercase tracking-wider text-purple-950">
+                                            Prazo de Reposição & Segurança
+                                        </span>
                                     </div>
 
-                                    {/* Slider */}
-                                    <div>
-                                        <input
-                                            type="range"
-                                            min="5"
-                                            max="50"
-                                            step="1"
-                                            value={globalAlertPercentage}
-                                            onChange={e => setGlobalAlertPercentage(Number(e.target.value))}
-                                            className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-pink-600"
-                                        />
-                                        <div className="flex justify-between text-[10px] font-bold text-slate-400 mt-1">
-                                            <span>5% (Mais restritivo)</span>
-                                            <span>20% (Recomendado)</span>
-                                            <span>50% (Mais amplo)</span>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                                                Prazo Reposição (Lead Time)
+                                            </label>
+                                            <div className="relative flex items-center">
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    max="180"
+                                                    value={reposicaoLeadTime}
+                                                    onChange={e => setReposicaoLeadTime(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                                                    className="w-full text-base font-black text-slate-900 bg-white border border-slate-200 rounded-xl py-2 px-3 focus:border-purple-500 outline-none pr-10"
+                                                />
+                                                <span className="absolute right-3 text-[10px] font-black text-slate-400">dias</span>
+                                            </div>
+                                            <span className="block text-[9px] text-slate-400 font-medium mt-1 leading-tight">
+                                                Tramitação, compra e entrega do fornecedor
+                                            </span>
                                         </div>
-                                    </div>
 
-                                    {/* Botões de Preset Rápido */}
-                                    <div>
-                                        <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">
-                                            Valores Rápidos
-                                        </label>
-                                        <div className="grid grid-cols-4 gap-2">
-                                            {[10, 15, 20, 25, 30, 40, 50].map(pct => (
-                                                <button
-                                                    key={pct}
-                                                    type="button"
-                                                    onClick={() => setGlobalAlertPercentage(pct)}
-                                                    className={`py-2 rounded-xl text-xs font-black transition-all ${
-                                                        globalAlertPercentage === pct
-                                                            ? 'bg-pink-600 text-white shadow-md shadow-pink-500/30 scale-105'
-                                                            : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200/60'
-                                                    }`}
-                                                >
-                                                    {pct}%
-                                                </button>
-                                            ))}
+                                        <div>
+                                            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                                                Margem de Segurança
+                                            </label>
+                                            <div className="relative flex items-center">
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    max="90"
+                                                    value={reposicaoMargemSeguranca}
+                                                    onChange={e => setReposicaoMargemSeguranca(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                                                    className="w-full text-base font-black text-slate-900 bg-white border border-slate-200 rounded-xl py-2 px-3 focus:border-purple-500 outline-none pr-10"
+                                                />
+                                                <span className="absolute right-3 text-[10px] font-black text-slate-400">dias</span>
+                                            </div>
+                                            <span className="block text-[9px] text-slate-400 font-medium mt-1 leading-tight">
+                                                Estoque reserva antidesabastecimento
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
@@ -2782,69 +2287,91 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                 type="button"
                                 onClick={handleSaveConfig}
                                 disabled={savingConfig}
-                                className="w-full py-4 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-pink-600/20 active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                                className="w-full py-3.5 bg-gradient-to-r from-purple-700 via-pink-600 to-rose-600 hover:from-purple-800 hover:to-rose-700 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-purple-600/20 active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-4"
                             >
                                 {savingConfig ? (
                                     <>
                                         <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                        <span>Salvando...</span>
+                                        <span>Salvando Parâmetros...</span>
                                     </>
                                 ) : (
                                     <>
                                         <CheckCircle2 className="w-4 h-4" />
-                                        <span>Salvar Configuração Global</span>
+                                        <span>Salvar Parâmetros Administrativos</span>
                                     </>
                                 )}
                             </button>
                         </div>
 
-                        {/* Card Ilustrativo com Exemplo Prático */}
-                        <div className="lg:col-span-2 bg-gradient-to-br from-purple-50/70 via-slate-50 to-white rounded-3xl p-6 border border-purple-100/60 shadow-sm flex flex-col justify-between space-y-6">
+                        {/* Card Ilustrativo com Exemplo Prático e as 4 Perguntas */}
+                        <div className="lg:col-span-2 bg-gradient-to-br from-purple-50/70 via-slate-50 to-white rounded-3xl p-6 border border-purple-100/60 shadow-sm flex flex-col justify-between space-y-5">
                             <div>
-                                <div className="inline-flex items-center gap-2 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-[10px] font-black uppercase tracking-wider mb-4">
-                                    <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                                    Como a IA calcula a sugestão de compras?
+                                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-[10px] font-black uppercase tracking-wider">
+                                        <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                                        Inteligência Preditiva de Estoque
+                                    </div>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase">
+                                        Fórmula de Reposição Antecipada
+                                    </span>
                                 </div>
 
-                                <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight mb-2">
-                                    Inteligência Artificial de Previsão Mensal
+                                <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight mb-1">
+                                    Como a IA calcula a Data Recomendada de Compra?
                                 </h4>
 
-                                <p className="text-slate-600 text-xs font-medium leading-relaxed mb-6">
-                                    O algoritmo cruza o <strong>histórico real de saídas</strong> dos últimos meses, calcula a média diária de consumo, adiciona 20% de margem de segurança antidesabastecimento e previne compras excessivas em itens com risco de vencer.
+                                <p className="text-slate-600 text-xs font-medium leading-relaxed mb-4">
+                                    A IA cruza o histórico real de dispensação (7, 30 e 90 dias) com o estoque utilizável. A aquisição precisa ser iniciada <strong>antes</strong> de a cobertura atingir a soma do prazo de entrega ({reposicaoLeadTime} dias) com a margem de segurança ({reposicaoMargemSeguranca} dias), nunca aguardando a data de esgotamento.
                                 </p>
 
                                 {/* Simulação Visual de Exemplo */}
-                                <div className="bg-white rounded-2xl p-5 border border-purple-100 shadow-sm space-y-4">
-                                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                                        <span className="text-xs font-black text-slate-700 uppercase">Medicamento Exemplo:</span>
-                                        <span className="text-xs font-black text-purple-600 uppercase bg-purple-50 px-2.5 py-1 rounded-lg">DIPIRONA 500MG</span>
+                                <div className="bg-white rounded-2xl p-4 border border-purple-100 shadow-sm space-y-3">
+                                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[11px] font-black text-slate-700 uppercase">Exemplo Prático:</span>
+                                            <span className="text-xs font-black text-purple-700 uppercase bg-purple-50 px-2 py-0.5 rounded-md">DIPIRONA 500MG</span>
+                                        </div>
+                                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md uppercase">
+                                            Situação: NO PRAZO
+                                        </span>
                                     </div>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-                                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                            <span className="block text-[10px] font-bold text-slate-400 uppercase">Consumo Médio Estimado</span>
-                                            <span className="text-lg font-black text-slate-800">1.000 <span className="text-xs text-slate-500">un/mês</span></span>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
+                                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                            <span className="block text-[9px] font-bold text-slate-400 uppercase">Cobertura Estimada</span>
+                                            <span className="text-base font-black text-slate-800">85 <span className="text-[10px] text-slate-500">dias</span></span>
                                         </div>
-                                        <div className="bg-purple-50 p-3 rounded-xl border border-purple-100">
-                                            <span className="block text-[10px] font-bold text-purple-600 uppercase">Estoque Mensal Ideal (IA)</span>
-                                            <span className="text-lg font-black text-purple-700">1.200 <span className="text-xs text-purple-500">un</span></span>
+                                        <div className="bg-purple-50 p-2.5 rounded-xl border border-purple-100">
+                                            <span className="block text-[9px] font-bold text-purple-600 uppercase">Prazo Reposição</span>
+                                            <span className="text-base font-black text-purple-700">{reposicaoLeadTime} <span className="text-[10px] text-purple-500">dias</span></span>
                                         </div>
-                                        <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100">
-                                            <span className="block text-[10px] font-bold text-emerald-600 uppercase">Sugestão de Compra</span>
-                                            <span className="text-lg font-black text-emerald-700">
-                                                + 800 <span className="text-xs text-emerald-600">un</span>
+                                        <div className="bg-amber-50 p-2.5 rounded-xl border border-amber-100">
+                                            <span className="block text-[9px] font-bold text-amber-700 uppercase">Margem Segurança</span>
+                                            <span className="text-base font-black text-amber-800">{reposicaoMargemSeguranca} <span className="text-[10px] text-amber-600">dias</span></span>
+                                        </div>
+                                        <div className="bg-emerald-50 p-2.5 rounded-xl border border-emerald-100">
+                                            <span className="block text-[9px] font-bold text-emerald-700 uppercase">Iniciar Compra em</span>
+                                            <span className="text-base font-black text-emerald-800">
+                                                {Math.max(0, 85 - (reposicaoLeadTime + reposicaoMargemSeguranca))} <span className="text-[10px] text-emerald-600">dias</span>
                                             </span>
                                         </div>
                                     </div>
 
-                                    <div className="p-3 bg-purple-500/10 border border-purple-200/60 rounded-xl flex items-start gap-3">
-                                        <Sparkles className="w-5 h-5 text-purple-600 shrink-0 mt-0.5" />
-                                        <p className="text-xs text-purple-950 font-semibold leading-relaxed">
-                                            Com estoque atual de 400 un e consumo de 1.000 un/mês, a IA sugere comprar <strong>800 unidades</strong> para alcançar o Estoque Ideal de 1.200 un com margem de segurança.
+                                    <div className="p-3 bg-purple-500/10 border border-purple-200/60 rounded-xl flex items-start gap-2.5">
+                                        <Sparkles className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+                                        <p className="text-[11px] text-purple-950 font-semibold leading-relaxed">
+                                            Com cobertura de 85 dias, a compra deve iniciar com {reposicaoLeadTime + reposicaoMargemSeguranca} dias de antecedência (em <strong>{Math.max(0, 85 - (reposicaoLeadTime + reposicaoMargemSeguranca))} dias</strong>), garantindo o recebimento antes de qualquer risco de desabastecimento.
                                         </p>
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* As 4 Perguntas Chave Respondidas */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-100 text-[10px]">
+                                <div className="text-slate-500 font-bold">1. Quanto consumimos? <span className="text-purple-600 font-black block">Médias 7, 30 e 90d</span></div>
+                                <div className="text-slate-500 font-bold">2. Quanto tempo dura? <span className="text-purple-600 font-black block">Dias de Cobertura</span></div>
+                                <div className="text-slate-500 font-bold">3. Quando repor? <span className="text-purple-600 font-black block">Data Recomendada</span></div>
+                                <div className="text-slate-500 font-bold">4. Quanto adquirir? <span className="text-purple-600 font-black block">Sugestão de Compra</span></div>
                             </div>
                         </div>
                     </div>
@@ -2861,26 +2388,29 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                         Tabela de Configuração & Inteligência Preditiva por IA
                                     </h4>
                                     <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-0.5">
-                                        Análise em tempo real de estoque ideal, sugestão de compra e risco de vencimento
+                                        Data Estimada de Reposição, Cobertura Real e Situação Operacional
                                     </p>
                                 </div>
                             </div>
 
                             <div className="flex flex-wrap items-center gap-2.5">
-                                {/* Filtro por Diagnóstico */}
+                                {/* Filtro por Diagnóstico / Situação Operacional */}
                                 <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-2xs">
                                     <Filter className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                                    <span className="text-[10px] font-black uppercase text-slate-400 hidden sm:inline">Diagnóstico:</span>
+                                    <span className="text-[10px] font-black uppercase text-slate-400 hidden sm:inline">Situação:</span>
                                     <select
                                         value={configDiagnosticoFilter}
                                         onChange={(e) => setConfigDiagnosticoFilter(e.target.value as any)}
                                         className="text-xs font-bold text-slate-800 bg-transparent border-none p-0 outline-none cursor-pointer"
                                     >
-                                        <option value="TODOS">Todos os Diagnósticos</option>
-                                        <option value="RISCO_DESABASTECIMENTO">Comprar Urgente</option>
+                                        <option value="TODOS">Todas as Situações</option>
+                                        <option value="RISCO_DESABASTECIMENTO">Risco de Desabastecimento</option>
+                                        <option value="INICIAR_REPOSICAO">Iniciar Reposição</option>
+                                        <option value="PLANEJAR_COMPRA">Planejar Compra</option>
+                                        <option value="NO_PRAZO">No Prazo</option>
                                         <option value="RISCO_VENCIMENTO">Risco Vencimento</option>
                                         <option value="SUPERESTOCAGEM">Superestocado</option>
-                                        <option value="EQUILIBRADO">Ideal</option>
+                                        <option value="DADOS_INSUFICIENTES">Dados Insuficientes</option>
                                     </select>
                                 </div>
 
@@ -2919,23 +2449,24 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         </div>
 
                         <div className="overflow-x-auto custom-scrollbar">
-                            <table className="w-full text-left border-collapse min-w-[1050px]">
+                            <table className="w-full text-left border-collapse min-w-[1150px]">
                                 <thead>
                                     <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-500 text-[10px] font-black uppercase tracking-wider">
-                                        <th className="py-4 px-6 text-left w-[26%]">Medicamento</th>
-                                        <th className="py-4 px-3 text-center w-[10%]">Estoque Atual</th>
-                                        <th className="py-4 px-3 text-center w-[11%]">Estoque Dia 05</th>
-                                        <th className="py-4 px-3 text-center w-[14%] bg-purple-50/50 text-purple-900">Estoque Ideal IA</th>
-                                        <th className="py-4 px-3 text-center w-[13%] bg-purple-50/50 text-purple-900">Sugestão Compra</th>
-                                        <th className="py-4 px-6 text-center w-[23%]">Diagnóstico IA & Parecer</th>
+                                        <th className="py-4 px-6 text-left w-[24%]">Medicamento</th>
+                                        <th className="py-4 px-3 text-center w-[11%]">Estoque Utilizável</th>
+                                        <th className="py-4 px-3 text-center w-[13%] bg-purple-50/50 text-purple-900">Cobertura & Esgotamento</th>
+                                        <th className="py-4 px-3 text-center w-[14%] bg-purple-50/50 text-purple-900">Data Compra Recomendada</th>
+                                        <th className="py-4 px-3 text-center w-[10%]">Sugestão Compra</th>
+                                        <th className="py-4 px-4 text-center w-[16%]">Situação Operacional</th>
+                                        <th className="py-4 px-4 text-center w-[12%]">Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {configPreviewList.length > 0 ? (
                                         configPreviewList.map(med => {
-                                            const isCritical = med.quantidade <= med.thresholdCritical && med.quantidade > 0;
-                                            const isLow = med.quantidade <= med.thresholdLow && med.quantidade > med.thresholdCritical;
-                                            const isZero = med.quantidade === 0;
+                                            const reposicao = med.reposicaoIA;
+                                            const estoqueUtilizavel = reposicao?.estoqueUtilizavel ?? med.quantidade;
+                                            const temVencidos = (reposicao?.estoqueVencido || 0) > 0;
 
                                             return (
                                                 <tr key={med.id} className="hover:bg-purple-50/20 transition-colors text-xs text-slate-700">
@@ -2962,52 +2493,67 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                                         </div>
                                                     </td>
 
-                                                    {/* Estoque Atual */}
+                                                    {/* Estoque Utilizável */}
                                                     <td className="py-4 px-3 text-center">
-                                                        <span className={`inline-flex items-center justify-center px-3 py-1 rounded-xl text-xs font-black ${
-                                                            isZero || isCritical
+                                                        <span className={`inline-flex flex-col items-center justify-center px-3 py-1 rounded-xl text-xs font-black ${
+                                                            estoqueUtilizavel === 0
                                                                 ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                                                                : isLow
-                                                                ? 'bg-amber-50 text-amber-800 border border-amber-200'
                                                                 : 'bg-slate-100 text-slate-900'
                                                         }`}>
-                                                            {med.quantidade.toLocaleString('pt-BR')} <span className="text-[10px] font-bold opacity-75 ml-1">{med.unidade}</span>
+                                                            <span>{estoqueUtilizavel.toLocaleString('pt-BR')} <span className="text-[10px] font-bold opacity-75">{med.unidade}</span></span>
+                                                            {temVencidos && (
+                                                                <span className="text-[9px] text-amber-700 font-bold">(-{reposicao?.estoqueVencido} vencidos)</span>
+                                                            )}
                                                         </span>
                                                     </td>
 
-                                                    {/* Estoque no Dia 05 */}
-                                                    <td className="py-4 px-3 text-center">
-                                                        <span className="inline-flex items-center justify-center px-3 py-1 bg-slate-100/80 text-slate-800 font-extrabold rounded-xl text-xs">
-                                                            {med.estoqueDia05.toLocaleString('pt-BR')} <span className="text-[10px] font-bold text-slate-400 ml-1">{med.unidade}</span>
-                                                        </span>
-                                                    </td>
-
-                                                    {/* Estoque Mensal Ideal IA */}
-                                                    <td className="py-4 px-3 text-center bg-purple-50/30 font-black">
-                                                        {!med.isEstoqueAtivo ? (
-                                                            <span className="text-slate-400 font-bold text-xs">-</span>
-                                                        ) : med.statusIA === 'ANALISANDO' ? (
-                                                            <span className="inline-flex items-center justify-center px-3 py-1 bg-purple-50 text-purple-700 rounded-xl text-xs font-bold border border-purple-200">
-                                                                <Sparkles className="w-3 h-3 mr-1 text-purple-600 animate-spin" /> Analisando
-                                                            </span>
+                                                    {/* Cobertura & Data Estimada de Esgotamento */}
+                                                    <td className="py-4 px-3 text-center bg-purple-50/20">
+                                                        {reposicao?.diasCobertura !== null && reposicao?.diasCobertura !== undefined ? (
+                                                            <div>
+                                                                <span className="font-black text-slate-900 text-xs">
+                                                                    {reposicao.diasCobertura} dias
+                                                                </span>
+                                                                <span className="block text-[10px] font-bold text-slate-400">
+                                                                    Esgota: {reposicao.dataEstimadaEsgotamentoStr}
+                                                                </span>
+                                                            </div>
                                                         ) : (
-                                                            <span className="inline-flex items-center justify-center px-3 py-1 bg-purple-100/80 text-purple-900 rounded-xl text-xs border border-purple-200/60 font-black">
-                                                                {med.estoqueIdealIA.toLocaleString('pt-BR')} <span className="text-[10px] font-bold text-purple-600 ml-1">{med.unidade}</span>
+                                                            <span className="text-slate-400 text-[11px] font-bold">
+                                                                Dados insuficientes
                                                             </span>
                                                         )}
                                                     </td>
 
+                                                    {/* Data Recomendada para Iniciar a Compra */}
+                                                    <td className="py-4 px-3 text-center bg-purple-50/20">
+                                                        {reposicao?.dataRecomendadaCompraStr && reposicao.dataRecomendadaCompraStr !== 'Dados insuficientes' ? (
+                                                            <div>
+                                                                <span className="font-black text-purple-950 text-xs">
+                                                                    {reposicao.dataRecomendadaCompraStr}
+                                                                </span>
+                                                                {reposicao.diasAteCompraRecomendada !== null && (
+                                                                    <span className={`block text-[10px] font-black ${
+                                                                        reposicao.diasAteCompraRecomendada <= 0 
+                                                                            ? 'text-rose-600' 
+                                                                            : reposicao.diasAteCompraRecomendada <= 15 
+                                                                            ? 'text-amber-600' 
+                                                                            : 'text-emerald-600'
+                                                                    }`}>
+                                                                        {reposicao.diasAteCompraRecomendada <= 0 
+                                                                            ? 'Imediata' 
+                                                                            : `em ${reposicao.diasAteCompraRecomendada} dias`}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-slate-400 text-[11px] font-bold">-</span>
+                                                        )}
+                                                    </td>
+
                                                     {/* Sugestão de Compra IA */}
-                                                    <td className="py-4 px-3 text-center bg-purple-50/30">
-                                                        {!med.isEstoqueAtivo ? (
-                                                            <span className="inline-flex items-center justify-center px-3 py-1 bg-slate-100 text-slate-400 rounded-xl text-xs font-semibold">
-                                                                Sem Análise
-                                                            </span>
-                                                        ) : med.statusIA === 'ANALISANDO' ? (
-                                                            <span className="inline-flex items-center justify-center px-3 py-1 bg-slate-100 text-slate-500 rounded-xl text-xs font-bold">
-                                                                Analisando
-                                                            </span>
-                                                        ) : med.sugestaoCompra > 0 ? (
+                                                    <td className="py-4 px-3 text-center">
+                                                        {med.sugestaoCompra > 0 ? (
                                                             <span className="inline-flex items-center justify-center px-3 py-1 bg-emerald-100 text-emerald-800 rounded-xl text-xs font-black border border-emerald-200">
                                                                 + {med.sugestaoCompra.toLocaleString('pt-BR')} <span className="text-[10px] font-bold text-emerald-600 ml-1">{med.unidade}</span>
                                                             </span>
@@ -3018,248 +2564,46 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                                         )}
                                                     </td>
 
-                                                    {/* Diagnóstico IA & Parecer */}
-                                                    <td className="py-4 px-6 text-center">
-                                                        <div className="flex items-center justify-center gap-2">
-                                                            {!med.isEstoqueAtivo ? (
-                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 border border-slate-200">
-                                                                    Sem Análise
-                                                                </span>
-                                                            ) : med.statusIA === 'ANALISANDO' ? (
-                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-200 shadow-xs">
-                                                                    <Sparkles className="w-3 h-3 mr-1 text-purple-600 animate-pulse" /> Analisando
-                                                                </span>
-                                                            ) : med.statusIA === 'RISCO_DESABASTECIMENTO' ? (
-                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-red-100 text-red-800 border border-red-200 animate-pulse">
-                                                                    Comprar Urgente
-                                                                </span>
-                                                            ) : med.statusIA === 'RISCO_VENCIMENTO' ? (
-                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
-                                                                    Risco Vencimento
-                                                                </span>
-                                                            ) : med.statusIA === 'SUPERESTOCAGEM' ? (
-                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-200">
-                                                                    Superestocado
-                                                                </span>
-                                                            ) : (
-                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                                                    Ideal
-                                                                </span>
-                                                            )}
+                                                    {/* Situação Operacional (Badge Padronizado dos 5 Estados) */}
+                                                    <td className="py-4 px-4 text-center">
+                                                        {reposicao ? (
+                                                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border shadow-2xs ${reposicao.situacaoColorClass.badge}`}>
+                                                                {reposicao.situacaoOperacionalLabel}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500">
+                                                                DADOS INSUFICIENTES
+                                                            </span>
+                                                        )}
+                                                    </td>
 
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setSelectedIAMed(med);
-                                                                    setIsIAModalOpen(true);
-                                                                }}
-                                                                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-800 text-[10px] font-extrabold transition-all flex items-center gap-1 cursor-pointer"
-                                                                title="Ver Parecer Detalhado da IA"
-                                                            >
-                                                                <Sparkles className="w-3 h-3 text-purple-600" />
-                                                                <span>Parecer IA</span>
-                                                            </button>
-                                                        </div>
+                                                    {/* Ações */}
+                                                    <td className="py-4 px-4 text-center">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setSelectedIAMed(med);
+                                                                setIsIAModalOpen(true);
+                                                            }}
+                                                            className="px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer mx-auto border border-purple-200/60 shadow-2xs hover:scale-105 active:scale-95"
+                                                            title="Ver Parecer Detalhado e Auditoria da IA"
+                                                        >
+                                                            <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                                                            <span>Parecer IA</span>
+                                                        </button>
                                                     </td>
                                                 </tr>
                                             );
                                         })
                                     ) : (
                                         <tr>
-                                            <td colSpan={6} className="p-8 text-center text-slate-400 font-bold text-xs uppercase">
-                                                Nenhum medicamento encontrado.
+                                            <td colSpan={7} className="p-8 text-center text-slate-400 font-bold text-xs uppercase">
+                                                Nenhum medicamento encontrado nos critérios selecionados.
                                             </td>
                                         </tr>
                                     )}
                                 </tbody>
                             </table>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Modal de Cadastro de Medicamento de Alto Custo */}
-            {isAltoCustoModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200/50 flex flex-col animate-in zoom-in-95 duration-200">
-                        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <div>
-                                <h3 className="font-black text-pink-600 uppercase text-lg tracking-wide flex items-center gap-2">
-                                    <Plus className="w-5 h-5" />
-                                    Cadastrar Medicamento de Alto Custo
-                                </h3>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Preencha os dados do medicamento especial de alto custo</p>
-                            </div>
-                            <button onClick={() => setIsAltoCustoModalOpen(false)} className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-                        
-                        <form onSubmit={handleCreateAltoCusto} className="p-6 space-y-4">
-                            <div>
-                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Nome do Medicamento *</label>
-                                <input
-                                    type="text"
-                                    required
-                                    placeholder="EX: ADALIMUMABE"
-                                    value={acNome}
-                                    onChange={e => setAcNome(e.target.value)}
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm font-semibold text-slate-900 uppercase focus:bg-white focus:border-pink-500 outline-none transition-all"
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Princípio Ativo</label>
-                                    <input
-                                        type="text"
-                                        placeholder="EX: ADALIMUMABE 40MG"
-                                        value={acPrincipioAtivo}
-                                        onChange={e => setAcPrincipioAtivo(e.target.value)}
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm font-semibold text-slate-900 uppercase focus:bg-white focus:border-pink-500 outline-none transition-all"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Forma Farmacêutica *</label>
-                                    <input
-                                        type="text"
-                                        required
-                                        placeholder="EX: Solução Injetável, Comprimido..."
-                                        value={acTipo}
-                                        onChange={e => setAcTipo(e.target.value)}
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm font-semibold text-slate-900 focus:bg-white focus:border-pink-500 outline-none transition-all"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Dosagem (Ex: 40mg, 100mg/mL)</label>
-                                    <input
-                                        type="text"
-                                        placeholder="EX: 40mg"
-                                        value={acDosagem}
-                                        onChange={e => setAcDosagem(e.target.value)}
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm font-semibold text-slate-900 focus:bg-white focus:border-pink-500 outline-none transition-all"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Categoria *</label>
-                                    <select
-                                        value={acCategoria}
-                                        onChange={e => setAcCategoria(e.target.value as any)}
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm font-semibold text-slate-900 focus:bg-white focus:border-pink-500 outline-none transition-all cursor-pointer"
-                                    >
-                                        <option value="CEAF">Componente Especializado (CEAF)</option>
-                                        <option value="CESAF">Componente Estratégico (CESAF)</option>
-                                        <option value="CBAF">Componente Básico (CBAF)</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Lote</label>
-                                    <input
-                                        type="text"
-                                        placeholder="EX: LOTE123"
-                                        value={acLote}
-                                        onChange={e => setAcLote(e.target.value)}
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm font-semibold text-slate-900 uppercase focus:bg-white focus:border-pink-500 outline-none transition-all"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Validade</label>
-                                    <input
-                                        type="date"
-                                        value={acValidade}
-                                        onChange={e => setAcValidade(e.target.value)}
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm font-semibold text-slate-900 focus:bg-white focus:border-pink-500 outline-none transition-all"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Quantidade Inicial em Estoque</label>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        value={acQuantidade}
-                                        onChange={e => setAcQuantidade(e.target.value)}
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm font-semibold text-slate-900 focus:bg-white focus:border-pink-500 outline-none transition-all"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Limite Mínimo (Alerta)</label>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        value={acLimiteMinimo}
-                                        onChange={e => setAcLimiteMinimo(e.target.value)}
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm font-semibold text-slate-900 focus:bg-white focus:border-pink-500 outline-none transition-all"
-                                    />
-                                </div>
-                            </div>
-
-                            <button
-                                type="submit"
-                                disabled={acSaving}
-                                className="w-full py-3.5 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-98 mt-2 cursor-pointer"
-                            >
-                                {acSaving ? 'Salvando...' : 'Cadastrar Medicamento de Alto Custo'}
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {isOrderModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
-                                <ShoppingCart className="w-5 h-5 text-pink-600" />
-                                Resumo do Pedido de Compras
-                            </h3>
-                            <button onClick={() => setIsOrderModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold p-2">
-                                X
-                            </button>
-                        </div>
-                        <div className="p-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr>
-                                        <th className="pb-3 text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-100">Medicamento</th>
-                                        <th className="pb-3 text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 text-right">Qtd Solicitada</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {Object.values(selectedCompras).map((item, index) => (
-                                        <tr key={index} className="border-b border-slate-50 last:border-0">
-                                            <td className="py-3 text-sm font-bold text-slate-700">{item.nome}</td>
-                                            <td className="py-3 text-sm font-bold text-slate-600 text-right">{item.quantidade} {item.unidade}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-                            <button 
-                                onClick={handleDownloadPDF}
-                                className="px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2"
-                            >
-                                <FileDown className="w-4 h-4 text-slate-500" />
-                                Baixar PDF
-                            </button>
-                            <button 
-                                onClick={handleSendOrder}
-                                disabled={isSubmittingOrder}
-                                className="px-5 py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {isSubmittingOrder ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <ShoppingCart className="w-4 h-4" />}
-                                Enviar para o Compras
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -3291,58 +2635,166 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 />
             )}
 
-            {/* Modal de Parecer Detalhado da IA */}
+            {/* Modal de Parecer Detalhado da IA: DATA ESTIMADA DE NECESSIDADE DE REPOSIÇÃO */}
             {isIAModalOpen && selectedIAMed && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-6">
-                        <div className="flex items-start justify-between">
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200 overflow-y-auto">
+                    <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 my-8 max-h-[90vh] overflow-y-auto custom-scrollbar">
+                        {/* Header */}
+                        <div className="flex items-start justify-between pb-3 border-b border-slate-100">
                             <div className="flex items-center gap-3">
-                                <div className="p-3 bg-gradient-to-br from-purple-500 to-pink-600 text-white rounded-2xl shadow-md">
+                                <div className="p-3 bg-gradient-to-br from-purple-600 to-indigo-600 text-white rounded-2xl shadow-md">
                                     <Sparkles className="w-6 h-6 animate-pulse" />
                                 </div>
                                 <div>
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-purple-600">Inteligência Artificial Preditiva</span>
-                                    <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">{selectedIAMed.nome}</h3>
-                                    <p className="text-xs font-semibold text-slate-400">{selectedIAMed.dosagem} • {selectedIAMed.categoria} ({selectedIAMed.tipo || 'Geral'})</p>
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-purple-600">
+                                        Inteligência Preditiva de Estoque
+                                    </span>
+                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">{selectedIAMed.nome}</h3>
+                                    <p className="text-xs font-semibold text-slate-400">
+                                        {selectedIAMed.dosagem || 'Sem dosagem'} • {selectedIAMed.categoria} ({selectedIAMed.tipo || 'Geral'})
+                                    </p>
                                 </div>
                             </div>
                             <button
                                 onClick={() => setIsIAModalOpen(false)}
-                                className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition-colors"
+                                className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
                             >
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
 
-                        {/* Métricas da IA */}
-                        <div className="grid grid-cols-2 gap-3">
+                        {/* Banner do Novo Indicador Visual: DATA ESTIMADA DE NECESSIDADE DE REPOSIÇÃO */}
+                        <div className={`p-4 rounded-2xl border ${selectedIAMed.reposicaoIA?.situacaoColorClass.bg || 'bg-slate-50'} ${selectedIAMed.reposicaoIA?.situacaoColorClass.border || 'border-slate-200'} flex flex-col sm:flex-row sm:items-center justify-between gap-3`}>
+                            <div>
+                                <span className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                    Indicador Estratégico
+                                </span>
+                                <h4 className="text-sm font-black uppercase tracking-tight text-slate-900">
+                                    DATA ESTIMADA DE NECESSIDADE DE REPOSIÇÃO
+                                </h4>
+                            </div>
+                            <span className={`inline-flex items-center self-start sm:self-auto px-3.5 py-1.5 rounded-full text-xs font-black uppercase tracking-wider border shadow-xs ${selectedIAMed.reposicaoIA?.situacaoColorClass.badge || 'bg-slate-100 text-slate-700'}`}>
+                                {selectedIAMed.reposicaoIA?.situacaoOperacionalLabel || 'DADOS INSUFICIENTES'}
+                            </span>
+                        </div>
+
+                        {/* Grade de 6 Métricas Chave da Reposição Preditiva */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                             <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
-                                <span className="block text-[10px] font-bold text-slate-400 uppercase">Estoque Atual</span>
-                                <span className="text-base font-black text-slate-800">{selectedIAMed.quantidade.toLocaleString('pt-BR')} {selectedIAMed.unidade}</span>
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase">Cobertura Atual</span>
+                                <span className="text-lg font-black text-slate-800">
+                                    {selectedIAMed.reposicaoIA?.diasCobertura !== null && selectedIAMed.reposicaoIA?.diasCobertura !== undefined
+                                        ? `${selectedIAMed.reposicaoIA.diasCobertura} dias`
+                                        : 'Dados insuficientes'}
+                                </span>
+                                <span className="block text-[9px] text-slate-400 mt-0.5">Estoque utilizável / consumo dia</span>
                             </div>
-                            <div className="bg-purple-50 p-3.5 rounded-2xl border border-purple-100">
-                                <span className="block text-[10px] font-bold text-purple-600 uppercase">Estoque Ideal IA / Mês</span>
-                                <span className="text-base font-black text-purple-700">{selectedIAMed.estoqueIdealIA.toLocaleString('pt-BR')} {selectedIAMed.unidade}</span>
+
+                            <div className="bg-purple-50/70 p-3.5 rounded-2xl border border-purple-100">
+                                <span className="block text-[10px] font-bold text-purple-700 uppercase">Data de Esgotamento</span>
+                                <span className="text-lg font-black text-purple-900">
+                                    {selectedIAMed.reposicaoIA?.dataEstimadaEsgotamentoStr || 'Sem previsão'}
+                                </span>
+                                <span className="block text-[9px] text-purple-600 mt-0.5">Estimativa sem novas entradas</span>
                             </div>
-                            <div className="bg-amber-50 p-3.5 rounded-2xl border border-amber-100">
-                                <span className="block text-[10px] font-bold text-amber-700 uppercase">Consumo Mensal Estimado</span>
-                                <span className="text-base font-black text-amber-800">{selectedIAMed.demandaMensal.toLocaleString('pt-BR')} {selectedIAMed.unidade}/mês</span>
+
+                            <div className="bg-indigo-50/70 p-3.5 rounded-2xl border border-indigo-100">
+                                <span className="block text-[10px] font-bold text-indigo-700 uppercase">Data Recomendada Compra</span>
+                                <span className="text-lg font-black text-indigo-900">
+                                    {selectedIAMed.reposicaoIA?.dataRecomendadaCompraStr || 'Sem previsão'}
+                                </span>
+                                <span className="block text-[9px] text-indigo-600 mt-0.5">
+                                    {selectedIAMed.reposicaoIA?.diasAteCompraRecomendada !== null
+                                        ? selectedIAMed.reposicaoIA.diasAteCompraRecomendada <= 0
+                                            ? 'Compra Imediata'
+                                            : `em ${selectedIAMed.reposicaoIA.diasAteCompraRecomendada} dias`
+                                        : '-'}
+                                </span>
                             </div>
-                            <div className="bg-emerald-50 p-3.5 rounded-2xl border border-emerald-100">
-                                <span className="block text-[10px] font-bold text-emerald-700 uppercase">Sugestão de Compra</span>
-                                <span className="text-base font-black text-emerald-800">{selectedIAMed.sugestaoCompra.toLocaleString('pt-BR')} {selectedIAMed.unidade}</span>
+
+                            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase">Prazo de Reposição</span>
+                                <span className="text-lg font-black text-slate-800">
+                                    {selectedIAMed.reposicaoIA?.prazoReposicaoDias || reposicaoLeadTime} <span className="text-xs text-slate-500">dias</span>
+                                </span>
+                                <span className="block text-[9px] text-slate-400 mt-0.5">Lead time administrativo/entrega</span>
+                            </div>
+
+                            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase">Margem de Segurança</span>
+                                <span className="text-lg font-black text-slate-800">
+                                    {selectedIAMed.reposicaoIA?.margemSegurancaDias || reposicaoMargemSeguranca} <span className="text-xs text-slate-500">dias</span>
+                                </span>
+                                <span className="block text-[9px] text-slate-400 mt-0.5">Resguardo antidesabastecimento</span>
+                            </div>
+
+                            <div className="bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-100">
+                                <span className="block text-[10px] font-bold text-emerald-700 uppercase">Quantidade Sugerida</span>
+                                <span className="text-lg font-black text-emerald-900">
+                                    {selectedIAMed.sugestaoCompra > 0 
+                                        ? `+ ${selectedIAMed.sugestaoCompra.toLocaleString('pt-BR')} ${selectedIAMed.unidade}` 
+                                        : '0 un (Não comprar)'}
+                                </span>
+                                <span className="block text-[9px] text-emerald-600 mt-0.5">Para meta de 30d + segurança</span>
                             </div>
                         </div>
 
-                        {/* Parecer IA */}
-                        <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-100 rounded-2xl space-y-2">
+                        {/* Auditoria das Médias de Consumo Real (7, 30 e 90 dias) e Estoque */}
+                        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/60 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                                    <Layers className="w-3.5 h-3.5 text-purple-600" />
+                                    Auditoria de Dados Reais de Dispensação & Estoque
+                                </span>
+                                <span className="text-[10px] font-bold text-slate-400">
+                                    Confiabilidade: <strong className="text-slate-700">{selectedIAMed.reposicaoIA?.parametrosUtilizados.confiabilidadeHistorico || 'ALTA'}</strong>
+                                </span>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                                <div className="bg-white p-2.5 rounded-xl border border-slate-200/60">
+                                    <span className="block text-[9px] font-black text-slate-400 uppercase">Últimos 7 dias</span>
+                                    <span className="font-black text-slate-800">{selectedIAMed.reposicaoIA?.consumo7dTotal || 0} un</span>
+                                    <span className="block text-[9px] text-slate-500 font-bold">({selectedIAMed.reposicaoIA?.consumo7dDiario || 0} un/dia)</span>
+                                </div>
+                                <div className="bg-white p-2.5 rounded-xl border border-slate-200/60">
+                                    <span className="block text-[9px] font-black text-slate-400 uppercase">Últimos 30 dias</span>
+                                    <span className="font-black text-slate-800">{selectedIAMed.reposicaoIA?.consumo30dTotal || 0} un</span>
+                                    <span className="block text-[9px] text-slate-500 font-bold">({selectedIAMed.reposicaoIA?.consumo30dDiario || 0} un/dia)</span>
+                                </div>
+                                <div className="bg-white p-2.5 rounded-xl border border-slate-200/60">
+                                    <span className="block text-[9px] font-black text-slate-400 uppercase">Últimos 90 dias</span>
+                                    <span className="font-black text-slate-800">{selectedIAMed.reposicaoIA?.consumo90dTotal || 0} un</span>
+                                    <span className="block text-[9px] text-slate-500 font-bold">({selectedIAMed.reposicaoIA?.consumo90dDiario || 0} un/dia)</span>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/60 text-[10px] text-slate-600 font-bold">
+                                <div>
+                                    Estoque Físico Total: <span className="font-black text-slate-900">{selectedIAMed.quantidade} {selectedIAMed.unidade}</span>
+                                </div>
+                                <div>
+                                    Lotes Vencidos Excluídos: <span className="font-black text-rose-600">{selectedIAMed.reposicaoIA?.estoqueVencido || 0} {selectedIAMed.unidade}</span>
+                                </div>
+                                <div>
+                                    Estoque Utilizável Líquido: <span className="font-black text-purple-700">{selectedIAMed.reposicaoIA?.estoqueUtilizavel ?? selectedIAMed.quantidade} {selectedIAMed.unidade}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Parecer IA & Transparência Objetiva */}
+                        <div className="p-4 bg-gradient-to-br from-purple-50/80 via-white to-pink-50/60 border border-purple-100 rounded-2xl space-y-2.5">
                             <div className="flex items-center gap-2 text-xs font-black text-purple-900 uppercase">
                                 <Sparkles className="w-4 h-4 text-purple-600" />
-                                <span>Parecer Preditivo do Algoritmo IA</span>
+                                <span>Explicação Objetiva & Transparência da Recomendação</span>
                             </div>
                             <p className="text-xs font-semibold text-slate-700 leading-relaxed">
-                                {selectedIAMed.parecerIA}
+                                {selectedIAMed.reposicaoIA?.explicacaoObjetiva || selectedIAMed.parecerIA}
                             </p>
+                            <div className="text-[10px] text-slate-400 font-medium pt-2 border-t border-purple-100/60 flex items-center justify-between">
+                                <span>Fórmula: Dias Cobertura = Estoque Utilizável / Consumo Diário Projetado</span>
+                                <span className="italic">Estimativa preditiva de apoio ao planejamento administrativo</span>
+                            </div>
                         </div>
 
                         <button

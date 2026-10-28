@@ -64,7 +64,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
     const showNovoAgendamento = (subView === 'novo-agendamento' || (subView?.startsWith('novo-agendamento') ?? false) || subView === 'vagas-reservadas') && canAccessNovoAgendamento;
     const showLiberarVagas = (subView === 'liberar-vagas') && canAccessLiberarVagas;
     const showAcompanhar = (subView === 'acompanhar' || subView === 'definir-agenda') && canAccessAcompanhar;
-    const showProcedimentos = (subView === 'procedimentos') && canAccessProcedimentos;
+    const showProcedimentos = (subView === 'procedimentos' || subView === 'procedimentos-revisar-duplicidades') && canAccessProcedimentos;
     const showDados = (subView === 'dados' || (subView?.startsWith('dados') ?? false)) && canAccessDados;
     const showPacientes = (subView === 'pacientes') && canAccessPacientes;
     const showGestor = (subView === 'gestor') && canAccessGestor;
@@ -321,6 +321,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                             currentUser={currentUser}
                             onBack={() => onNavigate('consultas')}
                             onNavigate={onNavigate}
+                            subView={subView}
                         />
                     ) : showPacientes ? (
                         <div className="w-full flex-1 flex flex-col h-full max-h-full min-h-0 bg-transparent overflow-hidden animate-in fade-in duration-200">

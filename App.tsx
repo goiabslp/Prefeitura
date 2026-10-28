@@ -239,6 +239,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'licitacao:kanban-view': '/Licitacao/Kanban/view',
   'consultas': '/Regulacao',
   'consultas:procedimentos': '/Regulacao/Procedimentos',
+  'consultas:procedimentos-revisar-duplicidades': '/Regulacao/Procedimentos/RevisarDuplicidades',
   'consultas:pacientes': '/Regulacao/Pacientes',
   'consultas:novo-agendamento': '/Regulacao/NovoAgendamento',
   'consultas:novo-agendamento-paciente': '/Regulacao/NovoAgendamento/Paciente',
@@ -275,16 +276,12 @@ const VIEW_TO_PATH: Record<string, string> = {
   'farmacia:estoque': '/FarmaciaPopular/Estoque',
   'farmacia:dados': '/FarmaciaPopular/Dados',
   'farmacia:historico': '/FarmaciaPopular/Historico',
-  'farmacia:dashboard': '/FarmaciaPopular/Dashboard',
+  'farmacia:dashboard': '/FarmaciaPopular/Dashboard/VisaoGeral',
   'farmacia:dashboard-geral': '/FarmaciaPopular/Dashboard/VisaoGeral',
   'farmacia:dashboard-medicos': '/FarmaciaPopular/Dashboard/VisaoGeral/Medicos',
-  'farmacia:dashboard-medicamentos': '/FarmaciaPopular/Dashboard/Medicamentos',
-  'farmacia:dashboard-pacientes': '/FarmaciaPopular/Dashboard/Pacientes',
   'farmacia:dashboard-operacoes': '/FarmaciaPopular/Dashboard/Operacoes',
-  'farmacia:dashboard-relatorios': '/FarmaciaPopular/Dashboard/Relatorios',
   'farmacia:dashboard-rename': '/FarmaciaPopular/Dashboard/Rename',
-  'farmacia:dashboard-alto-custo': '/FarmaciaPopular/Dashboard/AltoCusto',
-  'farmacia:dashboard-configuracao': '/FarmaciaPopular/Dashboard/Configuracao',
+  'farmacia:dashboard-analise-inteligente': '/FarmaciaPopular/Dashboard/AnaliseInteligente',
   'farmacia:gestor': '/FarmaciaPopular/Gestor',
   'noticias': '/Noticias',
   'noticias:tour': '/Noticias/Tour',
@@ -2477,6 +2474,40 @@ const App: React.FC = () => {
       if (lookupPath.startsWith('/farmaciapopular/pacientes')) {
         setCurrentView('farmacia');
         setAppState(prev => ({ ...prev, view: 'pacientes' }));
+        setActiveBlock(null);
+        setIsAdminSidebarOpen(false);
+        return;
+      }
+
+      if (lookupPath.startsWith('/farmaciapopular/dashboard')) {
+        setCurrentView('farmacia');
+        if (lookupPath === '/farmaciapopular/dashboard/analiseinteligente') {
+          setAppState(prev => ({ ...prev, view: 'dashboard-analise-inteligente' }));
+        } else if (lookupPath === '/farmaciapopular/dashboard/configuracao') {
+          // Redirecionamento retrocompatível de /Configuracao para /AnaliseInteligente
+          setAppState(prev => ({ ...prev, view: 'dashboard-analise-inteligente' }));
+          window.history.replaceState({}, '', '/FarmaciaPopular/Dashboard/AnaliseInteligente');
+        } else if (
+          lookupPath === '/farmaciapopular/dashboard/medicamentos' ||
+          lookupPath === '/farmaciapopular/dashboard/pacientes' ||
+          lookupPath === '/farmaciapopular/dashboard/relatorios' ||
+          lookupPath === '/farmaciapopular/dashboard/altocusto'
+        ) {
+          // Abas removidas definitivamente -> redireciona para VisaoGeral
+          setAppState(prev => ({ ...prev, view: 'dashboard-geral' }));
+          window.history.replaceState({}, '', '/FarmaciaPopular/Dashboard/VisaoGeral');
+        } else if (lookupPath === '/farmaciapopular/dashboard/visaogeral/medicos' || lookupPath === '/farmaciapopular/dashboard/medicos') {
+          setAppState(prev => ({ ...prev, view: 'dashboard-medicos' }));
+        } else if (lookupPath === '/farmaciapopular/dashboard/operacoes') {
+          setAppState(prev => ({ ...prev, view: 'dashboard-operacoes' }));
+        } else if (lookupPath === '/farmaciapopular/dashboard/rename') {
+          setAppState(prev => ({ ...prev, view: 'dashboard-rename' }));
+        } else {
+          setAppState(prev => ({ ...prev, view: 'dashboard-geral' }));
+          if (lookupPath !== '/farmaciapopular/dashboard/visaogeral') {
+            window.history.replaceState({}, '', '/FarmaciaPopular/Dashboard/VisaoGeral');
+          }
+        }
         setActiveBlock(null);
         setIsAdminSidebarOpen(false);
         return;
@@ -6611,6 +6642,9 @@ timestamp: ${new Date().toISOString()}`);
                   } else if (view === 'consultas:procedimentos') {
                     setAppState(prev => ({ ...prev, view: 'procedimentos' }));
                     window.history.pushState({}, '', '/Regulacao/Procedimentos');
+                  } else if (view === 'consultas:procedimentos-revisar-duplicidades') {
+                    setAppState(prev => ({ ...prev, view: 'procedimentos-revisar-duplicidades' }));
+                    window.history.pushState({}, '', '/Regulacao/Procedimentos/RevisarDuplicidades');
                   } else if (view === 'consultas:pacientes') {
                     setAppState(prev => ({ ...prev, view: 'pacientes' }));
                     window.history.pushState({}, '', '/Regulacao/Pacientes');
@@ -6736,33 +6770,29 @@ timestamp: ${new Date().toISOString()}`);
                   } else if (view === 'farmacia:gestor') {
                     setAppState(prev => ({ ...prev, view: 'gestor' }));
                     window.history.pushState({}, '', '/FarmaciaPopular/Gestor');
-                  } else if (view === 'farmacia:dashboard') {
-                    setAppState(prev => ({ ...prev, view: 'dashboard-geral' }));
-                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/VisaoGeral');
-                  } else if (view === 'farmacia:dashboard-geral') {
+                  } else if (view === 'farmacia:dashboard' || view === 'farmacia:dashboard-geral') {
                     setAppState(prev => ({ ...prev, view: 'dashboard-geral' }));
                     window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/VisaoGeral');
                   } else if (view === 'farmacia:dashboard-medicos') {
                     setAppState(prev => ({ ...prev, view: 'dashboard-medicos' }));
                     window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/VisaoGeral/Medicos');
-                  } else if (view === 'farmacia:dashboard-medicamentos') {
-                    setAppState(prev => ({ ...prev, view: 'dashboard-medicamentos' }));
-                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/Medicamentos');
-                  } else if (view === 'farmacia:dashboard-pacientes') {
-                    setAppState(prev => ({ ...prev, view: 'dashboard-pacientes' }));
-                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/Pacientes');
-                  } else if (view === 'farmacia:dashboard-relatorios') {
-                    setAppState(prev => ({ ...prev, view: 'dashboard-relatorios' }));
-                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/Relatorios');
+                  } else if (view === 'farmacia:dashboard-operacoes') {
+                    setAppState(prev => ({ ...prev, view: 'dashboard-operacoes' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/Operacoes');
                   } else if (view === 'farmacia:dashboard-rename') {
                     setAppState(prev => ({ ...prev, view: 'dashboard-rename' }));
                     window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/Rename');
-                  } else if (view === 'farmacia:dashboard-alto-custo') {
-                    setAppState(prev => ({ ...prev, view: 'dashboard-alto-custo' }));
-                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/AltoCusto');
-                  } else if (view === 'farmacia:dashboard-configuracao') {
-                    setAppState(prev => ({ ...prev, view: 'dashboard-configuracao' }));
-                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/Configuracao');
+                  } else if (view === 'farmacia:dashboard-analise-inteligente' || view === 'farmacia:dashboard-configuracao') {
+                    setAppState(prev => ({ ...prev, view: 'dashboard-analise-inteligente' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/AnaliseInteligente');
+                  } else if (
+                    view === 'farmacia:dashboard-medicamentos' ||
+                    view === 'farmacia:dashboard-pacientes' ||
+                    view === 'farmacia:dashboard-relatorios' ||
+                    view === 'farmacia:dashboard-alto-custo'
+                  ) {
+                    setAppState(prev => ({ ...prev, view: 'dashboard-geral' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/VisaoGeral');
                   } else if (view === 'farmacia') {
                     setAppState(prev => ({ ...prev, view: undefined }));
                     window.history.pushState({}, '', '/FarmaciaPopular');

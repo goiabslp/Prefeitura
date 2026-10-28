@@ -943,8 +943,15 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         const procCodeWords = rawCode ? rawCode.split(/[^a-z0-9]+/).filter(Boolean) : [];
 
         // Cada termo digitado deve bater com o início de alguma palavra do nome ou do código
-        return queryTerms.every(term => {
-            const matchesName = procNameWords.some(word => word.startsWith(term));
+        return queryTerms.every(rawTerm => {
+            let term = rawTerm;
+            if (term.startsWith('ultrassonografi') || term.startsWith('ultrasonografi') || term.startsWith('ultrasom')) {
+                term = 'ultrassom';
+            }
+            const matchesName = procNameWords.some(word => 
+                word.startsWith(term) || 
+                (term === 'ultrassom' && (word.startsWith('ultrasson') || word.startsWith('ultrason') || word.startsWith('ultrasom')))
+            );
             const matchesCode = rawCode.startsWith(term) || 
                                 cleanCode.startsWith(term) || 
                                 procCodeWords.some(w => w.startsWith(term));

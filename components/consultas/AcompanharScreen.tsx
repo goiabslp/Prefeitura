@@ -1668,12 +1668,22 @@ function evaluateBookingSearch(
 
     // A) Procedimento / Exame / Especialidade (ex: "ressonância", "neurologia", "ultrassom", "artro")
     if (procLabelNorm) {
-        if (procLabelNorm === queryNorm) return 0.01;
-        if (procLabelNorm.startsWith(queryNorm)) return 0.05;
-        if (procLabelNorm.includes(queryNorm)) return 0.1;
+        let targetQuery = queryNorm;
+        if (targetQuery.startsWith('ultrassonografi') || targetQuery.startsWith('ultrasonografi') || targetQuery.startsWith('ultrasom')) {
+            targetQuery = 'ultrassom';
+        }
+        if (procLabelNorm === targetQuery) return 0.01;
+        if (procLabelNorm.startsWith(targetQuery)) return 0.05;
+        if (procLabelNorm.includes(targetQuery)) return 0.1;
 
         const words = queryNorm.split(/\s+/).filter(Boolean);
-        if (words.length > 1 && words.every(w => procLabelNorm.includes(w))) {
+        if (words.length > 1 && words.every(w => {
+            let nw = w;
+            if (nw.startsWith('ultrassonografi') || nw.startsWith('ultrasonografi') || nw.startsWith('ultrasom')) {
+                nw = 'ultrassom';
+            }
+            return procLabelNorm.includes(nw);
+        })) {
             return 0.15;
         }
     }

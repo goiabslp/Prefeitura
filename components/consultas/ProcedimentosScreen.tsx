@@ -10,19 +10,23 @@ import * as db from '../../services/consultasService';
 import { formatProcedimentoLabel } from '../../services/consultasService';
 import { seedDefaultProcedures } from '../../services/procedimentosSeed';
 import { formatPatientName } from '../common/PacientesTab';
+import { RevisarDuplicidadesModal } from './RevisarDuplicidadesModal';
+import { procedureMatchesSearch } from '../../services/procedimentosStandardizer';
 
 interface ProcedimentosScreenProps {
     currentUser?: User | null;
     onBack?: () => void;
     onNavigate?: (view: string) => void;
     embedded?: boolean;
+    subView?: string;
 }
 
 export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
     currentUser,
     onBack,
     onNavigate,
-    embedded = false
+    embedded = false,
+    subView
 }) => {
     const [gestorUserIds, setGestorUserIds] = useState<string[]>([]);
 
@@ -75,6 +79,48 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
     const [isMedicoDropdownOpen, setIsMedicoDropdownOpen] = useState(false);
     const [addEspecialistaStatus, setAddEspecialistaStatus] = useState<'Ativo' | 'Inativo'>('Ativo');
     const [addEspecialistaError, setAddEspecialistaError] = useState('');
+
+    // Modal de Revisão de Duplicidades e Padronização Inteligente State
+    const [isRevisarDuplicidadesOpen, setIsRevisarDuplicidadesOpen] = useState(false);
+
+    // Sincronizar abertura do modal com a rota canônica /Regulacao/Procedimentos/RevisarDuplicidades
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const path = window.location.pathname;
+            if (path.includes('/Regulacao/Procedimentos/RevisarDuplicidades') || subView === 'procedimentos-revisar-duplicidades') {
+                setIsRevisarDuplicidadesOpen(true);
+            }
+        }
+    }, [subView]);
+
+    useEffect(() => {
+        const handlePopState = () => {
+            if (typeof window !== 'undefined') {
+                const path = window.location.pathname;
+                if (path.includes('/Regulacao/Procedimentos/RevisarDuplicidades')) {
+                    setIsRevisarDuplicidadesOpen(true);
+                } else if (path.includes('/Regulacao/Procedimentos')) {
+                    setIsRevisarDuplicidadesOpen(false);
+                }
+            }
+        };
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
+
+    const handleOpenRevisarDuplicidades = () => {
+        setIsRevisarDuplicidadesOpen(true);
+        if (typeof window !== 'undefined') {
+            window.history.pushState({}, '', '/Regulacao/Procedimentos/RevisarDuplicidades');
+        }
+    };
+
+    const handleCloseRevisarDuplicidades = () => {
+        setIsRevisarDuplicidadesOpen(false);
+        if (typeof window !== 'undefined') {
+            window.history.pushState({}, '', '/Regulacao/Procedimentos');
+        }
+    };
 
     // Accordion State: quais procedimentos principais estão expandidos na listagem
     const [expandedParentIds, setExpandedParentIds] = useState<Record<string, boolean>>({});
@@ -330,11 +376,10 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
     const filteredProcedures = useMemo(() => {
         return procedures.filter(p => {
             const label = formatProcedimentoLabel(p, especialistas);
-            // Text Search
+            // Text Search inteligente com normalização fonética/lexical de Ultrassom
             const matchesText = 
-                label.toLowerCase().includes(procSearch.toLowerCase()) ||
-                p.name.toLowerCase().includes(procSearch.toLowerCase()) ||
-                (p.code && p.code.toLowerCase().includes(procSearch.toLowerCase())) ||
+                procedureMatchesSearch(label, procSearch, p.code) ||
+                procedureMatchesSearch(p.name, procSearch, p.code) ||
                 p.type.toLowerCase().includes(procSearch.toLowerCase()) ||
                 (p.recurso && p.recurso.toLowerCase().includes(procSearch.toLowerCase()));
 
@@ -414,19 +459,17 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                 return false;
             }
 
-            // Busca de texto: por código pai, nome do procedimento, código do filho ou nome do médico
+            // Busca de texto inteligente: por código pai, nome do procedimento, código do filho ou nome do médico
             if (cleanSearch) {
                 const parentMatches = 
-                    (parent.code && parent.code.toLowerCase().includes(cleanSearch)) ||
-                    parent.name.toLowerCase().includes(cleanSearch) ||
+                    procedureMatchesSearch(parent.name, cleanSearch, parent.code) ||
                     parent.type.toLowerCase().includes(cleanSearch);
 
                 const childMatches = children.some(child => {
                     const espName = child.especialista?.nome || especialistas.find(e => e.id === child.especialista_id)?.nome || '';
                     return (
-                        (child.code && child.code.toLowerCase().includes(cleanSearch)) ||
-                        child.name.toLowerCase().includes(cleanSearch) ||
-                        espName.toLowerCase().includes(cleanSearch)
+                        procedureMatchesSearch(child.name, cleanSearch, child.code) ||
+                        procedureMatchesSearch(espName, cleanSearch)
                     );
                 });
 
@@ -1143,6 +1186,19 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
 
                             {/* Action Buttons */}
                             <div className="flex items-center gap-2 shrink-0">
+                                {/* Botão Administrativo: REVISAR DUPLICIDADES */}
+                                {isAdmin && (
+                                    <button
+                                        type="button"
+                                        onClick={handleOpenRevisarDuplicidades}
+                                        className="px-3.5 py-2.5 bg-gradient-to-r from-sky-600 via-indigo-600 to-indigo-700 hover:from-sky-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-md hover:shadow-indigo-500/20 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-400/30"
+                                        title="Revisar procedimentos de ultrassom, padronizar nomenclaturas e analisar duplicidades ou equivalências"
+                                    >
+                                        <Sparkles className="w-4 h-4 text-amber-300" />
+                                        <span>Revisar Duplicidades</span>
+                                    </button>
+                                )}
+
                                 {/* Novo Botão de Destaque: Adicionar Especialista */}
                                 <button
                                     onClick={() => handleOpenAddEspecialistaModal()}
@@ -2124,6 +2180,15 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                     </div>
                 );
             })()}
+
+            {/* Modal Amplo de Revisão de Duplicidades e Padronização Inteligente de Ultrassom */}
+            <RevisarDuplicidadesModal
+                isOpen={isRevisarDuplicidadesOpen}
+                onClose={handleCloseRevisarDuplicidades}
+                procedures={procedures}
+                currentUser={currentUser}
+                onSuccessReload={fetchProcedures}
+            />
 
         </div>
     );

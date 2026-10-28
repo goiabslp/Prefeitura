@@ -367,12 +367,9 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
           '/FarmaciaPopular/Dashboard/VisaoGeral',
           '/FarmaciaPopular/Dashboard/VisaoGeral/Medicos',
           '/FarmaciaPopular/Dashboard/Medicos',
-          '/FarmaciaPopular/Dashboard/Medicamentos',
-          '/FarmaciaPopular/Dashboard/Pacientes',
           '/FarmaciaPopular/Dashboard/Operacoes',
-          '/FarmaciaPopular/Dashboard/Relatorios',
           '/FarmaciaPopular/Dashboard/Rename',
-          '/FarmaciaPopular/Dashboard/AltoCusto',
+          '/FarmaciaPopular/Dashboard/AnaliseInteligente',
           '/FarmaciaPopular/Dashboard/Configuracao',
           '/FarmaciaPopular/Dados',
           '/FarmaciaPopular/Historico'

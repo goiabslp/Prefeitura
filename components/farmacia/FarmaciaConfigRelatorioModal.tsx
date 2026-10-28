@@ -17,6 +17,7 @@ import {
     Search
 } from 'lucide-react';
 import { User } from '../../types';
+import { IndicadorReposicaoIA } from '../../services/farmaciaPredictiveService';
 
 export type DiagnosticoStatusKey = 'RISCO_DESABASTECIMENTO' | 'RISCO_VENCIMENTO' | 'SUPERESTOCAGEM' | 'EQUILIBRADO';
 
@@ -35,6 +36,7 @@ export interface FarmaciaConfigRelatorioItem {
     statusIA: 'SEM_ESTOQUE_CADASTRADO' | 'ANALISANDO' | 'RISCO_DESABASTECIMENTO' | 'RISCO_VENCIMENTO' | 'SUPERESTOCAGEM' | 'EQUILIBRADO';
     parecerIA: string;
     isEstoqueAtivo: boolean;
+    reposicaoIA?: IndicadorReposicaoIA;
 }
 
 interface FarmaciaConfigRelatorioModalProps {
@@ -285,13 +287,21 @@ export const FarmaciaConfigRelatorioModal: React.FC<FarmaciaConfigRelatorioModal
                 // Tabela de Itens com autoTable
                 const tableBody = itemsInSection.map((med, index) => {
                     const fullName = [med.nome, med.categoria, med.tipo, med.dosagem].filter(Boolean).join(' • ');
-                    const estoqueAtual = `${med.quantidade.toLocaleString('pt-BR')} ${med.unidade}`;
+                    const estoqueAtual = `${(med.reposicaoIA?.estoqueUtilizavel ?? med.quantidade).toLocaleString('pt-BR')} ${med.unidade}`;
                     const estoqueDia05 = `${med.estoqueDia05.toLocaleString('pt-BR')} ${med.unidade}`;
                     const estoqueIdeal = `${med.estoqueIdealIA.toLocaleString('pt-BR')} ${med.unidade}`;
                     const sugestaoCompra = med.sugestaoCompra > 0 
                         ? `+ ${med.sugestaoCompra.toLocaleString('pt-BR')} ${med.unidade}` 
                         : 'Não Comprar';
-                    const diasCob = med.diasCobertura >= 999 ? 'Ampla' : `${med.diasCobertura} dias`;
+                    
+                    let coberturaRepStr = '-';
+                    if (med.reposicaoIA?.diasCobertura !== null && med.reposicaoIA?.diasCobertura !== undefined) {
+                        coberturaRepStr = `${med.reposicaoIA.diasCobertura} dias\nCompra: ${med.reposicaoIA.dataRecomendadaCompraStr}`;
+                    } else if (med.diasCobertura < 999) {
+                        coberturaRepStr = `${med.diasCobertura} dias`;
+                    }
+
+                    const situacao = med.reposicaoIA?.situacaoOperacionalLabel || section.badgeText;
 
                     return [
                         `${index + 1}`,
@@ -300,9 +310,9 @@ export const FarmaciaConfigRelatorioModal: React.FC<FarmaciaConfigRelatorioModal
                         estoqueDia05,
                         estoqueIdeal,
                         sugestaoCompra,
-                        diasCob,
-                        section.badgeText,
-                        med.parecerIA || '-'
+                        coberturaRepStr,
+                        situacao,
+                        med.reposicaoIA?.explicacaoObjetiva || med.parecerIA || '-'
                     ];
                 });
 
@@ -311,13 +321,13 @@ export const FarmaciaConfigRelatorioModal: React.FC<FarmaciaConfigRelatorioModal
                     head: [[
                         '#',
                         'Medicamento / Detalhes',
-                        'Estoque Atual',
+                        'Estoque Utilizável',
                         'Estoque Dia 05',
                         'Estoque Ideal IA',
                         'Sugestão Compra',
-                        'Cobertura',
-                        'Diagnóstico',
-                        'Parecer Inteligente da IA'
+                        'Cobertura & Reposição',
+                        'Situação Operacional',
+                        'Parecer e Auditoria Preditiva'
                     ]],
                     body: tableBody,
                     theme: 'striped',
