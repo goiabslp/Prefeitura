@@ -1877,8 +1877,32 @@ export const createAgendamento = async (agendamento: Omit<ConsultaAgendamento, '
             }
         }
 
+        // 1.2 Validação e sanitização estrita de Retorno vs Não Retorno
+        if (!agendamento.is_retorno) {
+            // Quando tipo_atendimento = NÃO RETORNO:
+            // - Não exigir classificação de retorno.
+            // - Não salvar valores de 1º ao 5º retorno.
+            // - Ignorar e rejeitar dados incompatíveis enviados por requisições manipuladas.
+            agendamento.is_retorno = false;
+            delete (agendamento as any).retorno_tipo;
+            delete (agendamento as any).retorno_grau;
+        } else {
+            // Quando tipo_atendimento = RETORNO:
+            // - Aplicar as regras de classificação já existentes (1º ao 5º Retorno).
+            const retornosValidos = ['1º Retorno', '2º Retorno', '3º Retorno', '4º Retorno', '5º Retorno'];
+            if (!agendamento.retorno_tipo || !retornosValidos.includes(agendamento.retorno_tipo)) {
+                agendamento.retorno_tipo = '1º Retorno' as any;
+            }
+            agendamento.retorno_grau = Number(agendamento.retorno_tipo.charAt(0)) || 1;
+        }
+
         // 2. Insert agendamento com suporte a fallback resiliente para novas colunas
         let insertPayload: any = { ...agendamento };
+        if (!insertPayload.is_retorno) {
+            insertPayload.is_retorno = false;
+            delete insertPayload.retorno_tipo;
+            delete insertPayload.retorno_grau;
+        }
         
         // Limpar propriedades com valor null ou undefined que sejam opcionais para evitar erros de schema cache
         const optionalCols = [
