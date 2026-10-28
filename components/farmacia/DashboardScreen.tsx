@@ -29,6 +29,96 @@ import { useNotification } from '../../contexts/NotificationContext';
 import { MedicosDashboardTab } from './dashboard/MedicosDashboardTab';
 import { FarmaciaConfigRelatorioModal } from './FarmaciaConfigRelatorioModal';
 
+// Helper para identificar movimentações de Saída com flexibilidade de caracteres
+const isSaidaTipo = (tipoStr?: string) => {
+    if (!tipoStr) return false;
+    const normalized = tipoStr.trim().toLowerCase();
+    return normalized === 'saída' || normalized === 'saida';
+};
+
+// Parsing robusto de data para movimentações e medicamentos (priorizando formato brasileiro DD/MM/YYYY, ISO e variações)
+const parseMovimentacaoDate = (dateStr?: string | Date | null): Date | null => {
+    if (!dateStr) return null;
+    if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr;
+    try {
+        const str = String(dateStr).trim();
+        if (!str) return null;
+
+        // Prioridade 1: Formato brasileiro com barras (DD/MM/YYYY ou DD/MM/YYYY HH:mm:ss)
+        if (str.includes('/')) {
+            const parts = str.split(' ');
+            const dateParts = parts[0].split('/');
+            if (dateParts.length === 3) {
+                const day = parseInt(dateParts[0], 10);
+                const month = parseInt(dateParts[1], 10) - 1; // Mês 0-indexed
+                const year = parseInt(dateParts[2], 10);
+                let hours = 0, minutes = 0, seconds = 0;
+                if (parts[1]) {
+                    const timeParts = parts[1].split(':');
+                    hours = parseInt(timeParts[0], 10) || 0;
+                    minutes = parseInt(timeParts[1], 10) || 0;
+                    seconds = parseInt(timeParts[2], 10) || 0;
+                }
+                const parsedDate = new Date(year, month, day, hours, minutes, seconds);
+                if (!isNaN(parsedDate.getTime())) return parsedDate;
+            } else if (dateParts.length === 2) {
+                // MM/YYYY
+                const month = parseInt(dateParts[0], 10) - 1;
+                const year = parseInt(dateParts[1], 10);
+                const parsedDate = new Date(year, month, 1);
+                if (!isNaN(parsedDate.getTime())) return parsedDate;
+            }
+        }
+
+        // Prioridade 2: Formato YYYY-MM
+        if (/^\d{4}-\d{2}$/.test(str)) {
+            const parts = str.split('-');
+            const parsedDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1);
+            if (!isNaN(parsedDate.getTime())) return parsedDate;
+        }
+
+        // Prioridade 3: Formato ISO (YYYY-MM-DD ou YYYY-MM-DDTHH:mm:ss)
+        const isoParsed = parseISO(str);
+        if (!isNaN(isoParsed.getTime())) return isoParsed;
+
+        // Prioridade 4: Instanciação direta
+        const directDate = new Date(str);
+        if (!isNaN(directDate.getTime())) return directDate;
+
+        return null;
+    } catch {
+        return null;
+    }
+};
+
+// Formatação de data 100% resiliente contra RangeError: Invalid time value
+const formatSafeDate = (dateVal?: string | Date | null, formatStr: string = 'dd/MM/yyyy'): string => {
+    if (!dateVal) return '—';
+    try {
+        const parsed = parseMovimentacaoDate(dateVal);
+        if (!parsed || isNaN(parsed.getTime())) {
+            const str = String(dateVal).trim();
+            return str.length > 0 && str.length <= 25 ? str : '—';
+        }
+        return format(parsed, formatStr);
+    } catch {
+        const str = String(dateVal).trim();
+        return str.length > 0 && str.length <= 25 ? str : '—';
+    }
+};
+
+const formatSafeDistanceToNow = (dateVal?: string | Date | null): string => {
+    if (!dateVal) return '';
+    try {
+        const parsed = parseMovimentacaoDate(dateVal);
+        if (!parsed || isNaN(parsed.getTime())) return '';
+        return formatDistanceToNow(parsed, { addSuffix: true, locale: ptBR });
+    } catch {
+        return '';
+    }
+};
+
+
 interface DashboardScreenProps {
     currentUser?: User | null;
     onBack: () => void;
@@ -553,94 +643,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     const daysPassedThisMonth = useMemo(() => differenceInDays(now, currentMonthStart) || 1, [now, currentMonthStart]);
     const daysInCurrentMonth = useMemo(() => differenceInDays(currentMonthEnd, currentMonthStart) + 1, [currentMonthEnd, currentMonthStart]);
 
-    // Helper para identificar movimentações de Saída com flexibilidade de caracteres
-    const isSaidaTipo = (tipoStr?: string) => {
-        if (!tipoStr) return false;
-        const normalized = tipoStr.trim().toLowerCase();
-        return normalized === 'saída' || normalized === 'saida';
-    };
-
-    // Parsing robusto de data para movimentações e medicamentos (priorizando formato brasileiro DD/MM/YYYY, ISO e variações)
-    const parseMovimentacaoDate = (dateStr?: string | Date | null): Date | null => {
-        if (!dateStr) return null;
-        if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr;
-        try {
-            const str = String(dateStr).trim();
-            if (!str) return null;
-
-            // Prioridade 1: Formato brasileiro com barras (DD/MM/YYYY ou DD/MM/YYYY HH:mm:ss)
-            if (str.includes('/')) {
-                const parts = str.split(' ');
-                const dateParts = parts[0].split('/');
-                if (dateParts.length === 3) {
-                    const day = parseInt(dateParts[0], 10);
-                    const month = parseInt(dateParts[1], 10) - 1; // Mês 0-indexed
-                    const year = parseInt(dateParts[2], 10);
-                    let hours = 0, minutes = 0, seconds = 0;
-                    if (parts[1]) {
-                        const timeParts = parts[1].split(':');
-                        hours = parseInt(timeParts[0], 10) || 0;
-                        minutes = parseInt(timeParts[1], 10) || 0;
-                        seconds = parseInt(timeParts[2], 10) || 0;
-                    }
-                    const parsedDate = new Date(year, month, day, hours, minutes, seconds);
-                    if (!isNaN(parsedDate.getTime())) return parsedDate;
-                } else if (dateParts.length === 2) {
-                    // MM/YYYY
-                    const month = parseInt(dateParts[0], 10) - 1;
-                    const year = parseInt(dateParts[1], 10);
-                    const parsedDate = new Date(year, month, 1);
-                    if (!isNaN(parsedDate.getTime())) return parsedDate;
-                }
-            }
-
-            // Prioridade 2: Formato YYYY-MM
-            if (/^\d{4}-\d{2}$/.test(str)) {
-                const parts = str.split('-');
-                const parsedDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1);
-                if (!isNaN(parsedDate.getTime())) return parsedDate;
-            }
-
-            // Prioridade 3: Formato ISO (YYYY-MM-DD ou YYYY-MM-DDTHH:mm:ss)
-            const isoParsed = parseISO(str);
-            if (!isNaN(isoParsed.getTime())) return isoParsed;
-
-            // Prioridade 4: Instanciação direta
-            const directDate = new Date(str);
-            if (!isNaN(directDate.getTime())) return directDate;
-
-            return null;
-        } catch {
-            return null;
-        }
-    };
-
-    // Formatação de data 100% resiliente contra RangeError: Invalid time value
-    const formatSafeDate = (dateVal?: string | Date | null, formatStr: string = 'dd/MM/yyyy'): string => {
-        if (!dateVal) return '—';
-        try {
-            const parsed = parseMovimentacaoDate(dateVal);
-            if (!parsed || isNaN(parsed.getTime())) {
-                const str = String(dateVal).trim();
-                return str.length > 0 && str.length <= 25 ? str : '—';
-            }
-            return format(parsed, formatStr);
-        } catch {
-            const str = String(dateVal).trim();
-            return str.length > 0 && str.length <= 25 ? str : '—';
-        }
-    };
-
-    const formatSafeDistanceToNow = (dateVal?: string | Date | null): string => {
-        if (!dateVal) return '';
-        try {
-            const parsed = parseMovimentacaoDate(dateVal);
-            if (!parsed || isNaN(parsed.getTime())) return '';
-            return formatDistanceToNow(parsed, { addSuffix: true, locale: ptBR });
-        } catch {
-            return '';
-        }
-    };
 
     // Todas as movimentações de Saída
     const allSaidaMovimentacoes = useMemo(() => {
