@@ -706,6 +706,8 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         const isWaitlist = (bookingPriority === 'Especial') || (!canSeeSlots) || isWaitlistOnly || (!hasValidFutureSlot) || (!bookingDate);
         const targetStatus = isWaitlist ? ('Fila de espera' as const) : ('Solicitado' as const);
 
+        const isRetornoEfetivo = Boolean(atendimentoTipo === 'retorno' && isRetorno && retornoTipo);
+
         const optimisticBooking: any = {
             patient_id: selectedPatient.id,
             procedimento_id: selectedProcedure.id,
@@ -714,9 +716,9 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
             priority: bookingPriority,
             status: targetStatus,
             created_by: currentUser.id,
-            is_retorno: isRetorno,
-            retorno_tipo: isRetorno && retornoTipo ? retornoTipo : undefined,
-            retorno_grau: isRetorno && retornoTipo ? Number(retornoTipo.charAt(0)) : undefined
+            is_retorno: isRetornoEfetivo,
+            retorno_tipo: isRetornoEfetivo ? retornoTipo : undefined,
+            retorno_grau: isRetornoEfetivo && retornoTipo ? Number(retornoTipo.charAt(0)) : undefined
         };
 
         if (!isWaitlist && bookingDate) {
@@ -739,7 +741,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
             setSuccessMessage(
                 bookingPriority === 'Especial'
                 ? 'Agendamento Especial cadastrado com sucesso no topo da fila prioritária!'
-                : isRetorno && retornoTipo
+                : isRetornoEfetivo
                 ? `Retorno (${retornoTipo}) cadastrado com sucesso na fila prioritária de acompanhamento!`
                 : targetStatus === 'Fila de espera'
                 ? 'Paciente inserido na fila de espera com sucesso!'
@@ -1902,70 +1904,72 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                     )}
                                                 </div>
 
-                                                {/* BOTÃO E SELEÇÃO DE RETORNO */}
-                                                <div>
-                                                    <div className="flex items-center justify-between mb-1 ml-1">
-                                                        <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
-                                                            Acompanhamento / Retorno
-                                                        </label>
-                                                        {isRetorno && retornoTipo && (
-                                                            <span className="text-[9px] font-black uppercase tracking-widest text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
-                                                                Retorno Ativo
-                                                            </span>
-                                                        )}
-                                                    </div>
+                                                {/* BOTÃO E SELEÇÃO DE RETORNO (Exclusivo para tipo de atendimento Retorno) */}
+                                                {atendimentoTipo === 'retorno' && (
+                                                    <div>
+                                                        <div className="flex items-center justify-between mb-1 ml-1">
+                                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                                                Acompanhamento / Retorno
+                                                            </label>
+                                                            {isRetorno && retornoTipo && (
+                                                                <span className="text-[9px] font-black uppercase tracking-widest text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
+                                                                    Retorno Ativo
+                                                                </span>
+                                                            )}
+                                                        </div>
 
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setIsRetornoModalOpen(true)}
-                                                            className={`flex-1 py-2.5 px-3.5 rounded-xl border text-xs font-black uppercase tracking-wider transition-all duration-300 active:scale-95 flex items-center justify-between shadow-sm cursor-pointer ${
-                                                                isRetorno && retornoTipo
-                                                                    ? 'bg-gradient-to-r from-teal-500 via-emerald-600 to-teal-600 border-teal-500 text-white shadow-lg shadow-teal-500/20 ring-2 ring-teal-400/30'
-                                                                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:border-teal-400'
-                                                            }`}
-                                                        >
-                                                            <div className="flex items-center gap-2.5">
-                                                                <div className={`p-1.5 rounded-lg ${isRetorno && retornoTipo ? 'bg-white/20' : 'bg-teal-50 text-teal-600'}`}>
-                                                                    <RotateCcw className={`w-3.5 h-3.5 ${isRetorno && retornoTipo ? 'text-white' : 'text-teal-600'}`} />
-                                                                </div>
-                                                                <div className="text-left">
-                                                                    <span className="block font-black">
-                                                                        {isRetorno && retornoTipo 
-                                                                            ? `RETORNO — ${retornoTipo.toUpperCase()}`
-                                                                            : 'Retorno'}
-                                                                    </span>
-                                                                    <span className={`block text-[9px] font-bold ${isRetorno && retornoTipo ? 'text-teal-100' : 'text-slate-400'} normal-case`}>
-                                                                        {isRetorno && retornoTipo 
-                                                                            ? 'Prioridade de retorno na fila médica' 
-                                                                            : 'Identificar acompanhamento / retorno (1º ao 5º)'}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                            <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md border shrink-0 ${
-                                                                isRetorno && retornoTipo
-                                                                    ? 'bg-white/20 text-white border-white/30'
-                                                                    : 'bg-teal-50 text-teal-700 border-teal-200'
-                                                            }`}>
-                                                                {isRetorno && retornoTipo ? 'Alterar' : 'Selecionar'}
-                                                            </span>
-                                                        </button>
-
-                                                        {isRetorno && retornoTipo && (
+                                                        <div className="flex items-center gap-2">
                                                             <button
                                                                 type="button"
-                                                                onClick={() => {
-                                                                    setIsRetorno(false);
-                                                                    setRetornoTipo(null);
-                                                                }}
-                                                                className="p-3 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl transition-all font-black text-xs cursor-pointer active:scale-95 shadow-xs shrink-0"
-                                                                title="Remover Retorno"
+                                                                onClick={() => setIsRetornoModalOpen(true)}
+                                                                className={`flex-1 py-2.5 px-3.5 rounded-xl border text-xs font-black uppercase tracking-wider transition-all duration-300 active:scale-95 flex items-center justify-between shadow-sm cursor-pointer ${
+                                                                    isRetorno && retornoTipo
+                                                                        ? 'bg-gradient-to-r from-teal-500 via-emerald-600 to-teal-600 border-teal-500 text-white shadow-lg shadow-teal-500/20 ring-2 ring-teal-400/30'
+                                                                        : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:border-teal-400'
+                                                                }`}
                                                             >
-                                                                <X className="w-4 h-4" />
+                                                                <div className="flex items-center gap-2.5">
+                                                                    <div className={`p-1.5 rounded-lg ${isRetorno && retornoTipo ? 'bg-white/20' : 'bg-teal-50 text-teal-600'}`}>
+                                                                        <RotateCcw className={`w-3.5 h-3.5 ${isRetorno && retornoTipo ? 'text-white' : 'text-teal-600'}`} />
+                                                                    </div>
+                                                                    <div className="text-left">
+                                                                        <span className="block font-black">
+                                                                            {isRetorno && retornoTipo 
+                                                                                ? `RETORNO — ${retornoTipo.toUpperCase()}`
+                                                                                : 'Retorno'}
+                                                                        </span>
+                                                                        <span className={`block text-[9px] font-bold ${isRetorno && retornoTipo ? 'text-teal-100' : 'text-slate-400'} normal-case`}>
+                                                                            {isRetorno && retornoTipo 
+                                                                                ? 'Prioridade de retorno na fila médica' 
+                                                                                : 'Identificar acompanhamento / retorno (1º ao 5º)'}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md border shrink-0 ${
+                                                                    isRetorno && retornoTipo
+                                                                        ? 'bg-white/20 text-white border-white/30'
+                                                                        : 'bg-teal-50 text-teal-700 border-teal-200'
+                                                                }`}>
+                                                                    {isRetorno && retornoTipo ? 'Alterar' : 'Selecionar'}
+                                                                </span>
                                                             </button>
-                                                        )}
+
+                                                            {isRetorno && retornoTipo && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setIsRetorno(false);
+                                                                        setRetornoTipo(null);
+                                                                    }}
+                                                                    className="p-3 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl transition-all font-black text-xs cursor-pointer active:scale-95 shadow-xs shrink-0"
+                                                                    title="Remover Retorno"
+                                                                >
+                                                                    <X className="w-4 h-4" />
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                </div>
+                                                )}
 
                                                 {canSeeSlots ? (
                                                     <div>
@@ -2065,7 +2069,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                              {bookingPriority}
                                                          </span>
                                                      </div>
-                                                     {isRetorno && retornoTipo && (
+                                                     {atendimentoTipo === 'retorno' && isRetorno && retornoTipo && (
                                                          <div className="flex justify-between items-center gap-3 pt-1 border-t border-slate-200/50">
                                                              <span className="font-bold text-slate-400 shrink-0">Acompanhamento:</span>
                                                              <span className="font-black uppercase text-[10px] px-2 py-0.5 rounded bg-teal-100 text-teal-900 border border-teal-300 font-extrabold shadow-2xs flex items-center gap-1">
@@ -2079,7 +2083,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                              <Sparkles className="w-4 h-4 shrink-0 text-amber-600 fill-amber-500 animate-pulse" />
                                                              <span><strong>AGENDAMENTO ESPECIAL:</strong> O paciente será automaticamente posicionado no topo da fila e chamado prioritariamente na próxima vaga liberada.</span>
                                                          </div>
-                                                     ) : isRetorno && retornoTipo ? (
+                                                     ) : atendimentoTipo === 'retorno' && isRetorno && retornoTipo ? (
                                                          <div className="text-[9.5px] font-bold text-teal-900 bg-teal-50 border border-teal-300 p-2.5 rounded-xl mt-1.5 flex items-center gap-2 shadow-xs">
                                                              <RotateCcw className="w-4 h-4 shrink-0 text-teal-600" />
                                                              <span><strong>PACIENTE DE RETORNO ({retornoTipo}):</strong> Atendido com prioridade logo após os Agendamentos Especiais, respeitando a ordem cronológica de agendamento.</span>
