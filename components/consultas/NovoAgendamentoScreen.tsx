@@ -2193,18 +2193,18 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                      ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-sm font-black'
                                                      : bookingPriority === 'Urgência'
                                                      ? 'bg-rose-500 text-white shadow-sm animate-pulse'
-                                                     : (isRetorno || retornoTipo)
+                                                     : (atendimentoTipo === 'retorno' && isRetorno && retornoTipo)
                                                      ? 'bg-teal-100 text-teal-900 border border-teal-300 font-extrabold'
                                                      : 'bg-slate-100 text-slate-700'
                                                  }`}>
                                                      {bookingPriority === 'Especial' 
                                                          ? 'AGENDAMENTO ESPECIAL' 
-                                                         : (isRetorno && retornoTipo)
+                                                         : (atendimentoTipo === 'retorno' && isRetorno && retornoTipo)
                                                          ? `RETORNO — ${retornoTipo.toUpperCase()}`
                                                          : bookingPriority}
                                                  </span>
                                              </div>
-                                             {isRetorno && retornoTipo && (
+                                             {atendimentoTipo === 'retorno' && isRetorno && retornoTipo && (
                                                  <div>
                                                      <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Acompanhamento</span>
                                                      <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded mt-0.5 bg-teal-100 text-teal-900 border border-teal-300 font-extrabold shadow-2xs">
