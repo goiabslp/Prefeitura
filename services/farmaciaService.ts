@@ -1,3 +1,4 @@
+import { isTodayInSaoPaulo, isDesistenciaMovimentacao } from '../utils/farmaciaDesistenciaUtils';
 import { supabase } from './supabaseClient';
 import { FarmaciaMedicamento, FarmaciaMovimentacao, FarmaciaConfig, FarmaciaMedico } from '../types';
 import { handleSupabaseError } from '../utils/errorUtils';
@@ -666,3 +667,180 @@ export const saveMedicoCadastrado = async (data: {
     return updatedMedico;
 };
 
+
+// --- DESISTÊNCIA DE DISPENSAÇÃO (REVERSÃO SEGURA E AUDITADA) ---
+
+export interface RegistrarDesistenciaParams {
+    movimentacaoId: string;
+    motivo: string;
+    retornoAoEstoque: boolean; // true = medicamento não saiu da farmácia (devolve ao saldo dispensável); false = saiu da farmácia (quarentena/bloqueio)
+    currentUser?: {
+        id?: string;
+        name?: string;
+        email?: string;
+    } | null;
+}
+
+export const registrarDesistenciaDispensacao = async (
+    params: RegistrarDesistenciaParams
+): Promise<{ success: boolean; error?: string; movimentacaoAtualizada?: FarmaciaMovimentacao }> => {
+    try {
+        const { movimentacaoId, motivo, retornoAoEstoque, currentUser } = params;
+
+        if (!movimentacaoId) {
+            return { success: false, error: 'Identificador da dispensação não fornecido.' };
+        }
+        if (!motivo || !motivo.trim()) {
+            return { success: false, error: 'O motivo da desistência é obrigatório para fins de auditoria.' };
+        }
+
+        // 1. Buscar dispensação original no Supabase
+        const { data: movOriginal, error: movError } = await supabase
+            .from('farmacia_movimentacoes')
+            .select('*')
+            .eq('id', movimentacaoId)
+            .single();
+
+        if (movError || !movOriginal) {
+            return { success: false, error: 'Dispensação não localizada no banco de dados.' };
+        }
+
+        // 2. Validar tipo
+        if (movOriginal.tipo !== 'Saída') {
+            return { success: false, error: 'Apenas operações de dispensação (Saída) podem receber desistência.' };
+        }
+
+        // 3. Validar se já possui desistência registrada (Controle estrito contra duplicidade)
+        if (isDesistenciaMovimentacao(movOriginal)) {
+            return { success: false, error: 'Esta dispensação já possui desistência registrada anteriormente.' };
+        }
+
+        // 4. Validar dia atual no fuso horário America/Sao_Paulo (Horário oficial)
+        if (!isTodayInSaoPaulo(movOriginal.data)) {
+            return { success: false, error: 'Apenas dispensações realizadas na data de hoje podem receber desistência por este fluxo.' };
+        }
+
+        const nowIso = new Date().toISOString();
+        const responsavelNome = currentUser?.name || 'Farmacêutico Responsável';
+        const responsavelId = currentUser?.id || null;
+
+        // 5. Devolução ao estoque e ao lote de origem se medicamento permaneceu sob controle
+        if (retornoAoEstoque) {
+            // Localiza o medicamento exato do lote original
+            let medId = movOriginal.medicamento_id;
+            let currentMed: any = null;
+
+            if (medId) {
+                const { data: medData } = await supabase
+                    .from('farmacia_medicamentos')
+                    .select('*')
+                    .eq('id', medId)
+                    .maybeSingle();
+                currentMed = medData;
+            }
+
+            // Fallback: se medId mudou ou não encontrado, busca pelo mesmo nome, lote e categoria
+            if (!currentMed && movOriginal.medicamento_nome && movOriginal.lote) {
+                const { data: medByLote } = await supabase
+                    .from('farmacia_medicamentos')
+                    .select('*')
+                    .eq('nome', movOriginal.medicamento_nome)
+                    .eq('lote', movOriginal.lote)
+                    .eq('categoria', movOriginal.medicamento_categoria)
+                    .maybeSingle();
+                currentMed = medByLote;
+                if (currentMed) medId = currentMed.id;
+            }
+
+            if (currentMed && medId) {
+                const novaQuantidade = (currentMed.quantidade || 0) + Number(movOriginal.quantidade);
+                const { error: updateStockErr } = await supabase
+                    .from('farmacia_medicamentos')
+                    .update({ 
+                        quantidade: novaQuantidade,
+                        atualizado_em: nowIso 
+                    })
+                    .eq('id', medId);
+
+                if (updateStockErr) {
+                    console.error('[farmaciaService] Erro ao atualizar saldo no estoque:', updateStockErr);
+                    return { success: false, error: 'Falha ao devolver quantidade ao saldo do estoque de origem.' };
+                }
+            } else {
+                console.warn('[farmaciaService] Medicamento do lote original não encontrado no catálogo para devolução de saldo.', movOriginal);
+            }
+
+            // Inserir movimentação formal de reversão
+            const reversaoPayload: any = {
+                medicamento_id: medId || movOriginal.medicamento_id,
+                medicamento_nome: movOriginal.medicamento_nome,
+                medicamento_categoria: movOriginal.medicamento_categoria,
+                medicamento_dosagem: movOriginal.medicamento_dosagem || '',
+                medicamento_tipo: movOriginal.medicamento_tipo || '',
+                quantidade: movOriginal.quantidade,
+                tipo: 'Entrada',
+                lote: movOriginal.lote,
+                validade: movOriginal.validade,
+                responsavel_id: responsavelId,
+                responsavel_nome: responsavelNome,
+                paciente_nome: movOriginal.paciente_nome,
+                paciente_cpf: movOriginal.paciente_cpf,
+                data: nowIso,
+                observacoes: `[REVERSÃO POR DESISTÊNCIA - Movimentação Origem: #${movOriginal.id}] ${motivo.trim()}`
+            };
+
+            await supabase.from('farmacia_movimentacoes').insert([reversaoPayload]);
+        } else {
+            // Caso de Quarentena Sanitária: medicamento saiu da farmácia e foi devolvido
+            const quarentenaPayload: any = {
+                medicamento_id: movOriginal.medicamento_id,
+                medicamento_nome: movOriginal.medicamento_nome,
+                medicamento_categoria: movOriginal.medicamento_categoria,
+                medicamento_dosagem: movOriginal.medicamento_dosagem || '',
+                medicamento_tipo: movOriginal.medicamento_tipo || '',
+                quantidade: movOriginal.quantidade,
+                tipo: 'Ajuste',
+                lote: movOriginal.lote,
+                validade: movOriginal.validade,
+                responsavel_id: responsavelId,
+                responsavel_nome: responsavelNome,
+                paciente_nome: movOriginal.paciente_nome,
+                paciente_cpf: movOriginal.paciente_cpf,
+                data: nowIso,
+                observacoes: `[DEVOLUÇÃO EM QUARENTENA SANITÁRIA - Movimentação Origem: #${movOriginal.id}] ${motivo.trim()} (Material segregado - não disponibilizado para nova dispensação)`
+            };
+
+            await supabase.from('farmacia_movimentacoes').insert([quarentenaPayload]);
+        }
+
+        // 6. Atualizar a movimentação original para marcar desistência definitiva com auditoria
+        const situacaoTexto = retornoAoEstoque ? 'Retorno ao Estoque' : 'Quarentena Sanitária';
+        const carimboDesistencia = `\n[DESISTÊNCIA REGISTRADA | Data: ${nowIso} | Responsavel: ${responsavelNome} | Situacao: ${situacaoTexto} | Motivo: ${motivo.trim()}]`;
+        const updatedObservacoes = `${movOriginal.observacoes || ''}${carimboDesistencia}`.trim();
+
+        const { data: updatedMov, error: updateMovErr } = await supabase
+            .from('farmacia_movimentacoes')
+            .update({
+                observacoes: updatedObservacoes
+            })
+            .eq('id', movOriginal.id)
+            .select()
+            .single();
+
+        if (updateMovErr) {
+            console.error('[farmaciaService] Erro ao carimbar desistência na movimentação original:', updateMovErr);
+            return { success: false, error: 'Falha ao registrar carimbo de desistência na movimentação.' };
+        }
+
+        // 7. Invalidar cache de medicamentos
+        invalidateMedicamentosCache();
+
+        return {
+            success: true,
+            movimentacaoAtualizada: updatedMov || { ...movOriginal, observacoes: updatedObservacoes }
+        };
+    } catch (err: any) {
+        console.error('[farmaciaService] registrarDesistenciaDispensacao erro inesperado:', err);
+        return { success: false, error: err.message || 'Erro inesperado ao processar desistência.' };
+    }
+};

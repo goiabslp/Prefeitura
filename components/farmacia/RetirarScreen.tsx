@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { User, FarmaciaMedicamento, FarmaciaMovimentacao, FarmaciaMedico, ConsultaPaciente, AppState, AGENTES_DE_SAUDE } from '../../types';
-import { ArrowLeft, User as UserIcon, Calendar, ClipboardList, CheckCircle2, AlertTriangle, Search, Loader2, History, X, FileDown, Pill, ShieldCheck, FileText, Plus, Trash2, Minus, UserPlus, ChevronDown, Sparkles, Check, Stethoscope, UserCheck, ArrowRight, ClipboardCheck, Edit3, RefreshCw, Activity, Brain, HeartPulse } from 'lucide-react';
+import { ArrowLeft, User as UserIcon, Calendar, ClipboardList, CheckCircle2, AlertTriangle, Search, Loader2, History, X, FileDown, Pill, ShieldCheck, FileText, Plus, Trash2, Minus, UserPlus, ChevronDown, Sparkles, Check, Stethoscope, UserCheck, ArrowRight, ClipboardCheck, Edit3, RefreshCw, Activity, Brain, HeartPulse, RotateCcw, Undo2, ShieldAlert, Clock, AlertCircle } from 'lucide-react';
 import * as db from '../../services/farmaciaService';
+import { isTodayInSaoPaulo, isDesistenciaMovimentacao, parseDesistenciaInfo, maskCpf } from '../../utils/farmaciaDesistenciaUtils';
 import { normalizeCrmAndUf } from './dashboard/MedicosDashboardTab';
 import { getPacientes, createPaciente, updatePaciente } from '../../services/consultasService';
 import { useAgentesSaude } from '../../services/agentesSaudeService';

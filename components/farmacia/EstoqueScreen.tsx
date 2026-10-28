@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { User, FarmaciaMedicamento, FarmaciaMovimentacao } from '../../types';
 import { Package, Plus, Edit, Trash2, Calendar, AlertTriangle, ChevronRight, CheckCircle2, TrendingUp, Info, Loader2, Sparkles, SlidersHorizontal, X, XCircle, Search, Pill, ArrowLeft } from 'lucide-react';
 import * as db from '../../services/farmaciaService';
+import { isDesistenciaMovimentacao } from '../../utils/farmaciaDesistenciaUtils';
 import { useFarmaciaAlert } from './FarmaciaAlertContext';
 import { RAW_MEDS } from './medsToImportData';
 import { getMedsToImport } from './medsToImport';
@@ -251,7 +252,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
         }).length;
 
         // Most Withdrawn drugs ranking (type 'Saída')
-        const withdrawals = movimentacoes.filter(m => m.tipo === 'Saída');
+        const withdrawals = movimentacoes.filter(m => m.tipo === 'Saída' && !isDesistenciaMovimentacao(m));
         const grouped: Record<string, number> = {};
         withdrawals.forEach(w => {
             grouped[w.medicamento_nome] = (grouped[w.medicamento_nome] || 0) + w.quantidade;

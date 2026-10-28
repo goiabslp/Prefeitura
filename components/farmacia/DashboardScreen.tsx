@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, FarmaciaMedicamento, FarmaciaMovimentacao } from '../../types';
 import * as db from '../../services/farmaciaService';
+import { isDesistenciaMovimentacao } from '../../utils/farmaciaDesistenciaUtils';
 import {
     calculateMedicamentoReposicaoIA,
     getReposicaoConfig,
@@ -391,7 +392,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             );
 
             // Movimentações de saída exclusivas
-            const saidasGroup = groupMovs.filter(m => isSaidaTipo(m.tipo));
+            const saidasGroup = groupMovs.filter(m => isSaidaTipo(m.tipo) && !isDesistenciaMovimentacao(m));
 
             // --- NOVO MOTOR DE PREDIÇÃO: DATA ESTIMADA DE NECESSIDADE DE REPOSIÇÃO (IA) ---
             // Cruza 7, 30 e 90 dias, deduz lotes vencidos, calcula lead time e margem de segurança

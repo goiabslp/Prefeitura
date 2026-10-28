@@ -307,9 +307,27 @@ export function analyzeProcedureEquivalences(procedures: ConsultaProcedimento[])
             return;
         }
 
-        // Buscar outros procedimentos com mesma base clínica
+        // Se o procedimento já está inativo, ele já foi arquivado/unificado e não possui duplicidade pendente
+        if (proc.status === 'Inativo') {
+            results.push({
+                procedimento: proc,
+                standardizedName: std.standardizedName,
+                isChanged: false,
+                isUltrasound: true,
+                isTerceirizado: std.isTerceirizado,
+                category: 'JA_PADRONIZADO',
+                categoryLabel: 'Inativo / Unificado',
+                corrections: [],
+                equivalentTo: null,
+                clinicalDifferenceReason: 'Procedimento arquivado / unificado no histórico.'
+            });
+            return;
+        }
+
+        // Buscar outros procedimentos ATIVOS com mesma base clínica
         const candidates = standardizedList.filter(other => 
             other.proc.id !== proc.id && 
+            other.proc.status === 'Ativo' &&
             other.feat.clinicalBase === feat.clinicalBase
         );
 
@@ -523,6 +541,11 @@ export async function unifyProceduresSafely(
         await updateProcedimento(secondaryProcId, {
             status: 'Inativo',
             recurso: 'Não Se Aplica'
+        });
+
+        // 4.1 Garantir que o procedimento principal esteja com status Ativo
+        await updateProcedimento(primaryProcId, {
+            status: 'Ativo'
         });
 
         // 5. Registrar log de auditoria completo

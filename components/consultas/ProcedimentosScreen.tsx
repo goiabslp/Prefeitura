@@ -1134,30 +1134,30 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                     /* LISTAGEM GERAL DE PROCEDIMENTOS                         */
                     /* ======================================================= */
                     <div className="space-y-4">
-                        {/* Search & Filters Bar */}
-                        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-                            <div className="flex flex-col sm:flex-row items-center gap-2 flex-1">
+                        {/* Search & Filters Bar - Totalmente Responsiva */}
+                        <div className="flex flex-col 2xl:flex-row items-stretch 2xl:items-center justify-between gap-3 w-full max-w-full">
+                            <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0 w-full 2xl:w-auto">
                                 {/* Search input */}
-                                <div className="relative w-full sm:w-80">
+                                <div className="relative w-full sm:w-64 md:w-72 2xl:w-80 flex-1 min-w-[200px]">
                                     <input
                                         type="text"
                                         placeholder="Buscar exame, consulta ou código..."
-                                        className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-semibold placeholder:text-slate-400 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-xs"
+                                        className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-4 py-2 text-xs font-semibold placeholder:text-slate-400 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-2xs"
                                         value={procSearch}
                                         onChange={(e) => setProcSearch(e.target.value)}
                                     />
-                                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                                 </div>
 
                                 {/* Type selector pills */}
-                                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl w-full sm:w-auto overflow-x-auto">
+                                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto shrink-0 max-w-full">
                                     {(['Todos', 'Exame', 'Consulta', 'Cirurgia'] as const).map(type => (
                                         <button
                                             key={type}
                                             onClick={() => setSelectedTypeFilter(type)}
-                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                                                 selectedTypeFilter === type
-                                                    ? 'bg-white text-slate-900 shadow-xs'
+                                                    ? 'bg-white text-slate-900 shadow-2xs'
                                                     : 'text-slate-500 hover:text-slate-800'
                                             }`}
                                         >
@@ -1167,14 +1167,14 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                 </div>
 
                                 {/* Status filter pills */}
-                                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl w-full sm:w-auto overflow-x-auto">
+                                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto shrink-0 max-w-full">
                                     {(['Todos', 'Ativos', 'Suspensos'] as const).map(st => (
                                         <button
                                             key={st}
                                             onClick={() => setSelectedStatusFilter(st)}
-                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                                                 selectedStatusFilter === st
-                                                    ? 'bg-white text-slate-900 shadow-xs'
+                                                    ? 'bg-white text-slate-900 shadow-2xs'
                                                     : 'text-slate-500 hover:text-slate-800'
                                             }`}
                                         >
@@ -1184,36 +1184,40 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                 </div>
                             </div>
 
-                            {/* Action Buttons */}
-                            <div className="flex items-center gap-2 shrink-0">
+                            {/* Action Buttons - 100% responsivos dentro do viewport */}
+                            <div className="flex flex-wrap items-center gap-2 shrink-0 justify-start sm:justify-end w-full 2xl:w-auto">
                                 {/* Botão Administrativo: REVISAR DUPLICIDADES */}
                                 {isAdmin && (
                                     <button
                                         type="button"
                                         onClick={handleOpenRevisarDuplicidades}
-                                        className="px-3.5 py-2.5 bg-gradient-to-r from-sky-600 via-indigo-600 to-indigo-700 hover:from-sky-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-md hover:shadow-indigo-500/20 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-400/30"
+                                        className="px-3.5 py-2 bg-gradient-to-r from-sky-600 via-indigo-600 to-indigo-700 hover:from-sky-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-md hover:shadow-indigo-500/20 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-400/30 whitespace-nowrap"
                                         title="Revisar procedimentos de ultrassom, padronizar nomenclaturas e analisar duplicidades ou equivalências"
                                     >
-                                        <Sparkles className="w-4 h-4 text-amber-300" />
+                                        <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
                                         <span>Revisar Duplicidades</span>
                                     </button>
                                 )}
 
                                 {/* Novo Botão de Destaque: Adicionar Especialista */}
                                 <button
+                                    type="button"
                                     onClick={() => handleOpenAddEspecialistaModal()}
-                                    className="px-3.5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-md hover:shadow-indigo-500/20 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-500/30"
+                                    className="px-3.5 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-md hover:shadow-indigo-500/20 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-500/30 whitespace-nowrap"
                                     title="Vincular profissional especialista a um procedimento principal existente"
                                 >
-                                    <Stethoscope className="w-4 h-4 text-indigo-200" />
+                                    <Stethoscope className="w-4 h-4 text-indigo-200 shrink-0" />
                                     <span>+ Adicionar Especialista</span>
                                 </button>
 
+                                {/* Botão Novo Procedimento */}
                                 <button
+                                    type="button"
                                     onClick={() => handleOpenProcModal()}
-                                    className="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-md hover:shadow-sky-500/15 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
+                                    className="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-md hover:shadow-sky-500/15 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                                    title="Cadastrar novo procedimento"
                                 >
-                                    <Plus className="w-4 h-4" />
+                                    <Plus className="w-4 h-4 shrink-0" />
                                     <span>Novo Procedimento</span>
                                 </button>
                             </div>

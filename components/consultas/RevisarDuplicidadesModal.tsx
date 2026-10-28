@@ -3,7 +3,7 @@ import {
     X, Sparkles, CheckCircle2, AlertTriangle, ArrowRight, Layers, 
     Search, Check, ShieldAlert, GitMerge, FileText, RefreshCw, 
     Info, Stethoscope, Calendar, Clock, ChevronRight, HelpCircle,
-    ArrowUpDown, Filter, ShieldCheck, Eye, Database, AlertCircle, Loader2
+    ArrowUpDown, Filter, ShieldCheck, Eye, Database, AlertCircle, Loader2, ArrowLeftRight
 } from 'lucide-react';
 import { ConsultaProcedimento, User } from '../../types';
 import { 
@@ -191,10 +191,15 @@ export const RevisarDuplicidadesModal: React.FC<RevisarDuplicidadesModalProps> =
         }
     };
 
+    // Gerador de justificativa padrão automática para unificação
+    const generateDefaultUnifyJustification = (primary: ConsultaProcedimento, secondary: ConsultaProcedimento) => {
+        return `Unificação administrativa: Procedimento ${secondary.code ? `Cód. ${secondary.code} (${secondary.name})` : secondary.name} consolidado no Procedimento Principal ${primary.code ? `Cód. ${primary.code} (${primary.name})` : primary.name}. Histórico, agendamentos e cotas preservados integralmente.`;
+    };
+
     // Abrir modal de unificação segura com levantamento de impacto
     const handleOpenUnifyModal = async (primary: ConsultaProcedimento, secondary: ConsultaProcedimento) => {
         setUnifyTarget({ primary, secondary });
-        setUnifyJustification('');
+        setUnifyJustification(generateDefaultUnifyJustification(primary, secondary));
         setLoadingImpact(true);
 
         try {
@@ -202,11 +207,15 @@ export const RevisarDuplicidadesModal: React.FC<RevisarDuplicidadesModalProps> =
                 getProcedureImpactSummary(primary.id),
                 getProcedureImpactSummary(secondary.id)
             ]);
-            setUnifyTarget({
-                primary,
-                secondary,
-                impactPrimary: impactPrim,
-                impactSecondary: impactSec
+            setUnifyTarget(prev => {
+                if (!prev) return null;
+                return {
+                    ...prev,
+                    primary,
+                    secondary,
+                    impactPrimary: impactPrim,
+                    impactSecondary: impactSec
+                };
             });
         } catch (err) {
             console.error('Erro ao calcular impacto de unificação:', err);
@@ -215,21 +224,39 @@ export const RevisarDuplicidadesModal: React.FC<RevisarDuplicidadesModalProps> =
         }
     };
 
+    // Alternar qual é o Principal e qual é o Secundário
+    const handleSwapUnifyRoles = () => {
+        if (!unifyTarget) return;
+        const newPrimary = unifyTarget.secondary;
+        const newSecondary = unifyTarget.primary;
+        const newImpactPrimary = unifyTarget.impactSecondary;
+        const newImpactSecondary = unifyTarget.impactPrimary;
+
+        setUnifyTarget({
+            primary: newPrimary,
+            secondary: newSecondary,
+            impactPrimary: newImpactPrimary,
+            impactSecondary: newImpactSecondary
+        });
+        setUnifyJustification(generateDefaultUnifyJustification(newPrimary, newSecondary));
+    };
+
     // Confirmar Unificação Segura
     const handleConfirmUnify = async () => {
         if (!unifyTarget) return;
 
         setLoadingAction('unify-exec');
         try {
+            const finalJustification = unifyJustification.trim() || generateDefaultUnifyJustification(unifyTarget.primary, unifyTarget.secondary);
             const res = await unifyProceduresSafely(
                 unifyTarget.primary.id,
                 unifyTarget.secondary.id,
-                unifyJustification,
+                finalJustification,
                 currentUser || null
             );
 
             if (res.success) {
-                showToast(`Procedimentos unificados com sucesso! Histórico e códigos preservados.`);
+                showToast(`Procedimento ${unifyTarget.secondary.code ? `Cód. ${unifyTarget.secondary.code}` : ''} unificado com sucesso no Procedimento Principal ${unifyTarget.primary.code ? `Cód. ${unifyTarget.primary.code}` : ''}! Histórico e cotas preservados.`);
                 setUnifyTarget(null);
                 setComparingItem(null);
                 await onSuccessReload();
@@ -610,16 +637,30 @@ export const RevisarDuplicidadesModal: React.FC<RevisarDuplicidadesModalProps> =
                                                             </span>
                                                         )}
 
-                                                        {/* Botão Unificar (apenas se for duplicidade idêntica ou equivalente com aprovação) */}
-                                                        {item.equivalentTo && (item.category === 'DUPLICIDADE_IDENTICA' || item.category === 'EQUIVALENTE_ADMINISTRATIVO') && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleOpenUnifyModal(item.equivalentTo!, item.procedimento)}
-                                                                className="p-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-[10.5px] font-extrabold transition-all cursor-pointer border border-purple-200 shrink-0"
-                                                                title="Unificar registros (Abre modal de impacto)"
-                                                            >
-                                                                <GitMerge className="w-3.5 h-3.5" />
-                                                            </button>
+                                                        {/* Botão Unificar (apenas se for duplicidade idêntica ou equivalente e estiver ativo) */}
+                                                        {item.procedimento.status === 'Ativo' && item.equivalentTo && (item.category === 'DUPLICIDADE_IDENTICA' || item.category === 'EQUIVALENTE_ADMINISTRATIVO') && (() => {
+                                                            const isItemTerceirizado = item.procedimento.name.toUpperCase().includes('TERCEIRIZADO') || item.procedimento.name.toUpperCase().includes('TERC');
+                                                            const isEqTerceirizado = item.equivalentTo?.name.toUpperCase().includes('TERCEIRIZADO') || item.equivalentTo?.name.toUpperCase().includes('TERC');
+                                                            const defaultPrimary = (isItemTerceirizado && !isEqTerceirizado) ? item.equivalentTo! : item.procedimento;
+                                                            const defaultSecondary = (isItemTerceirizado && !isEqTerceirizado) ? item.procedimento : item.equivalentTo!;
+
+                                                            return (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleOpenUnifyModal(defaultPrimary, defaultSecondary)}
+                                                                    className="px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 active:scale-95 text-purple-700 rounded-lg text-[10.5px] font-extrabold transition-all cursor-pointer border border-purple-200 shrink-0 flex items-center gap-1 shadow-2xs hover:border-purple-300"
+                                                                    title="Unificar este procedimento com seu equivalente"
+                                                                >
+                                                                    <GitMerge className="w-3.5 h-3.5" />
+                                                                    <span>Unificar</span>
+                                                                </button>
+                                                            );
+                                                        })()}
+
+                                                        {item.procedimento.status === 'Inativo' && (
+                                                            <span className="text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-lg">
+                                                                Inativo / Unificado
+                                                            </span>
                                                         )}
                                                     </div>
                                                 </td>
@@ -766,15 +807,17 @@ export const RevisarDuplicidadesModal: React.FC<RevisarDuplicidadesModalProps> =
                                 >
                                     Manter Procedimentos Separados
                                 </button>
-                                {comparingItem.itemA.category === 'DUPLICIDADE_IDENTICA' && (
+                                {(comparingItem.itemA.category === 'DUPLICIDADE_IDENTICA' || comparingItem.itemA.category === 'EQUIVALENTE_ADMINISTRATIVO') && (
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            const prim = comparingItem.itemB;
-                                            const sec = comparingItem.itemA.procedimento;
+                                            const isATerc = comparingItem.itemA.procedimento.name.toUpperCase().includes('TERC');
+                                            const isBTerc = comparingItem.itemB.name.toUpperCase().includes('TERC');
+                                            const prim = (isATerc && !isBTerc) ? comparingItem.itemB : comparingItem.itemA.procedimento;
+                                            const sec = (isATerc && !isBTerc) ? comparingItem.itemA.procedimento : comparingItem.itemB;
                                             handleOpenUnifyModal(prim, sec);
                                         }}
-                                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-md"
+                                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
                                     >
                                         <GitMerge className="w-4 h-4" />
                                         <span>Prosseguir para Unificação</span>
@@ -931,26 +974,64 @@ export const RevisarDuplicidadesModal: React.FC<RevisarDuplicidadesModalProps> =
                                 O procedimento secundário será consolidado no procedimento principal. O código histórico permanecerá registrado para consultas e auditoria, sem exclusão física de dados.
                             </div>
 
+                            {/* Controles de Inversão de Papel */}
+                            <div className="flex items-center justify-between pt-1">
+                                <span className="text-xs font-black uppercase tracking-wider text-slate-600">
+                                    Definição dos Papéis da Unificação:
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={handleSwapUnifyRoles}
+                                    className="px-3 py-1.5 bg-purple-100 hover:bg-purple-200 active:scale-95 text-purple-800 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer border border-purple-300 shadow-2xs"
+                                    title="Inverter qual procedimento será mantido como Principal e qual será unificado como Secundário"
+                                >
+                                    <ArrowLeftRight className="w-3.5 h-3.5 text-purple-700" />
+                                    <span>Inverter Principal / Secundário</span>
+                                </button>
+                            </div>
+
                             {/* Resumo dos Procedimentos */}
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs space-y-1">
-                                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 block">Procedimento Principal (Mantido)</span>
-                                    <span className="font-black text-slate-900 block leading-tight">{unifyTarget.primary.name}</span>
-                                    <span className="font-mono text-[10px] text-emerald-800 font-bold">Cód. {unifyTarget.primary.code || '----'}</span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="p-4 bg-emerald-50/80 border-2 border-emerald-400/80 rounded-2xl text-xs space-y-1.5 relative shadow-xs">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-200/70 px-2 py-0.5 rounded-md">
+                                            ✓ Procedimento Principal (Permanece Ativo)
+                                        </span>
+                                    </div>
+                                    <span className="font-black text-slate-900 block text-sm leading-tight pt-1">{unifyTarget.primary.name}</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-mono text-[11px] text-emerald-800 font-bold bg-white px-2 py-0.5 rounded border border-emerald-200">
+                                            Cód. {unifyTarget.primary.code || '----'}
+                                        </span>
+                                        <span className="text-[10px] font-bold text-emerald-700">Tipo: {unifyTarget.primary.type}</span>
+                                    </div>
                                     {unifyTarget.impactPrimary && (
-                                        <div className="text-[10px] text-slate-500 pt-1">
-                                            Vagas: {unifyTarget.impactPrimary.vagasCount} • Agendamentos: {unifyTarget.impactPrimary.agendamentosCount}
+                                        <div className="text-[11px] text-slate-600 pt-2 border-t border-emerald-200/60 font-semibold space-y-0.5">
+                                            <div>Vagas Ativas: <strong className="text-slate-900">{unifyTarget.impactPrimary.vagasCount}</strong></div>
+                                            <div>Agendamentos: <strong className="text-slate-900">{unifyTarget.impactPrimary.agendamentosCount}</strong></div>
+                                            <div>Especialistas: <strong className="text-slate-900">{unifyTarget.impactPrimary.especialistasCount}</strong></div>
                                         </div>
                                     )}
                                 </div>
 
-                                <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs space-y-1">
-                                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 block">Procedimento Secundário (Migrado)</span>
-                                    <span className="font-black text-slate-900 block leading-tight">{unifyTarget.secondary.name}</span>
-                                    <span className="font-mono text-[10px] text-amber-800 font-bold">Cód. {unifyTarget.secondary.code || '----'}</span>
+                                <div className="p-4 bg-purple-50/80 border-2 border-purple-400/80 rounded-2xl text-xs space-y-1.5 relative shadow-xs">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-purple-800 bg-purple-200/70 px-2 py-0.5 rounded-md">
+                                            ⚡ Procedimento Secundário (Será Inativado)
+                                        </span>
+                                    </div>
+                                    <span className="font-black text-slate-900 block text-sm leading-tight pt-1">{unifyTarget.secondary.name}</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-mono text-[11px] text-purple-800 font-bold bg-white px-2 py-0.5 rounded border border-purple-200">
+                                            Cód. {unifyTarget.secondary.code || '----'}
+                                        </span>
+                                        <span className="text-[10px] font-bold text-purple-700">Tipo: {unifyTarget.secondary.type}</span>
+                                    </div>
                                     {unifyTarget.impactSecondary && (
-                                        <div className="text-[10px] text-slate-500 pt-1">
-                                            Vagas: {unifyTarget.impactSecondary.vagasCount} • Agendamentos: {unifyTarget.impactSecondary.agendamentosCount}
+                                        <div className="text-[11px] text-slate-600 pt-2 border-t border-purple-200/60 font-semibold space-y-0.5">
+                                            <div>Vagas a Migrar: <strong className="text-purple-900">{unifyTarget.impactSecondary.vagasCount}</strong></div>
+                                            <div>Agendamentos a Migrar: <strong className="text-purple-900">{unifyTarget.impactSecondary.agendamentosCount}</strong></div>
+                                            <div>Especialistas Vinculados: <strong className="text-purple-900">{unifyTarget.impactSecondary.especialistasCount}</strong></div>
                                         </div>
                                     )}
                                 </div>
@@ -959,15 +1040,18 @@ export const RevisarDuplicidadesModal: React.FC<RevisarDuplicidadesModalProps> =
                             {/* Campo de Justificativa */}
                             <div>
                                 <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                                    Justificativa da Unificação (Obrigatório para Auditoria):
+                                    Justificativa da Unificação (Pré-preenchida para Auditoria):
                                 </label>
                                 <textarea
                                     rows={3}
                                     value={unifyJustification}
                                     onChange={(e) => setUnifyJustification(e.target.value)}
-                                    placeholder="Ex: Registros clinicamente idênticos consolidados para unificação de agenda e cota municipal..."
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-semibold text-slate-800 focus:outline-none focus:border-purple-500"
+                                    placeholder="Justificativa da unificação..."
+                                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs font-semibold text-slate-800 focus:outline-none focus:border-purple-500 focus:bg-white transition-all shadow-inner"
                                 />
+                                <span className="text-[10px] text-slate-400 block mt-1">
+                                    Esta justificativa ficará salva no histórico de auditoria do sistema.
+                                </span>
                             </div>
                         </div>
 
@@ -975,15 +1059,15 @@ export const RevisarDuplicidadesModal: React.FC<RevisarDuplicidadesModalProps> =
                             <button
                                 type="button"
                                 onClick={() => setUnifyTarget(null)}
-                                className="px-4 py-2 bg-white hover:bg-slate-200 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 cursor-pointer"
+                                className="px-4 py-2 bg-white hover:bg-slate-200 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 cursor-pointer transition-all"
                             >
                                 Cancelar
                             </button>
                             <button
                                 type="button"
-                                disabled={loadingAction === 'unify-exec' || !unifyJustification.trim()}
+                                disabled={loadingAction === 'unify-exec'}
                                 onClick={handleConfirmUnify}
-                                className="px-5 py-2.5 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider flex items-center gap-2 shadow-md cursor-pointer disabled:opacity-50"
+                                className="px-5 py-2.5 bg-purple-700 hover:bg-purple-800 active:scale-95 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider flex items-center gap-2 shadow-md cursor-pointer disabled:opacity-50 transition-all"
                             >
                                 {loadingAction === 'unify-exec' ? (
                                     <>
