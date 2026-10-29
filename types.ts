@@ -235,6 +235,8 @@ export type AppPermission =
 
 export type BlockType = 'oficio' | 'compras' | 'diarias' | 'agendamento' | 'abastecimento' | 'vs_calendar' | 'vs_novo' | 'vs_day' | 'vs_history' | 'vs_approvals' | 'vs_consultar' | 'dashboard' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'licitacao' | 'consultas' | 'farmacia' | 'art' | 'documentos';
 
+export type FarmaciaOrigemEstoque = 'COMPRADO' | 'DOADO';
+
 export interface FarmaciaMedicamento {
   id: string;
   nome: string;
@@ -249,6 +251,9 @@ export interface FarmaciaMedicamento {
   fornecedor?: string;
   principio_ativo?: string;
   alto_custo?: boolean;
+  origem?: FarmaciaOrigemEstoque;
+  doador_nome?: string;
+  documento_origem?: string;
   criado_em?: string;
   atualizado_em?: string;
 }
@@ -264,6 +269,9 @@ export interface FarmaciaMovimentacao {
   medicamento_dosagem?: string;
   lote: string;
   validade: string;
+  origem?: FarmaciaOrigemEstoque;
+  doador_nome?: string;
+  documento_origem?: string;
   paciente_nome?: string;
   paciente_cpf?: string;
   tipo_profissional?: string;

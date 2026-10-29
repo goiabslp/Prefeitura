@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, FarmaciaMedicamento, FarmaciaMovimentacao } from '../../types';
-import { Package, Plus, Edit, Trash2, Calendar, AlertTriangle, ChevronRight, CheckCircle2, TrendingUp, Info, Loader2, Sparkles, SlidersHorizontal, X, XCircle, Search, Pill, ArrowLeft } from 'lucide-react';
+import { Package, Plus, Edit, Trash2, Calendar, AlertTriangle, ChevronRight, CheckCircle2, TrendingUp, Info, Loader2, Sparkles, SlidersHorizontal, X, XCircle, Search, Pill, ArrowLeft, ArrowUpRight, ArrowDownRight, Scale, ShieldCheck, ShoppingBag, Gift, Building2, HeartHandshake } from 'lucide-react';
 import * as db from '../../services/farmaciaService';
 import { isDesistenciaMovimentacao } from '../../utils/farmaciaDesistenciaUtils';
 import { useFarmaciaAlert } from './FarmaciaAlertContext';
@@ -69,7 +69,41 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
     const [selectedMed, setSelectedMed] = useState<FarmaciaMedicamento | null>(null);
     const [isAddStockModalOpen, setIsAddStockModalOpen] = useState(false);
-    const [stockToAdd, setStockToAdd] = useState({ lote: '', validade: '', quantidade: '' });
+    const [stockToAdd, setStockToAdd] = useState<{
+        lote: string;
+        validade: string;
+        quantidade: string;
+        origem: 'COMPRADO' | 'DOADO' | '';
+        doador_nome: string;
+        documento_origem: string;
+        fornecedor: string;
+    }>({
+        lote: '',
+        validade: '',
+        quantidade: '',
+        origem: '',
+        doador_nome: '',
+        documento_origem: '',
+        fornecedor: ''
+    });
+
+    const resetStockToAdd = (med?: FarmaciaMedicamento | null) => ({
+        lote: '',
+        validade: '',
+        quantidade: '',
+        origem: '' as 'COMPRADO' | 'DOADO' | '',
+        doador_nome: '',
+        documento_origem: '',
+        fornecedor: med?.fornecedor || ''
+    });
+
+    // --- ESTADOS DO MODAL DE AJUSTE MANUAL DE ESTOQUE POR LOTE ---
+    const [isAjusteManualModalOpen, setIsAjusteManualModalOpen] = useState(false);
+    const [ajusteLoteTarget, setAjusteLoteTarget] = useState<FarmaciaMedicamento | null>(null);
+    const [ajusteNovoSaldoInput, setAjusteNovoSaldoInput] = useState<string>('');
+    const [ajusteMotivoInput, setAjusteMotivoInput] = useState<string>('');
+    const [ajusteStep, setAjusteStep] = useState<'form' | 'confirm'>('form');
+    const [isSubmittingAjuste, setIsSubmittingAjuste] = useState(false);
 
     const [expandedMeds, setExpandedMeds] = useState<Record<string, boolean>>({});
 
@@ -639,7 +673,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                 }
             }
             setIsAddStockModalOpen(false);
-            setStockToAdd({ lote: '', validade: '', quantidade: '' });
+            setStockToAdd(resetStockToAdd(medReference));
             loadData(true);
         } catch (error: any) {
             showAlert(error.message || 'Erro ao adicionar estoque.', 'error');
@@ -650,6 +684,53 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
 
     // --- STOCK CONTROL / VIEW DETAILS ---
 
+    const handleOpenAjusteManualModal = (lote: FarmaciaMedicamento) => {
+        setAjusteLoteTarget(lote);
+        setAjusteNovoSaldoInput('');
+        setAjusteMotivoInput('');
+        setAjusteStep('form');
+        setIsAjusteManualModalOpen(true);
+    };
+
+    const handleConfirmarAjusteManual = async () => {
+        if (!ajusteLoteTarget) return;
+        const novoSaldoNum = Number(ajusteNovoSaldoInput);
+        if (isNaN(novoSaldoNum) || !Number.isInteger(novoSaldoNum) || novoSaldoNum < 0) {
+            showAlert('Informe uma nova quantidade inteira e não negativa (≥ 0).', 'error');
+            return;
+        }
+        if (!ajusteMotivoInput || ajusteMotivoInput.trim().length < 5) {
+            showAlert('A justificativa do ajuste é obrigatória (mínimo de 5 caracteres).', 'error');
+            return;
+        }
+
+        setIsSubmittingAjuste(true);
+        try {
+            const result = await db.registrarAjusteManualEstoque({
+                medicamentoId: ajusteLoteTarget.id,
+                saldoEsperadoAnterior: Number(ajusteLoteTarget.quantidade) || 0,
+                novoSaldo: novoSaldoNum,
+                motivo: ajusteMotivoInput.trim(),
+                currentUser: currentUser ? { id: currentUser.id, name: currentUser.name } : undefined
+            });
+
+            if (!result.success) {
+                showAlert(result.error || 'Erro ao realizar ajuste de estoque.', 'error');
+                return;
+            }
+
+            showAlert('Ajuste de estoque realizado com sucesso.', 'success');
+            setIsAjusteManualModalOpen(false);
+            setAjusteLoteTarget(null);
+            await loadData(true);
+        } catch (err: any) {
+            console.error('Erro ao ajustar estoque:', err);
+            showAlert(err.message || 'Erro inesperado ao realizar ajuste.', 'error');
+        } finally {
+            setIsSubmittingAjuste(false);
+        }
+    };
+
     const handleOpenAdjustModal = (med: FarmaciaMedicamento) => {
         setSelectedMed(med);
         setIsAdjustModalOpen(true);
@@ -657,7 +738,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
 
     const handleOpenAddStockForGroup = (medReference: FarmaciaMedicamento) => {
         setSelectedMed(medReference);
-        setStockToAdd({ lote: '', validade: '', quantidade: '' });
+        setStockToAdd(resetStockToAdd(selectedMed));
         setIsAddStockModalOpen(true);
     };
 
@@ -1681,6 +1762,341 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                     </div>
                 </div>
             )}
+
+            {/* MODAL MODERNO DE AJUSTE MANUAL DE ESTOQUE POR LOTE */}
+            {isAjusteManualModalOpen && ajusteLoteTarget && (() => {
+                const saldoAtual = Number(ajusteLoteTarget.quantidade) || 0;
+                const novoSaldoNum = ajusteNovoSaldoInput === '' ? NaN : Number(ajusteNovoSaldoInput);
+                const isValidNovoSaldo = !isNaN(novoSaldoNum) && Number.isInteger(novoSaldoNum) && novoSaldoNum >= 0;
+                const diferenca = isValidNovoSaldo ? novoSaldoNum - saldoAtual : 0;
+                const tipoAjuste = diferenca > 0 ? 'Aumento de estoque' : diferenca < 0 ? 'Redução de estoque' : 'Sem alteração';
+                const podeAvancar = isValidNovoSaldo && diferenca !== 0 && ajusteMotivoInput.trim().length >= 5;
+                const medKey = `${ajusteLoteTarget.nome.toUpperCase()} - ${ajusteLoteTarget.dosagem?.toUpperCase() || ''} - ${ajusteLoteTarget.tipo?.toUpperCase() || ''}`;
+                const codigoMed = medicamentCodes[medKey] || '00000';
+
+                return (
+                    <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-200">
+                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-hidden border border-slate-200/90 flex flex-col animate-in zoom-in-95 duration-200">
+                            {/* Modal Header */}
+                            <div className="p-4 sm:p-5 border-b border-amber-100 flex justify-between items-center bg-amber-50/60 shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-600 text-white flex items-center justify-center shadow-md shadow-amber-500/20">
+                                        <SlidersHorizontal className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-black text-slate-800 uppercase text-xs sm:text-sm tracking-wide">
+                                            Ajuste Manual de Estoque por Lote
+                                        </h3>
+                                        <p className="text-[10px] text-amber-700 font-bold uppercase mt-0.5 flex items-center gap-1">
+                                            <span>Correção de saldo físico conferido</span>
+                                            <span className="text-amber-400">•</span>
+                                            <span>Auditoria ativa</span>
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (!isSubmittingAjuste) {
+                                            setIsAjusteManualModalOpen(false);
+                                            setAjusteLoteTarget(null);
+                                        }
+                                    }}
+                                    disabled={isSubmittingAjuste}
+                                    className="p-1.5 hover:bg-amber-100 rounded-xl text-slate-500 transition-colors disabled:opacity-50 cursor-pointer"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            {/* Modal Body */}
+                            <div className="p-5 overflow-y-auto custom-scrollbar space-y-4 text-xs">
+                                {/* Card de Identificação do Medicamento e Lote */}
+                                <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-2.5">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-[9px] font-black uppercase tracking-wider bg-slate-800 text-white px-2 py-0.5 rounded">
+                                            Cód: {codigoMed}
+                                        </span>
+                                        <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded bg-pink-100/80 text-pink-700 border border-pink-200/50">
+                                            {ajusteLoteTarget.categoria}
+                                        </span>
+                                    </div>
+
+                                    <div>
+                                        <h4 className="font-black text-slate-900 text-base uppercase leading-snug">
+                                            {ajusteLoteTarget.nome}{' '}
+                                            {ajusteLoteTarget.dosagem && <span className="text-pink-600">{ajusteLoteTarget.dosagem}</span>}
+                                        </h4>
+                                        {ajusteLoteTarget.principio_ativo && (
+                                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">
+                                                <span className="text-slate-400">P. Ativo:</span> {ajusteLoteTarget.principio_ativo}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div className="pt-2 border-t border-slate-200/60 grid grid-cols-4 gap-2 text-[10px]">
+                                        <div className="bg-white p-2 rounded-xl border border-slate-100">
+                                            <span className="text-[8px] font-black uppercase text-slate-400 block">Lote</span>
+                                            <span className="font-mono font-bold text-slate-700 uppercase truncate block">
+                                                {ajusteLoteTarget.lote}
+                                            </span>
+                                        </div>
+                                        <div className="bg-white p-2 rounded-xl border border-slate-100">
+                                            <span className="text-[8px] font-black uppercase text-slate-400 block">Origem</span>
+                                            <span className="font-extrabold text-slate-800 block truncate">
+                                                {ajusteLoteTarget.origem === 'COMPRADO' ? 'COMPRADO' : ajusteLoteTarget.origem === 'DOADO' ? `DOADO (${ajusteLoteTarget.doador_nome || 'Doador'})` : 'Não informada'}
+                                            </span>
+                                        </div>
+                                        <div className="bg-white p-2 rounded-xl border border-slate-100">
+                                            <span className="text-[8px] font-black uppercase text-slate-400 block">Validade</span>
+                                            <span className="font-bold text-slate-700 block">
+                                                {formatDateBr(ajusteLoteTarget.validade)}
+                                            </span>
+                                        </div>
+                                        <div className="bg-white p-2 rounded-xl border border-slate-100">
+                                            <span className="text-[8px] font-black uppercase text-slate-400 block">Saldo Registrado</span>
+                                            <span className="font-black text-slate-900 block">
+                                                {saldoAtual} {ajusteLoteTarget.unidade}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {ajusteStep === 'form' ? (
+                                    <>
+                                        {/* Campo: Novo Saldo Total Correto */}
+                                        <div className="space-y-1.5">
+                                            <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700">
+                                                Nova Quantidade Correta (Estoque Físico Conferido) *
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="1"
+                                                value={ajusteNovoSaldoInput}
+                                                onChange={(e) => setAjusteNovoSaldoInput(e.target.value)}
+                                                placeholder="Ex: 6400"
+                                                disabled={isSubmittingAjuste}
+                                                className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 px-4 text-base font-black text-slate-900 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10 outline-none transition-all placeholder:text-slate-400 shadow-2xs"
+                                                required
+                                            />
+                                            <p className="text-[9px] text-slate-400 font-semibold leading-relaxed">
+                                                Informe o <strong>saldo total real</strong> apurado na contagem física deste lote. A diferença será calculada pelo sistema automaticamente.
+                                            </p>
+                                        </div>
+
+                                        {/* Área de Conferência Visual em Tempo Real */}
+                                        <div className="rounded-2xl border border-slate-200/90 bg-slate-50/70 p-3.5 space-y-2">
+                                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
+                                                Conferência Visual Antes e Depois
+                                            </span>
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                                                <div className="p-2.5 bg-white rounded-xl border border-slate-150 shadow-2xs">
+                                                    <span className="text-[8px] font-black uppercase text-slate-400 block">Estoque Anterior</span>
+                                                    <span className="text-sm font-black text-slate-700">{saldoAtual}</span>
+                                                    <span className="text-[9px] font-bold text-slate-400 uppercase block">{ajusteLoteTarget.unidade}</span>
+                                                </div>
+                                                <div className="p-2.5 bg-white rounded-xl border border-slate-150 shadow-2xs">
+                                                    <span className="text-[8px] font-black uppercase text-slate-400 block">Novo Estoque</span>
+                                                    <span className="text-sm font-black text-slate-900">
+                                                        {isValidNovoSaldo ? novoSaldoNum : '—'}
+                                                    </span>
+                                                    <span className="text-[9px] font-bold text-slate-400 uppercase block">{ajusteLoteTarget.unidade}</span>
+                                                </div>
+                                                <div className={`p-2.5 rounded-xl border shadow-2xs ${
+                                                    !isValidNovoSaldo || diferenca === 0 
+                                                        ? 'bg-slate-100/70 border-slate-200 text-slate-500' 
+                                                        : diferenca > 0 
+                                                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                                                            : 'bg-rose-50 border-rose-200 text-rose-700'
+                                                }`}>
+                                                    <span className="text-[8px] font-black uppercase block opacity-80">Diferença</span>
+                                                    <span className="text-sm font-black">
+                                                        {isValidNovoSaldo ? (diferenca > 0 ? `+${diferenca}` : `${diferenca}`) : '—'}
+                                                    </span>
+                                                    <span className="text-[9px] font-bold opacity-80 uppercase block">{ajusteLoteTarget.unidade}</span>
+                                                </div>
+                                                <div className={`p-2.5 rounded-xl border shadow-2xs flex flex-col justify-center ${
+                                                    !isValidNovoSaldo || diferenca === 0 
+                                                        ? 'bg-slate-100/70 border-slate-200 text-slate-500' 
+                                                        : diferenca > 0 
+                                                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+                                                            : 'bg-amber-50 border-amber-200 text-amber-800'
+                                                }`}>
+                                                    <span className="text-[8px] font-black uppercase block opacity-80">Tipo de Ajuste</span>
+                                                    <span className="text-[10px] font-extrabold uppercase leading-tight mt-0.5">
+                                                        {isValidNovoSaldo ? tipoAjuste : '—'}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {isValidNovoSaldo && diferenca === 0 && (
+                                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-700 bg-amber-50/90 border border-amber-200 p-2 rounded-xl mt-1">
+                                                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                                    <span>O novo estoque é idêntico ao saldo atual. Informe uma quantidade diferente para realizar o ajuste.</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Campo: Justificativa Obrigatória */}
+                                        <div className="space-y-1.5">
+                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 flex items-center justify-between">
+                                                <span>Justificativa do Ajuste *</span>
+                                                <span className="text-[9px] font-bold text-slate-400 lowercase">mínimo 5 caracteres</span>
+                                            </label>
+                                            <textarea
+                                                rows={2}
+                                                placeholder="Informe o motivo da correção do estoque..."
+                                                value={ajusteMotivoInput}
+                                                onChange={(e) => setAjusteMotivoInput(e.target.value)}
+                                                disabled={isSubmittingAjuste}
+                                                className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-2.5 px-3.5 text-xs font-semibold text-slate-800 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10 outline-none transition-all placeholder:text-slate-400 resize-none shadow-2xs"
+                                                required
+                                            />
+                                            {/* Chips de sugestão rápida */}
+                                            <div className="flex flex-wrap items-center gap-1 pt-1">
+                                                <span className="text-[8px] font-black uppercase text-slate-400 mr-0.5">Sugestões:</span>
+                                                {[
+                                                    'Conferência física do estoque',
+                                                    'Correção de divergência de inventário',
+                                                    'Correção de lançamento anterior',
+                                                    'Perda identificada',
+                                                    'Ajuste decorrente de avaria'
+                                                ].map((sug) => (
+                                                    <button
+                                                        key={sug}
+                                                        type="button"
+                                                        onClick={() => setAjusteMotivoInput(sug)}
+                                                        className="px-2 py-0.5 text-[8px] font-bold uppercase rounded-lg bg-slate-100 hover:bg-amber-100 text-slate-600 hover:text-amber-900 border border-slate-200/80 transition-colors cursor-pointer"
+                                                    >
+                                                        + {sug}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    /* ETAPA 2: CONFERÊNCIA FINAL E CONFIRMAÇÃO */
+                                    <div className="space-y-4 animate-in fade-in duration-200">
+                                        <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold flex items-start gap-2">
+                                            <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                                            <span>
+                                                Atenção: Por favor, confira atentamente os dados abaixo antes de aplicar a alteração definitiva no banco de dados. Esta operação é permanente e auditada.
+                                            </span>
+                                        </div>
+
+                                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5">
+                                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block border-b border-slate-200 pb-1">
+                                                Resumo da Operação de Ajuste
+                                            </span>
+
+                                            <div className="grid grid-cols-2 gap-3 text-[11px]">
+                                                <div>
+                                                    <span className="text-[8px] font-bold uppercase text-slate-400 block">Medicamento</span>
+                                                    <span className="font-extrabold text-slate-800 uppercase block truncate">
+                                                        {ajusteLoteTarget.nome}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-[8px] font-bold uppercase text-slate-400 block">Lote Afetado</span>
+                                                    <span className="font-mono font-bold text-slate-800 uppercase block">
+                                                        {ajusteLoteTarget.lote}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-[8px] font-bold uppercase text-slate-400 block">Saldo Anterior</span>
+                                                    <span className="font-black text-slate-700 block">
+                                                        {saldoAtual} {ajusteLoteTarget.unidade}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-[8px] font-bold uppercase text-slate-400 block">Novo Saldo Aplicado</span>
+                                                    <span className="font-black text-slate-900 block">
+                                                        {novoSaldoNum} {ajusteLoteTarget.unidade}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div className="p-2.5 rounded-xl bg-white border border-slate-150 flex items-center justify-between">
+                                                <span className="text-[10px] font-bold text-slate-500 uppercase">Diferença Efetiva:</span>
+                                                <span className={`text-xs font-black ${diferenca > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                    {diferenca > 0 ? `+${diferenca}` : diferenca} {ajusteLoteTarget.unidade} ({tipoAjuste})
+                                                </span>
+                                            </div>
+
+                                            <div className="space-y-1">
+                                                <span className="text-[8px] font-bold uppercase text-slate-400 block">Justificativa:</span>
+                                                <p className="text-[10px] font-semibold text-slate-700 italic bg-white p-2.5 rounded-xl border border-slate-150">
+                                                    "{ajusteMotivoInput}"
+                                                </p>
+                                            </div>
+
+                                            <div className="text-[9px] text-slate-400 font-bold uppercase flex items-center justify-between pt-1">
+                                                <span>Responsável:</span>
+                                                <span className="text-slate-600">{currentUser?.name || 'Operador Autorizado'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Modal Footer */}
+                            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2.5 shrink-0">
+                                {ajusteStep === 'form' ? (
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsAjusteManualModalOpen(false)}
+                                            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                                        >
+                                            Cancelar
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={!podeAvancar}
+                                            onClick={() => setAjusteStep('confirm')}
+                                            className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-pink-600 hover:from-amber-700 hover:to-pink-700 disabled:opacity-40 disabled:pointer-events-none text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-1.5"
+                                        >
+                                            <span>Confirmar Ajuste</span>
+                                            <ChevronRight className="w-4 h-4" />
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={() => setAjusteStep('form')}
+                                            disabled={isSubmittingAjuste}
+                                            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all disabled:opacity-50 cursor-pointer"
+                                        >
+                                            Voltar e Corrigir
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={isSubmittingAjuste}
+                                            onClick={handleConfirmarAjusteManual}
+                                            className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-1.5"
+                                        >
+                                            {isSubmittingAjuste ? (
+                                                <>
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                    <span>Aplicando Ajuste...</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <CheckCircle2 className="w-4 h-4" />
+                                                    <span>Sim, Aplicar Ajuste Agora</span>
+                                                </>
+                                            )}
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
+
         </div>
     );
 };

@@ -25,13 +25,44 @@ const saveLocalAltoCustoIds = (ids: Set<string>) => {
     }
 };
 
+export interface LoteOrigemMetadata {
+    origem?: 'COMPRADO' | 'DOADO';
+    doador_nome?: string;
+    documento_origem?: string;
+}
+
+export const getLocalLotesOrigemMap = (): Record<string, LoteOrigemMetadata> => {
+    try {
+        const stored = localStorage.getItem('farmacia_lotes_origem_map');
+        if (stored) return JSON.parse(stored);
+    } catch (e) {
+        console.error('Erro ao ler farmacia_lotes_origem_map do localStorage', e);
+    }
+    return {};
+};
+
+export const saveLocalLoteOrigem = (keyOrId: string, info: LoteOrigemMetadata) => {
+    try {
+        const map = getLocalLotesOrigemMap();
+        map[keyOrId] = {
+            ...map[keyOrId],
+            ...info
+        };
+        localStorage.setItem('farmacia_lotes_origem_map', JSON.stringify(map));
+    } catch (e) {
+        console.error('Erro ao salvar farmacia_lotes_origem_map no localStorage', e);
+    }
+};
+
 const isPgrst204ColumnError = (error: any, columnName: string) => {
     if (!error) return false;
     const str = typeof error === 'object' ? JSON.stringify(error) : String(error);
     return error.code === 'PGRST204' || str.includes(`'${columnName}'`) || str.includes(columnName);
 };
 
-const MEDICAMENTO_COLUMNS = 'id, nome, categoria, quantidade, unidade, validade, lote, limite_minimo, tipo, dosagem, fornecedor, principio_ativo, alto_custo, criado_em, atualizado_em';
+const MEDICAMENTO_BASE_COLUMNS = 'id, nome, categoria, quantidade, unidade, validade, lote, limite_minimo, tipo, dosagem, fornecedor, principio_ativo, alto_custo, criado_em, atualizado_em';
+const MEDICAMENTO_COLUMNS_WITH_ORIGEM = 'id, nome, categoria, quantidade, unidade, validade, lote, limite_minimo, tipo, dosagem, fornecedor, principio_ativo, alto_custo, origem, doador_nome, documento_origem, criado_em, atualizado_em';
+let hasOrigemColumnInDb: boolean | null = null;
 
 let cachedMedicamentos: FarmaciaMedicamento[] | null = null;
 let cachedMedicamentosExpiry = 0;
@@ -842,5 +873,147 @@ export const registrarDesistenciaDispensacao = async (
     } catch (err: any) {
         console.error('[farmaciaService] registrarDesistenciaDispensacao erro inesperado:', err);
         return { success: false, error: err.message || 'Erro inesperado ao processar desistência.' };
+    }
+};
+
+// --- AJUSTE MANUAL DE ESTOQUE POR LOTE (AUDITADO E SEGURO) ---
+
+export interface RegistrarAjusteManualParams {
+    medicamentoId: string;
+    novoSaldo: number;
+    saldoEsperadoAnterior: number;
+    motivo: string;
+    currentUser?: {
+        id?: string;
+        name?: string;
+        email?: string;
+        role?: string;
+    } | null;
+}
+
+export interface RegistrarAjusteManualResult {
+    success: boolean;
+    error?: string;
+    saldoAtualizado?: number;
+    medicamentoAtualizado?: FarmaciaMedicamento;
+    movimentacaoCriada?: FarmaciaMovimentacao;
+    diferenca?: number;
+    tipoAjuste?: 'Aumento de estoque' | 'Redução de estoque';
+}
+
+export const registrarAjusteManualEstoque = async (
+    params: RegistrarAjusteManualParams
+): Promise<RegistrarAjusteManualResult> => {
+    try {
+        const { medicamentoId, novoSaldo, saldoEsperadoAnterior, motivo, currentUser } = params;
+
+        // 1. Validações preliminares
+        if (!medicamentoId) {
+            return { success: false, error: 'Identificador do lote de medicamento não fornecido.' };
+        }
+
+        if (typeof novoSaldo !== 'number' || isNaN(novoSaldo) || !Number.isInteger(novoSaldo) || novoSaldo < 0) {
+            return { success: false, error: 'A nova quantidade informada deve ser um número inteiro válido e não negativo (≥ 0).' };
+        }
+
+        if (!motivo || !motivo.trim() || motivo.trim().length < 5) {
+            return { success: false, error: 'A justificativa do ajuste é obrigatória (mínimo de 5 caracteres) para fins de auditoria e controle de estoque.' };
+        }
+
+        // 2. Buscar o registro atualizado no Supabase para verificação concorrente
+        const { data: currentMed, error: fetchErr } = await supabase
+            .from('farmacia_medicamentos')
+            .select('*')
+            .eq('id', medicamentoId)
+            .single();
+
+        if (fetchErr || !currentMed) {
+            console.error('[farmaciaService] Erro ao buscar lote para ajuste:', fetchErr);
+            return { success: false, error: 'Lote de medicamento não localizado no banco de dados.' };
+        }
+
+        const saldoAtualNoBanco = Number(currentMed.quantidade) || 0;
+
+        // 3. Controle de Concorrência: se o saldo mudou após o modal ser aberto
+        if (saldoAtualNoBanco !== Number(saldoEsperadoAnterior)) {
+            return {
+                success: false,
+                error: `O saldo deste lote foi modificado por outra operação recentemente (Saldo atual no banco: ${saldoAtualNoBanco}, saldo conferido na tela: ${saldoEsperadoAnterior}). Por segurança, a alteração foi interrompida para evitar sobrescrita concorrente. Por favor, reabra o ajuste para nova conferência.`,
+                saldoAtualizado: saldoAtualNoBanco
+            };
+        }
+
+        // 4. Bloquear ajustes sem diferença efetiva
+        const diferenca = novoSaldo - saldoAtualNoBanco;
+        if (diferenca === 0) {
+            return {
+                success: false,
+                error: 'A nova quantidade informada é idêntica ao saldo atual do lote. Não existe diferença para ajustar.'
+            };
+        }
+
+        const tipoAjusteTexto = diferenca > 0 ? 'Aumento de estoque' : 'Redução de estoque';
+        const nowIso = new Date().toISOString();
+        const responsavelNome = currentUser?.name || 'Operador Autorizado';
+        const responsavelId = currentUser?.id || null;
+
+        // 5. Atualizar o saldo do lote no banco
+        const { data: updatedMed, error: updateErr } = await supabase
+            .from('farmacia_medicamentos')
+            .update({
+                quantidade: novoSaldo,
+                atualizado_em: nowIso
+            })
+            .eq('id', medicamentoId)
+            .select()
+            .single();
+
+        if (updateErr) {
+            console.error('[farmaciaService] Erro ao atualizar saldo do lote:', updateErr);
+            return { success: false, error: 'Falha ao atualizar o saldo do lote no banco de dados.' };
+        }
+
+        // 6. Inserir movimentação permanente de auditoria no histórico
+        const observacaoAuditoria = `[AJUSTE DE ESTOQUE | Anterior: ${saldoAtualNoBanco} | Novo: ${novoSaldo} | Dif: ${diferenca > 0 ? `+${diferenca}` : diferenca} | Tipo: ${tipoAjusteTexto}] Justificativa: ${motivo.trim()}`;
+
+        const payloadMovimentacao: any = {
+            medicamento_id: currentMed.id,
+            medicamento_nome: currentMed.nome,
+            medicamento_categoria: currentMed.categoria,
+            medicamento_dosagem: currentMed.dosagem || '',
+            medicamento_tipo: currentMed.tipo || '',
+            quantidade: Math.abs(diferenca),
+            tipo: 'Ajuste',
+            lote: currentMed.lote,
+            validade: currentMed.validade,
+            responsavel_id: responsavelId,
+            responsavel_nome: responsavelNome,
+            data: nowIso,
+            observacoes: observacaoAuditoria
+        };
+
+        const { data: movData, error: movErr } = await supabase
+            .from('farmacia_movimentacoes')
+            .insert([payloadMovimentacao])
+            .select()
+            .single();
+
+        if (movErr) {
+            console.error('[farmaciaService] Erro ao registrar movimentação de ajuste no histórico:', movErr);
+        }
+
+        // 7. Invalidar cache de medicamentos
+        invalidateMedicamentosCache();
+
+        return {
+            success: true,
+            medicamentoAtualizado: updatedMed,
+            movimentacaoCriada: movData,
+            diferenca,
+            tipoAjuste: tipoAjusteTexto
+        };
+    } catch (err: any) {
+        console.error('[farmaciaService] registrarAjusteManualEstoque erro inesperado:', err);
+        return { success: false, error: err.message || 'Erro inesperado ao processar ajuste de estoque.' };
     }
 };
