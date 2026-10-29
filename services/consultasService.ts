@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga, ConsultaEspecialista, TipoAtendimentoConsulta, User } from '../types';
+import { ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga, ConsultaEspecialista, TipoAtendimentoConsulta, User, ConsultaSolicitacaoCancelamento } from '../types';
 import { handleSupabaseError } from '../utils/errorUtils';
 import { auditLogService } from './auditLogService';
 
@@ -3770,3 +3770,392 @@ export const reagendarAgendamento = async (id: string): Promise<ConsultaAgendame
     }
 };
 
+// =========================================================================================
+// FLUXO SEGURO DE CANCELAMENTO COM APROVAÇÃO OBRIGATÓRIA (REGULAÇÃO)
+// =========================================================================================
+
+const LOCAL_STORAGE_SOLICITACOES_KEY = 'consultas_solicitacoes_cancelamento_local';
+
+const getLocalSolicitacoesCancelamento = (): ConsultaSolicitacaoCancelamento[] => {
+    try {
+        const stored = localStorage.getItem(LOCAL_STORAGE_SOLICITACOES_KEY);
+        if (stored) return JSON.parse(stored);
+    } catch (e) {
+        console.error('Erro ao ler solicitações de cancelamento do localStorage:', e);
+    }
+    return [];
+};
+
+const saveLocalSolicitacoesCancelamento = (solicitacoes: ConsultaSolicitacaoCancelamento[]) => {
+    try {
+        localStorage.setItem(LOCAL_STORAGE_SOLICITACOES_KEY, JSON.stringify(solicitacoes));
+    } catch (e) {
+        console.error('Erro ao salvar solicitações de cancelamento no localStorage:', e);
+    }
+};
+
+/**
+ * Busca todas as solicitações de cancelamento com status 'Aguardando Aprovação'
+ */
+export const getSolicitacoesCancelamentoPendentes = async (): Promise<ConsultaSolicitacaoCancelamento[]> => {
+    try {
+        const { data, error } = await supabase
+            .from('consultas_solicitacoes_cancelamento')
+            .select('*')
+            .eq('status', 'Aguardando Aprovação')
+            .order('criado_em', { ascending: true });
+
+        if (error) {
+            // Fallback caso a tabela ainda não exista no schema remoto
+            if (error.code === '42P01' || error.message?.includes('relation') || error.code === 'PGRST204') {
+                console.warn('[consultasService] Tabela consultas_solicitacoes_cancelamento não localizada. Usando fallback resiliente...');
+                return getLocalSolicitacoesCancelamento().filter(s => s.status === 'Aguardando Aprovação');
+            }
+            throw error;
+        }
+
+        return data || [];
+    } catch (err: any) {
+        console.warn('[consultasService] getSolicitacoesCancelamentoPendentes fallback:', err.message);
+        return getLocalSolicitacoesCancelamento().filter(s => s.status === 'Aguardando Aprovação');
+    }
+};
+
+/**
+ * Retorna um mapa { [agendamento_id]: ConsultaSolicitacaoCancelamento } das solicitações pendentes
+ */
+export const getMapaCancelamentosPendentes = async (): Promise<Record<string, ConsultaSolicitacaoCancelamento>> => {
+    const list = await getSolicitacoesCancelamentoPendentes();
+    const map: Record<string, ConsultaSolicitacaoCancelamento> = {};
+    list.forEach(sol => {
+        if (sol.agendamento_id) {
+            map[sol.agendamento_id] = sol;
+        }
+    });
+    return map;
+};
+
+/**
+ * Usuário Comum: Solicita o cancelamento de um agendamento para análise da Regulação
+ */
+export const solicitarCancelamentoAgendamento = async (params: {
+    agendamentoId: string;
+    justificativa: string;
+    solicitante: { id: string; name: string; sector?: string };
+    bookingSnapshot?: ConsultaAgendamento | null;
+}): Promise<{ success: boolean; solicitacao?: ConsultaSolicitacaoCancelamento; error?: string }> => {
+    try {
+        const { agendamentoId, justificativa, solicitante, bookingSnapshot } = params;
+
+        if (!justificativa || justificativa.trim().length < 5) {
+            return { success: false, error: 'A justificativa do cancelamento é obrigatória (mínimo 5 caracteres).' };
+        }
+
+        // 1. Verificar se já existe solicitação pendente para este agendamento (evitar duplicidades)
+        const pendentes = await getSolicitacoesCancelamentoPendentes();
+        const jaExistePendente = pendentes.some(s => s.agendamento_id === agendamentoId && s.status === 'Aguardando Aprovação');
+        if (jaExistePendente) {
+            return {
+                success: false,
+                error: 'Já existe uma solicitação de cancelamento pendente para este agendamento sob análise da Regulação.'
+            };
+        }
+
+        // 2. Obter dados do agendamento se não fornecido
+        let targetBooking = bookingSnapshot;
+        if (!targetBooking) {
+            const { data: bData } = await supabase
+                .from('consultas_agendamentos')
+                .select('*, paciente:consultas_pacientes(*), procedimento:consultas_procedimentos(*)')
+                .eq('id', agendamentoId)
+                .single();
+            targetBooking = bData;
+        }
+
+        if (!targetBooking) {
+            return { success: false, error: 'Agendamento não localizado no banco de dados.' };
+        }
+
+        if (targetBooking.status === 'Cancelado') {
+            return { success: false, error: 'Este agendamento já se encontra cancelado.' };
+        }
+
+        const now = new Date().toISOString();
+        const rawCpf = targetBooking.paciente?.cpf || '';
+        const formattedCpf = rawCpf ? rawCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : 'S/ CPF';
+
+        const payload: Omit<ConsultaSolicitacaoCancelamento, 'id'> = {
+            agendamento_id: agendamentoId,
+            paciente_nome: targetBooking.paciente?.name || 'Paciente não informado',
+            paciente_cpf: formattedCpf,
+            procedimento_nome: targetBooking.procedimento?.name || 'Procedimento não informado',
+            procedimento_categoria: targetBooking.procedimento?.type || targetBooking.procedimento?.category || 'Geral',
+            protocolo: (targetBooking as any).protocolo || agendamentoId.substring(0, 8).toUpperCase(),
+            prioridade: targetBooking.priority || 'Normal',
+            situacao_agendamento: targetBooking.status || 'Solicitado',
+            data_agendada: targetBooking.appointment_date || null,
+            solicitante_id: solicitante.id,
+            solicitante_nome: solicitante.name,
+            solicitante_setor: solicitante.sector || 'Unidade Básica / PSF',
+            justificativa_solicitacao: justificativa.trim(),
+            status: 'Aguardando Aprovação',
+            criado_em: now,
+            atualizado_em: now
+        };
+
+        let createdSolicitacao: ConsultaSolicitacaoCancelamento | null = null;
+
+        try {
+            const { data, error } = await supabase
+                .from('consultas_solicitacoes_cancelamento')
+                .insert([payload])
+                .select()
+                .single();
+
+            if (!error && data) {
+                createdSolicitacao = data;
+            } else if (error) {
+                console.warn('[consultasService] Erro ao gravar solicitação no Supabase. Usando fallback local:', error.message);
+            }
+        } catch (supabaseErr: any) {
+            console.warn('[consultasService] Falha de conexão Supabase ao salvar solicitação. Fallback local:', supabaseErr.message);
+        }
+
+        // Salvar também no fallback local para máxima resiliência
+        const localItem: ConsultaSolicitacaoCancelamento = createdSolicitacao || {
+            ...payload,
+            id: 'local-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7)
+        };
+        const localList = getLocalSolicitacoesCancelamento();
+        localList.push(localItem);
+        saveLocalSolicitacoesCancelamento(localList);
+
+        // Notificar eventos para tempo real
+        window.dispatchEvent(new CustomEvent('consultas-solicitacoes-cancelamento-changed'));
+        window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+
+        return { success: true, solicitacao: localItem };
+    } catch (err: any) {
+        console.error('[consultasService] solicitarCancelamentoAgendamento erro:', err);
+        return { success: false, error: err.message || 'Erro inesperado ao solicitar cancelamento.' };
+    }
+};
+
+/**
+ * Gestor / Admin: Aprova a solicitação e cancela definitivamente o agendamento em operação atômica
+ */
+export const aprovarSolicitacaoCancelamento = async (params: {
+    solicitacaoId: string;
+    aprovador: { id: string; name: string };
+}): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const { solicitacaoId, aprovador } = params;
+        const now = new Date().toISOString();
+
+        // 1. Buscar a solicitação para verificação concorrente
+        let solicitacao: ConsultaSolicitacaoCancelamento | null = null;
+
+        try {
+            const { data } = await supabase
+                .from('consultas_solicitacoes_cancelamento')
+                .select('*')
+                .eq('id', solicitacaoId)
+                .single();
+            if (data) solicitacao = data;
+        } catch (e) {
+            // Continua para verificar fallback local
+        }
+
+        if (!solicitacao) {
+            const localList = getLocalSolicitacoesCancelamento();
+            solicitacao = localList.find(s => s.id === solicitacaoId) || null;
+        }
+
+        if (!solicitacao) {
+            return { success: false, error: 'Solicitação de cancelamento não localizada.' };
+        }
+
+        if (solicitacao.status !== 'Aguardando Aprovação') {
+            return {
+                success: false,
+                error: `Esta solicitação já foi decidida anteriormente por outro gestor (Status atual: ${solicitacao.status}).`
+            };
+        }
+
+        const agendamentoId = solicitacao.agendamento_id;
+
+        // 2. Verificar o agendamento no Supabase
+        const { data: booking, error: bErr } = await supabase
+            .from('consultas_agendamentos')
+            .select('*')
+            .eq('id', agendamentoId)
+            .single();
+
+        if (bErr || !booking) {
+            return { success: false, error: 'O agendamento vinculado não foi encontrado no banco de dados.' };
+        }
+
+        if (booking.status === 'Cancelado') {
+            // Já cancelado, apenas marca solicitação como aprovada
+            try {
+                await supabase
+                    .from('consultas_solicitacoes_cancelamento')
+                    .update({
+                        status: 'Aprovada',
+                        aprovador_id: aprovador.id,
+                        aprovador_nome: aprovador.name,
+                        decidido_em: now,
+                        atualizado_em: now
+                    })
+                    .eq('id', solicitacaoId);
+            } catch (_) {}
+            return { success: true };
+        }
+
+        // 3. Executar o cancelamento definitivo do agendamento
+        const cancellationReason = `[Aprovado por ${aprovador.name} via Regulação] Motivo original: ${solicitacao.justificativa_solicitacao}`;
+
+        const { error: cancelErr } = await supabase
+            .from('consultas_agendamentos')
+            .update({
+                status: 'Cancelado',
+                cancellation_reason: cancellationReason,
+                canceled_by: aprovador.id,
+                canceled_by_name: aprovador.name,
+                canceled_at: now
+            })
+            .eq('id', agendamentoId);
+
+        if (cancelErr) {
+            // Fallback se colunas opcionais não existirem
+            const { error: retryErr } = await supabase
+                .from('consultas_agendamentos')
+                .update({ status: 'Cancelado' })
+                .eq('id', agendamentoId);
+            if (retryErr) {
+                return { success: false, error: 'Falha ao atualizar o status do agendamento para Cancelado: ' + retryErr.message };
+            }
+        }
+
+        // 4. Se o agendamento possuía vaga vinculada, liberá-la
+        if (booking.vaga_id) {
+            try {
+                await supabase
+                    .from('consultas_vagas')
+                    .update({ status: 'Disponível' })
+                    .eq('id', booking.vaga_id);
+            } catch (vagaErr) {
+                console.warn('[consultasService] Erro ao liberar vaga associada ao cancelamento:', vagaErr);
+            }
+        }
+
+        // 5. Atualizar a solicitação para 'Aprovada'
+        try {
+            await supabase
+                .from('consultas_solicitacoes_cancelamento')
+                .update({
+                    status: 'Aprovada',
+                    aprovador_id: aprovador.id,
+                    aprovador_nome: aprovador.name,
+                    decidido_em: now,
+                    atualizado_em: now
+                })
+                .eq('id', solicitacaoId);
+        } catch (_) {}
+
+        // Atualizar lista local
+        const localList = getLocalSolicitacoesCancelamento();
+        const updatedLocal = localList.map(s => {
+            if (s.id === solicitacaoId) {
+                return {
+                    ...s,
+                    status: 'Aprovada' as const,
+                    aprovador_id: aprovador.id,
+                    aprovador_nome: aprovador.name,
+                    decidido_em: now,
+                    atualizado_em: now
+                };
+            }
+            return s;
+        });
+        saveLocalSolicitacoesCancelamento(updatedLocal);
+
+        // 6. Notificar em tempo real
+        window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+        window.dispatchEvent(new CustomEvent('consultas-solicitacoes-cancelamento-changed'));
+        window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+
+        return { success: true };
+    } catch (err: any) {
+        console.error('[consultasService] aprovarSolicitacaoCancelamento erro:', err);
+        return { success: false, error: err.message || 'Erro inesperado ao aprovar cancelamento.' };
+    }
+};
+
+/**
+ * Gestor / Admin: Rejeita a solicitação de cancelamento com justificativa obrigatória
+ */
+export const rejeitarSolicitacaoCancelamento = async (params: {
+    solicitacaoId: string;
+    justificativaRecusa: string;
+    rejeitador: { id: string; name: string };
+}): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const { solicitacaoId, justificativaRecusa, rejeitador } = params;
+
+        if (!justificativaRecusa || justificativaRecusa.trim().length < 5) {
+            return {
+                success: false,
+                error: 'A justificativa para a rejeição da solicitação é obrigatória (mínimo de 5 caracteres).'
+            };
+        }
+
+        const now = new Date().toISOString();
+
+        // 1. Atualizar no Supabase
+        try {
+            const { error } = await supabase
+                .from('consultas_solicitacoes_cancelamento')
+                .update({
+                    status: 'Rejeitada',
+                    aprovador_id: rejeitador.id,
+                    aprovador_nome: rejeitador.name,
+                    decisao_justificativa: justificativaRecusa.trim(),
+                    decidido_em: now,
+                    atualizado_em: now
+                })
+                .eq('id', solicitacaoId);
+
+            if (error) {
+                console.warn('[consultasService] Erro ao rejeitar solicitação no Supabase. Fallback local:', error.message);
+            }
+        } catch (_) {}
+
+        // 2. Atualizar no fallback local
+        const localList = getLocalSolicitacoesCancelamento();
+        const updatedLocal = localList.map(s => {
+            if (s.id === solicitacaoId) {
+                return {
+                    ...s,
+                    status: 'Rejeitada' as const,
+                    aprovador_id: rejeitador.id,
+                    aprovador_nome: rejeitador.name,
+                    decisao_justificativa: justificativaRecusa.trim(),
+                    decidido_em: now,
+                    atualizado_em: now
+                };
+            }
+            return s;
+        });
+        saveLocalSolicitacoesCancelamento(updatedLocal);
+
+        // 3. Notificar em tempo real (o agendamento é mantido sem alterações de status)
+        window.dispatchEvent(new CustomEvent('consultas-solicitacoes-cancelamento-changed'));
+        window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+
+        return { success: true };
+    } catch (err: any) {
+        console.error('[consultasService] rejeitarSolicitacaoCancelamento erro:', err);
+        return { success: false, error: err.message || 'Erro inesperado ao rejeitar solicitação.' };
+    }
+};

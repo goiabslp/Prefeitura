@@ -749,6 +749,36 @@ export interface ConsultaAgendamento {
   confirmed_by?: string;
   confirmed_by_name?: string;
   confirmation_origin?: string;
+
+  // Solicitação de Cancelamento
+  cancelamento_pendente?: boolean;
+  solicitacao_cancelamento?: ConsultaSolicitacaoCancelamento;
+}
+
+export type SolicitacaoCancelamentoStatus = 'Aguardando Aprovação' | 'Aprovada' | 'Rejeitada';
+
+export interface ConsultaSolicitacaoCancelamento {
+  id: string;
+  agendamento_id: string;
+  paciente_nome: string;
+  paciente_cpf?: string;
+  procedimento_nome: string;
+  procedimento_categoria?: string;
+  protocolo?: string;
+  prioridade?: string;
+  situacao_agendamento?: string;
+  data_agendada?: string | null;
+  solicitante_id: string;
+  solicitante_nome: string;
+  solicitante_setor?: string;
+  justificativa_solicitacao: string;
+  status: SolicitacaoCancelamentoStatus;
+  aprovador_id?: string | null;
+  aprovador_nome?: string | null;
+  decisao_justificativa?: string | null;
+  decidido_em?: string | null;
+  criado_em?: string;
+  atualizado_em?: string;
 }
 
 export interface ConsultaVaga {

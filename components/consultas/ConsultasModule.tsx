@@ -9,6 +9,8 @@ import { LiberarVagasScreen } from './LiberarVagasScreen';
 import { ProcedimentosScreen } from './ProcedimentosScreen';
 import { PacientesHubScreen } from './pacientes/PacientesHubScreen';
 import { ModuleGestorScreen } from '../common/ModuleGestorScreen';
+import { SolicitacoesCancelamentoModal } from './SolicitacoesCancelamentoModal';
+import * as db from '../../services/consultasService';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { userCanAccessSubmodule } from '../../services/permissionService';
 
@@ -30,6 +32,15 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
     appState
 }) => {
     const { moduleStatus, mobileModuleStatus } = useSystemSettings();
+    const [gestorUserIds, setGestorUserIds] = useState<string[]>([]);
+
+    useEffect(() => {
+        db.getConsultasGestores().then(setGestorUserIds).catch(() => {});
+    }, []);
+
+    const isAdmin = currentUser?.role === 'admin';
+    const isGestor = currentUser ? (gestorUserIds.includes(currentUser.id) || !!currentUser.permissions?.includes('parent_consultas_gestor') || !!currentUser.permissions?.includes('sub_consultas_gestor')) : false;
+    const isGestorOrAdmin = isAdmin || isGestor;
     const [isMobileViewport, setIsMobileViewport] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
 
     useEffect(() => {

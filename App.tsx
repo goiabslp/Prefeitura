@@ -2254,6 +2254,13 @@ const App: React.FC = () => {
         )
         .on(
           'postgres_changes',
+          { event: '*', schema: 'public', table: 'consultas_solicitacoes_cancelamento' },
+          () => {
+            window.dispatchEvent(new Event('consultas-solicitacoes-cancelamento-changed'));
+          }
+        )
+        .on(
+          'postgres_changes',
           { event: '*', schema: 'public', table: 'consultas_pacientes' },
           () => {
             window.dispatchEvent(new Event('consultas-pacientes-changed'));
