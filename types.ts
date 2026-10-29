@@ -235,7 +235,7 @@ export type AppPermission =
 
 export type BlockType = 'oficio' | 'compras' | 'diarias' | 'agendamento' | 'abastecimento' | 'vs_calendar' | 'vs_novo' | 'vs_day' | 'vs_history' | 'vs_approvals' | 'vs_consultar' | 'dashboard' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'licitacao' | 'consultas' | 'farmacia' | 'art' | 'documentos';
 
-export type FarmaciaOrigemEstoque = 'COMPRADO' | 'DOADO';
+export type FarmaciaOrigemEstoque = 'COMPRADO' | 'DOADO' | 'FORNECIDO PELO ESTADO';
 
 export interface FarmaciaMedicamento {
   id: string;

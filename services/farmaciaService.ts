@@ -26,7 +26,7 @@ const saveLocalAltoCustoIds = (ids: Set<string>) => {
 };
 
 export interface LoteOrigemMetadata {
-    origem?: 'COMPRADO' | 'DOADO';
+    origem?: 'COMPRADO' | 'DOADO' | 'FORNECIDO PELO ESTADO';
     doador_nome?: string;
     documento_origem?: string;
 }
