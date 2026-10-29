@@ -61,6 +61,7 @@ const isPgrst204ColumnError = (error: any, columnName: string) => {
 };
 
 const MEDICAMENTO_BASE_COLUMNS = 'id, nome, categoria, quantidade, unidade, validade, lote, limite_minimo, tipo, dosagem, fornecedor, principio_ativo, alto_custo, criado_em, atualizado_em';
+const MEDICAMENTO_COLUMNS = MEDICAMENTO_BASE_COLUMNS;
 const MEDICAMENTO_COLUMNS_WITH_ORIGEM = 'id, nome, categoria, quantidade, unidade, validade, lote, limite_minimo, tipo, dosagem, fornecedor, principio_ativo, alto_custo, origem, doador_nome, documento_origem, criado_em, atualizado_em';
 let hasOrigemColumnInDb: boolean | null = null;
 
@@ -85,11 +86,25 @@ export const getMedicamentos = async (forceRefresh = false): Promise<FarmaciaMed
         let hasMore = true;
 
         while (hasMore) {
-            const { data, error } = await supabase
+            const colsToUse = hasOrigemColumnInDb === false ? MEDICAMENTO_BASE_COLUMNS : MEDICAMENTO_COLUMNS_WITH_ORIGEM;
+            let queryRes = await supabase
                 .from('farmacia_medicamentos')
-                .select(MEDICAMENTO_COLUMNS)
+                .select(colsToUse)
                 .order('nome', { ascending: true })
                 .range(from, from + step - 1);
+
+            if (queryRes.error && hasOrigemColumnInDb === null && (queryRes.error.code === 'PGRST204' || String(queryRes.error.message || '').includes('origem'))) {
+                hasOrigemColumnInDb = false;
+                queryRes = await supabase
+                    .from('farmacia_medicamentos')
+                    .select(MEDICAMENTO_BASE_COLUMNS)
+                    .order('nome', { ascending: true })
+                    .range(from, from + step - 1);
+            } else if (!queryRes.error && hasOrigemColumnInDb === null) {
+                hasOrigemColumnInDb = true;
+            }
+
+            const { data, error } = queryRes;
 
             if (error) throw error;
             
@@ -108,10 +123,18 @@ export const getMedicamentos = async (forceRefresh = false): Promise<FarmaciaMed
         }
 
         const localIds = getLocalAltoCustoIds();
-        const result = allData.map(med => ({
-            ...med,
-            alto_custo: med.alto_custo ?? localIds.has(med.id)
-        }));
+        const localOrigemMap = getLocalLotesOrigemMap();
+        const result = allData.map(med => {
+            const compositeKey = `${med.nome.trim().toUpperCase()}_${med.lote.trim().toUpperCase()}`;
+            const localInfo = localOrigemMap[med.id] || localOrigemMap[compositeKey];
+            return {
+                ...med,
+                alto_custo: med.alto_custo ?? localIds.has(med.id),
+                origem: med.origem || localInfo?.origem,
+                doador_nome: med.doador_nome || localInfo?.doador_nome,
+                documento_origem: med.documento_origem || localInfo?.documento_origem
+            };
+        });
 
         cachedMedicamentos = result;
         cachedMedicamentosExpiry = now + 1000 * 60 * 10; // 10 minutos de cache
