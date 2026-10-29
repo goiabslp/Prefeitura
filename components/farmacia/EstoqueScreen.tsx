@@ -597,7 +597,17 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     const handleCreateStock = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedMed || !stockToAdd.lote || !stockToAdd.validade || !stockToAdd.quantidade) {
-            showAlert('Preencha os campos obrigatórios.', 'error');
+            showAlert('Preencha os campos obrigatórios (Lote, Validade e Quantidade).', 'error');
+            return;
+        }
+
+        if (!stockToAdd.origem) {
+            showAlert('Por favor, selecione a Origem do Estoque (Comprado ou Doado).', 'error');
+            return;
+        }
+
+        if (stockToAdd.origem === 'DOADO' && !stockToAdd.doador_nome.trim()) {
+            showAlert('O campo "Município ou Entidade Doadora" é obrigatório para doações.', 'error');
             return;
         }
 
@@ -616,9 +626,16 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
 
         setSaving(true);
         try {
+            const obsProcedencia = stockToAdd.origem === 'DOADO' 
+                ? `[ORIGEM: DOADO | Doador: ${stockToAdd.doador_nome.trim()}${stockToAdd.documento_origem.trim() ? ` | Termo/Ofício: ${stockToAdd.documento_origem.trim()}` : ''}]`
+                : `[ORIGEM: COMPRADO${stockToAdd.documento_origem.trim() ? ` | NF/Doc: ${stockToAdd.documento_origem.trim()}` : ''}${stockToAdd.fornecedor.trim() ? ` | Fornecedor: ${stockToAdd.fornecedor.trim()}` : ''}]`;
+
             if (existingLote) {
                 await db.updateMedicamento(existingLote.id, {
-                    validade: stockToAdd.validade
+                    validade: stockToAdd.validade,
+                    origem: stockToAdd.origem || existingLote.origem,
+                    doador_nome: stockToAdd.origem === 'DOADO' ? stockToAdd.doador_nome.trim() : (existingLote.doador_nome || ''),
+                    documento_origem: stockToAdd.documento_origem.trim() || existingLote.documento_origem || ''
                 });
 
                 await db.registrarMovimentacao({
@@ -634,7 +651,10 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                     responsavel_nome: currentUser?.name || '',
                     responsavel_id: currentUser?.id || '',
                     data: new Date().toISOString(),
-                    observacoes: 'Adição de estoque'
+                    origem: stockToAdd.origem,
+                    doador_nome: stockToAdd.origem === 'DOADO' ? stockToAdd.doador_nome.trim() : '',
+                    documento_origem: stockToAdd.documento_origem.trim(),
+                    observacoes: `Adição de estoque ${obsProcedencia}`
                 });
 
                 showAlert('Estoque adicionado com sucesso!', 'success');
@@ -649,8 +669,11 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                     limite_minimo: selectedMed.limite_minimo,
                     tipo: selectedMed.tipo,
                     dosagem: selectedMed.dosagem,
-                    fornecedor: selectedMed.fornecedor,
-                    principio_ativo: selectedMed.principio_ativo
+                    fornecedor: stockToAdd.fornecedor.trim() || selectedMed.fornecedor,
+                    principio_ativo: selectedMed.principio_ativo,
+                    origem: stockToAdd.origem,
+                    doador_nome: stockToAdd.origem === 'DOADO' ? stockToAdd.doador_nome.trim() : '',
+                    documento_origem: stockToAdd.documento_origem.trim()
                 });
 
                 if (newMed) {
@@ -667,13 +690,16 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                         responsavel_nome: currentUser?.name || '',
                         responsavel_id: currentUser?.id || '',
                         data: new Date().toISOString(),
-                        observacoes: 'Cadastro de novo lote'
+                        origem: stockToAdd.origem,
+                        doador_nome: stockToAdd.origem === 'DOADO' ? stockToAdd.doador_nome.trim() : '',
+                        documento_origem: stockToAdd.documento_origem.trim(),
+                        observacoes: `Cadastro de novo lote ${obsProcedencia}`
                     });
                     showAlert('Novo lote adicionado com sucesso!', 'success');
                 }
             }
             setIsAddStockModalOpen(false);
-            setStockToAdd(resetStockToAdd(medReference));
+            setStockToAdd(resetStockToAdd(selectedMed));
             loadData(true);
         } catch (error: any) {
             showAlert(error.message || 'Erro ao adicionar estoque.', 'error');
@@ -943,6 +969,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                                                 <thead>
                                                                     <tr className="border-b border-slate-100 text-[8px] font-black text-slate-450 uppercase tracking-wider">
                                                                         <th className="py-2 pl-2">Identificação do Lote</th>
+                                                                        <th className="py-2">Origem do Estoque</th>
                                                                         <th className="py-2">Data de Validade</th>
                                                                         <th className="py-2 text-center">Quantidade</th>
                                                                         <th className="py-2 text-right pr-2">Ações</th>
@@ -954,7 +981,33 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                                                         const loteBadge = getStockBadgeColor(lote);
                                                                         return (
                                                                             <tr key={lote.id} className="hover:bg-slate-50/40">
-                                                                                <td className="py-2.5 pl-2 font-mono uppercase text-slate-750">{lote.lote}</td>
+                                                                                <td className="py-2.5 pl-2 font-mono uppercase text-slate-750 font-bold">{lote.lote}</td>
+                                                                                <td className="py-2.5">
+                                                                                    {lote.origem === 'COMPRADO' ? (
+                                                                                        <span 
+                                                                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-sky-50 text-sky-700 border border-sky-200/70"
+                                                                                            title={lote.documento_origem ? `Documento / NF: ${lote.documento_origem}` : 'Estoque adquirido por compra pública'}
+                                                                                        >
+                                                                                            <ShoppingBag className="w-2.5 h-2.5 text-sky-600" />
+                                                                                            <span>COMPRADO</span>
+                                                                                        </span>
+                                                                                    ) : lote.origem === 'DOADO' ? (
+                                                                                        <span 
+                                                                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200/70"
+                                                                                            title={lote.documento_origem ? `Termo/Ofício: ${lote.documento_origem}` : `Doador: ${lote.doador_nome || 'Não especificado'}`}
+                                                                                        >
+                                                                                            <HeartHandshake className="w-2.5 h-2.5 text-emerald-600" />
+                                                                                            <span className="truncate max-w-[150px]">DOADO — {lote.doador_nome || 'Doação'}</span>
+                                                                                        </span>
+                                                                                    ) : (
+                                                                                        <span 
+                                                                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold text-slate-400 bg-slate-50 border border-slate-200/60"
+                                                                                            title="Lote anterior sem procedência registrada"
+                                                                                        >
+                                                                                            Origem não informada
+                                                                                        </span>
+                                                                                    )}
+                                                                                </td>
                                                                                 <td className="py-2.5">
                                                                                     {lote.lote === 'LOTE-INICIAL' ? '-' : (
                                                                                         <span className={isLoteExpired ? 'text-rose-500 font-bold bg-rose-50 px-1.5 py-0.5 rounded' : 'text-slate-650'}>
@@ -972,9 +1025,17 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                                                                         <button
                                                                                             onClick={() => handleOpenAdjustModal(lote)}
                                                                                             className="px-2 py-0.5 text-[9px] font-black uppercase bg-pink-50 text-pink-600 hover:bg-pink-100 border border-pink-200/40 rounded transition-colors cursor-pointer"
-                                                                                            title="Ajustar ou movimentar este lote específico"
+                                                                                            title="Consultar histórico e movimentar este lote"
                                                                                         >
                                                                                             Movimentar
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => handleOpenAjusteManualModal(lote)}
+                                                                                            className="px-2.5 py-0.5 text-[9px] font-black uppercase bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/70 rounded transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                                                                                            title="Ajustar saldo conferido deste lote físico"
+                                                                                        >
+                                                                                            <SlidersHorizontal className="w-2.5 h-2.5 text-amber-600" />
+                                                                                            <span>Ajustar</span>
                                                                                         </button>
                                                                                         {canEdit && (
                                                                                             <button
@@ -1647,6 +1708,54 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                 </div>
                             </div>
 
+                            {/* Card de Procedência e Origem do Lote */}
+                            <div className="p-3.5 bg-slate-50/90 border border-slate-200/80 rounded-2xl space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Origem e Procedência</span>
+                                    {selectedMed.origem === 'COMPRADO' ? (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-sky-100 text-sky-800 border border-sky-200">
+                                            <ShoppingBag className="w-3 h-3 text-sky-600" />
+                                            COMPRADO
+                                        </span>
+                                    ) : selectedMed.origem === 'DOADO' ? (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                            <HeartHandshake className="w-3 h-3 text-emerald-600" />
+                                            DOADO
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-semibold text-slate-500 bg-slate-200/70">
+                                            Origem não informada
+                                        </span>
+                                    )}
+                                </div>
+
+                                {selectedMed.origem === 'DOADO' && (
+                                    <div className="text-[11px] pt-1 border-t border-slate-200/60 grid grid-cols-2 gap-2">
+                                        <div>
+                                            <span className="text-[8px] font-bold uppercase text-slate-400 block">Doador / Entidade</span>
+                                            <span className="font-extrabold text-slate-800 block truncate">{selectedMed.doador_nome || 'Não especificado'}</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-[8px] font-bold uppercase text-slate-400 block">Termo / Ofício</span>
+                                            <span className="font-semibold text-slate-700 block truncate">{selectedMed.documento_origem || 'Não anexado'}</span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {selectedMed.origem === 'COMPRADO' && (
+                                    <div className="text-[11px] pt-1 border-t border-slate-200/60 grid grid-cols-2 gap-2">
+                                        <div>
+                                            <span className="text-[8px] font-bold uppercase text-slate-400 block">Documento / NF</span>
+                                            <span className="font-semibold text-slate-800 block truncate">{selectedMed.documento_origem || 'Não informado'}</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-[8px] font-bold uppercase text-slate-400 block">Fornecedor</span>
+                                            <span className="font-semibold text-slate-700 block truncate">{selectedMed.fornecedor || 'Padrão da Farmácia'}</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                             {/* Warning or Status banner */}
                             {(selectedMed.lote !== 'LOTE-INICIAL' && new Date(selectedMed.validade).getTime() <= Date.now()) ? (
                                 <div className="bg-rose-50 border border-rose-100 rounded-2xl p-3 flex items-start gap-2.5 text-[10px] font-semibold text-rose-700">
@@ -1682,7 +1791,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                             <button
                                 onClick={() => {
                                     setIsAdjustModalOpen(false);
-                                    setStockToAdd({ lote: '', validade: '', quantidade: '' });
+                                    setStockToAdd(resetStockToAdd(selectedMed));
                                     setIsAddStockModalOpen(true);
                                 }}
                                 className="px-5 py-2.5 bg-pink-600 hover:bg-pink-700 text-white font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all shadow-sm flex items-center gap-2"
@@ -1721,41 +1830,156 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
-                        <form onSubmit={handleCreateStock} className="p-6 space-y-4">
+                        <form onSubmit={handleCreateStock} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto custom-scrollbar">
                             <div>
-                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Lote *</label>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-600 mb-1.5 ml-1">Lote *</label>
                                 <input 
                                     type="text" 
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 uppercase" 
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 uppercase" 
                                     placeholder="Ex: LOTE123"
                                     value={stockToAdd.lote} 
                                     onChange={e => setStockToAdd({...stockToAdd, lote: e.target.value})} 
                                     required 
                                 />
                             </div>
+
                             <div>
-                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Validade *</label>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-600 mb-1.5 ml-1">Validade *</label>
                                 <input 
                                     type="date" 
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 uppercase" 
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 uppercase" 
                                     value={stockToAdd.validade} 
                                     onChange={e => setStockToAdd({...stockToAdd, validade: e.target.value})} 
                                     required 
                                 />
                             </div>
+
+                            {/* SELETOR COMPACTO: ORIGEM DO ESTOQUE */}
+                            <div className="space-y-2.5 p-3.5 rounded-2xl bg-slate-50/90 border border-slate-200/90">
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 ml-0.5 flex items-center justify-between">
+                                    <span className="flex items-center gap-1.5">
+                                        <span>ORIGEM DO ESTOQUE *</span>
+                                    </span>
+                                    {!stockToAdd.origem && (
+                                        <span className="text-[9px] font-bold text-pink-600 lowercase bg-pink-50 px-2 py-0.5 rounded-full border border-pink-200/50">
+                                            seleção obrigatória
+                                        </span>
+                                    )}
+                                </label>
+
+                                {/* Seletor compacto Comprado vs Doado */}
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setStockToAdd({ ...stockToAdd, origem: 'COMPRADO' })}
+                                        className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                            stockToAdd.origem === 'COMPRADO'
+                                                ? 'bg-sky-600 text-white border-sky-600 shadow-md shadow-sky-600/20'
+                                                : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-200'
+                                        }`}
+                                    >
+                                        <ShoppingBag className="w-3.5 h-3.5" />
+                                        <span>Comprado</span>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setStockToAdd({ ...stockToAdd, origem: 'DOADO' })}
+                                        className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                            stockToAdd.origem === 'DOADO'
+                                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/20'
+                                                : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-200'
+                                        }`}
+                                    >
+                                        <Gift className="w-3.5 h-3.5" />
+                                        <span>Doado</span>
+                                    </button>
+                                </div>
+
+                                {/* Campos dinâmicos quando Comprado */}
+                                {stockToAdd.origem === 'COMPRADO' && (
+                                    <div className="pt-2.5 space-y-2 border-t border-slate-200 animate-in fade-in duration-200">
+                                        <div>
+                                            <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                                                Processo / Nota Fiscal / Empenho (Opcional)
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder="Ex: NF 45892 / Processo 120/2026"
+                                                value={stockToAdd.documento_origem}
+                                                onChange={e => setStockToAdd({ ...stockToAdd, documento_origem: e.target.value })}
+                                                className="w-full rounded-xl border border-slate-200 bg-white py-2 px-3 text-xs text-slate-800 focus:border-sky-500 outline-none"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                                                Fornecedor / Distribuidor (Opcional)
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder="Ex: União Química Farmacêutica"
+                                                value={stockToAdd.fornecedor}
+                                                onChange={e => setStockToAdd({ ...stockToAdd, fornecedor: e.target.value })}
+                                                className="w-full rounded-xl border border-slate-200 bg-white py-2 px-3 text-xs text-slate-800 focus:border-sky-500 outline-none"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Campos dinâmicos quando Doado */}
+                                {stockToAdd.origem === 'DOADO' && (
+                                    <div className="pt-2.5 space-y-2 border-t border-slate-200 animate-in fade-in duration-200">
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase text-emerald-800 mb-1 flex items-center justify-between">
+                                                <span>MUNICÍPIO OU ENTIDADE DOADORA *</span>
+                                                <span className="text-[9px] font-bold text-emerald-600">Obrigatório</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder="Ex: Município de Ipatinga / Rotary / SES-MG"
+                                                value={stockToAdd.doador_nome}
+                                                onChange={e => setStockToAdd({ ...stockToAdd, doador_nome: e.target.value })}
+                                                required
+                                                className="w-full rounded-xl border border-emerald-300 bg-white py-2 px-3 text-xs font-semibold text-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 outline-none"
+                                            />
+                                            <p className="text-[9px] text-slate-400 mt-1">
+                                                Identifique a prefeitura, secretaria, instituição ou entidade responsável pela doação.
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                                                Termo de Doação / Ofício / Documento (Opcional)
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder="Ex: Ofício nº 145/2026 / Termo de Repasse 02"
+                                                value={stockToAdd.documento_origem}
+                                                onChange={e => setStockToAdd({ ...stockToAdd, documento_origem: e.target.value })}
+                                                className="w-full rounded-xl border border-slate-200 bg-white py-2 px-3 text-xs text-slate-800 focus:border-emerald-500 outline-none"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                             <div>
-                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Quantidade *</label>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-600 mb-1.5 ml-1">Quantidade *</label>
                                 <input 
                                     type="number" 
                                     min="1"
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900" 
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900" 
                                     placeholder="Ex: 100"
                                     value={stockToAdd.quantidade} 
                                     onChange={e => setStockToAdd({...stockToAdd, quantidade: e.target.value})} 
                                     required 
                                 />
                             </div>
-                            <button type="submit" disabled={saving} className="w-full mt-4 py-3.5 bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-98">
+
+                            <button 
+                                type="submit" 
+                                disabled={saving || !stockToAdd.origem || (stockToAdd.origem === 'DOADO' && !stockToAdd.doador_nome.trim())} 
+                                className="w-full mt-4 py-3.5 bg-pink-600 hover:bg-pink-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-98 cursor-pointer"
+                            >
                                 {saving ? 'Adicionando...' : 'Confirmar Adição'}
                             </button>
                         </form>
