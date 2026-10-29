@@ -636,7 +636,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                 await db.updateMedicamento(existingLote.id, {
                     validade: stockToAdd.validade,
                     origem: stockToAdd.origem || existingLote.origem,
-                    doador_nome: stockToAdd.origem === 'DOADO' ? stockToAdd.doador_nome.trim() : (existingLote.doador_nome || ''),
+                    doador_nome: (stockToAdd.origem === 'DOADO' || stockToAdd.origem === 'FORNECIDO PELO ESTADO') ? stockToAdd.doador_nome.trim() : (existingLote.doador_nome || ''),
                     documento_origem: stockToAdd.documento_origem.trim() || existingLote.documento_origem || ''
                 });
 
@@ -654,7 +654,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                     responsavel_id: currentUser?.id || '',
                     data: new Date().toISOString(),
                     origem: stockToAdd.origem,
-                    doador_nome: stockToAdd.origem === 'DOADO' ? stockToAdd.doador_nome.trim() : '',
+                    doador_nome: (stockToAdd.origem === 'DOADO' || stockToAdd.origem === 'FORNECIDO PELO ESTADO') ? stockToAdd.doador_nome.trim() : '',
                     documento_origem: stockToAdd.documento_origem.trim(),
                     observacoes: `Adição de estoque ${obsProcedencia}`
                 });
@@ -674,7 +674,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                     fornecedor: stockToAdd.fornecedor.trim() || selectedMed.fornecedor,
                     principio_ativo: selectedMed.principio_ativo,
                     origem: stockToAdd.origem,
-                    doador_nome: stockToAdd.origem === 'DOADO' ? stockToAdd.doador_nome.trim() : '',
+                    doador_nome: (stockToAdd.origem === 'DOADO' || stockToAdd.origem === 'FORNECIDO PELO ESTADO') ? stockToAdd.doador_nome.trim() : '',
                     documento_origem: stockToAdd.documento_origem.trim()
                 });
 
@@ -693,7 +693,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                         responsavel_id: currentUser?.id || '',
                         data: new Date().toISOString(),
                         origem: stockToAdd.origem,
-                        doador_nome: stockToAdd.origem === 'DOADO' ? stockToAdd.doador_nome.trim() : '',
+                        doador_nome: (stockToAdd.origem === 'DOADO' || stockToAdd.origem === 'FORNECIDO PELO ESTADO') ? stockToAdd.doador_nome.trim() : '',
                         documento_origem: stockToAdd.documento_origem.trim(),
                         observacoes: `Cadastro de novo lote ${obsProcedencia}`
                     });

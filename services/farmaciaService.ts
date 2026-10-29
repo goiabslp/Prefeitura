@@ -54,16 +54,27 @@ export const saveLocalLoteOrigem = (keyOrId: string, info: LoteOrigemMetadata) =
     }
 };
 
+const isSchemaColumnError = (error: any): boolean => {
+    if (!error) return false;
+    const str = typeof error === 'object' ? (error.message || JSON.stringify(error)) : String(error);
+    return error.code === 'PGRST204' || 
+           str.includes('schema cache') || 
+           str.includes('Could not find the') || 
+           str.includes('column');
+};
+
 const isPgrst204ColumnError = (error: any, columnName: string) => {
     if (!error) return false;
     const str = typeof error === 'object' ? JSON.stringify(error) : String(error);
     return error.code === 'PGRST204' || str.includes(`'${columnName}'`) || str.includes(columnName);
 };
 
+const MEDICAMENTO_STRICT_COLUMNS = 'id, nome, categoria, quantidade, unidade, validade, lote, limite_minimo, tipo, dosagem, fornecedor, principio_ativo, criado_em, atualizado_em';
 const MEDICAMENTO_BASE_COLUMNS = 'id, nome, categoria, quantidade, unidade, validade, lote, limite_minimo, tipo, dosagem, fornecedor, principio_ativo, alto_custo, criado_em, atualizado_em';
 const MEDICAMENTO_COLUMNS = MEDICAMENTO_BASE_COLUMNS;
 const MEDICAMENTO_COLUMNS_WITH_ORIGEM = 'id, nome, categoria, quantidade, unidade, validade, lote, limite_minimo, tipo, dosagem, fornecedor, principio_ativo, alto_custo, origem, doador_nome, documento_origem, criado_em, atualizado_em';
 let hasOrigemColumnInDb: boolean | null = null;
+let hasAltoCustoColumnInDb: boolean | null = null;
 
 let cachedMedicamentos: FarmaciaMedicamento[] | null = null;
 let cachedMedicamentosExpiry = 0;
@@ -86,22 +97,46 @@ export const getMedicamentos = async (forceRefresh = false): Promise<FarmaciaMed
         let hasMore = true;
 
         while (hasMore) {
-            const colsToUse = hasOrigemColumnInDb === false ? MEDICAMENTO_BASE_COLUMNS : MEDICAMENTO_COLUMNS_WITH_ORIGEM;
+            let colsToUse = MEDICAMENTO_COLUMNS_WITH_ORIGEM;
+            if (hasOrigemColumnInDb === false && hasAltoCustoColumnInDb === false) {
+                colsToUse = MEDICAMENTO_STRICT_COLUMNS;
+            } else if (hasOrigemColumnInDb === false) {
+                colsToUse = MEDICAMENTO_BASE_COLUMNS;
+            }
+
             let queryRes = await supabase
                 .from('farmacia_medicamentos')
                 .select(colsToUse)
                 .order('nome', { ascending: true })
                 .range(from, from + step - 1);
 
-            if (queryRes.error && hasOrigemColumnInDb === null && (queryRes.error.code === 'PGRST204' || String(queryRes.error.message || '').includes('origem'))) {
-                hasOrigemColumnInDb = false;
+            if (queryRes.error && isSchemaColumnError(queryRes.error)) {
+                const errMsg = String(queryRes.error.message || '');
+                if (errMsg.includes('origem') || errMsg.includes('doador_nome') || errMsg.includes('documento_origem') || hasOrigemColumnInDb === null) {
+                    hasOrigemColumnInDb = false;
+                }
+                if (errMsg.includes('alto_custo') || hasAltoCustoColumnInDb === null) {
+                    hasAltoCustoColumnInDb = false;
+                }
+
+                const fallbackCols = hasAltoCustoColumnInDb === false ? MEDICAMENTO_STRICT_COLUMNS : MEDICAMENTO_BASE_COLUMNS;
                 queryRes = await supabase
                     .from('farmacia_medicamentos')
-                    .select(MEDICAMENTO_BASE_COLUMNS)
+                    .select(fallbackCols)
                     .order('nome', { ascending: true })
                     .range(from, from + step - 1);
-            } else if (!queryRes.error && hasOrigemColumnInDb === null) {
-                hasOrigemColumnInDb = true;
+
+                if (queryRes.error && isSchemaColumnError(queryRes.error)) {
+                    hasAltoCustoColumnInDb = false;
+                    queryRes = await supabase
+                        .from('farmacia_medicamentos')
+                        .select(MEDICAMENTO_STRICT_COLUMNS)
+                        .order('nome', { ascending: true })
+                        .range(from, from + step - 1);
+                }
+            } else if (!queryRes.error) {
+                if (hasOrigemColumnInDb === null) hasOrigemColumnInDb = true;
+                if (hasAltoCustoColumnInDb === null) hasAltoCustoColumnInDb = true;
             }
 
             const { data, error } = queryRes;
@@ -151,43 +186,99 @@ export const createMedicamento = async (
     med: Omit<FarmaciaMedicamento, 'id' | 'criado_em' | 'atualizado_em'>
 ): Promise<FarmaciaMedicamento | null> => {
     const isAltoCustoRequested = med.alto_custo === true;
+    const compositeKey = `${(med.nome || '').trim().toUpperCase()}_${(med.lote || '').trim().toUpperCase()}`;
+    const origemMetadata: LoteOrigemMetadata = {
+        origem: med.origem,
+        doador_nome: med.doador_nome,
+        documento_origem: med.documento_origem
+    };
+
+    // Salva antecipadamente no cache local com a chave composta (Nome + Lote)
+    if (origemMetadata.origem || origemMetadata.doador_nome || origemMetadata.documento_origem) {
+        saveLocalLoteOrigem(compositeKey, origemMetadata);
+    }
+
+    const buildPayload = (forceSanitize = false) => {
+        const payload: any = {
+            nome: med.nome,
+            categoria: med.categoria,
+            quantidade: med.quantidade ?? 0,
+            unidade: med.unidade,
+            validade: med.validade,
+            lote: med.lote,
+            limite_minimo: med.limite_minimo ?? 0,
+            tipo: med.tipo,
+            dosagem: med.dosagem,
+            fornecedor: med.fornecedor,
+            principio_ativo: med.principio_ativo
+        };
+
+        if (!forceSanitize) {
+            if (hasAltoCustoColumnInDb !== false && med.alto_custo !== undefined) {
+                payload.alto_custo = med.alto_custo;
+            }
+            if (hasOrigemColumnInDb !== false) {
+                if (med.origem) payload.origem = med.origem;
+                if (med.doador_nome) payload.doador_nome = med.doador_nome;
+                if (med.documento_origem) payload.documento_origem = med.documento_origem;
+            }
+        }
+        return payload;
+    };
 
     try {
-        const { data, error } = await supabase
+        const shouldSanitizeInitially = hasOrigemColumnInDb === false || hasAltoCustoColumnInDb === false;
+        let payload = buildPayload(shouldSanitizeInitially);
+
+        let { data, error } = await supabase
             .from('farmacia_medicamentos')
-            .insert([med])
+            .insert([payload])
             .select()
             .single();
 
         if (error) {
-            if (isPgrst204ColumnError(error, 'alto_custo')) {
-                console.warn("[farmaciaService] Coluna 'alto_custo' não encontrada no Supabase. Executando fallback sanitizado...");
-                const payload = { ...med };
-                delete payload.alto_custo;
+            if (isSchemaColumnError(error)) {
+                console.warn("[farmaciaService] Coluna opcional não encontrada no Supabase durante insert. Executando fallback sanitizado...", error.message);
+                hasOrigemColumnInDb = false;
+                hasAltoCustoColumnInDb = false;
 
+                const fallbackPayload = buildPayload(true);
                 const retry = await supabase
                     .from('farmacia_medicamentos')
-                    .insert([payload])
+                    .insert([fallbackPayload])
                     .select()
                     .single();
 
                 if (retry.error) throw retry.error;
-                
-                if (retry.data && isAltoCustoRequested) {
-                    const localIds = getLocalAltoCustoIds();
-                    localIds.add(retry.data.id);
-                    saveLocalAltoCustoIds(localIds);
-                    return { ...retry.data, alto_custo: true };
-                }
-                return retry.data;
+                data = retry.data;
+            } else {
+                throw error;
             }
-            throw error;
+        } else {
+            if (hasOrigemColumnInDb === null && med.origem) hasOrigemColumnInDb = true;
+            if (hasAltoCustoColumnInDb === null && med.alto_custo !== undefined) hasAltoCustoColumnInDb = true;
         }
 
-        if (data && isAltoCustoRequested) {
-            const localIds = getLocalAltoCustoIds();
-            localIds.add(data.id);
-            saveLocalAltoCustoIds(localIds);
+        if (data) {
+            if (isAltoCustoRequested) {
+                const localIds = getLocalAltoCustoIds();
+                localIds.add(data.id);
+                saveLocalAltoCustoIds(localIds);
+            }
+            if (origemMetadata.origem || origemMetadata.doador_nome || origemMetadata.documento_origem) {
+                saveLocalLoteOrigem(data.id, origemMetadata);
+                saveLocalLoteOrigem(compositeKey, origemMetadata);
+            }
+
+            invalidateMedicamentosCache();
+
+            return {
+                ...data,
+                alto_custo: isAltoCustoRequested ? true : (data.alto_custo ?? false),
+                origem: med.origem || data.origem || origemMetadata.origem,
+                doador_nome: med.doador_nome || data.doador_nome || origemMetadata.doador_nome,
+                documento_origem: med.documento_origem || data.documento_origem || origemMetadata.documento_origem
+            };
         }
 
         return data;
@@ -216,48 +307,105 @@ export const updateMedicamento = async (
         saveLocalAltoCustoIds(localIds);
     }
 
+    const hasOrigemUpdates = updates.origem !== undefined || updates.doador_nome !== undefined || updates.documento_origem !== undefined;
+    if (hasOrigemUpdates) {
+        saveLocalLoteOrigem(id, {
+            origem: updates.origem,
+            doador_nome: updates.doador_nome,
+            documento_origem: updates.documento_origem
+        });
+    }
+
     try {
-        const { data, error } = await supabase
+        const sanitizeUpdates = (forceSanitize = false) => {
+            const clean: any = { ...updates };
+            if (forceSanitize || hasAltoCustoColumnInDb === false) {
+                delete clean.alto_custo;
+            }
+            if (forceSanitize || hasOrigemColumnInDb === false) {
+                delete clean.origem;
+                delete clean.doador_nome;
+                delete clean.documento_origem;
+            }
+            return clean;
+        };
+
+        const initialPayload = sanitizeUpdates();
+
+        // Se após a sanitização inicial não restar nenhuma coluna para o Supabase
+        if (Object.keys(initialPayload).length === 0) {
+            const cols = hasAltoCustoColumnInDb === false ? MEDICAMENTO_STRICT_COLUMNS : MEDICAMENTO_BASE_COLUMNS;
+            const { data: currentData, error: currentErr } = await supabase
+                .from('farmacia_medicamentos')
+                .select(cols)
+                .eq('id', id)
+                .single();
+
+            if (currentErr) throw currentErr;
+            const localOrigemMap = getLocalLotesOrigemMap();
+            const localInfo = localOrigemMap[id];
+            invalidateMedicamentosCache();
+            return {
+                ...(currentData as any),
+                alto_custo: hasAltoCustoUpdate ? altoCustoValue : (currentData as any)?.alto_custo,
+                origem: updates.origem ?? localInfo?.origem,
+                doador_nome: updates.doador_nome ?? localInfo?.doador_nome,
+                documento_origem: updates.documento_origem ?? localInfo?.documento_origem
+            } as FarmaciaMedicamento;
+        }
+
+        let { data, error } = await supabase
             .from('farmacia_medicamentos')
-            .update(updates)
+            .update(initialPayload)
             .eq('id', id)
             .select()
             .single();
 
         if (error) {
-            if (isPgrst204ColumnError(error, 'alto_custo')) {
-                console.warn("[farmaciaService] Coluna 'alto_custo' não encontrada no banco Supabase. Aplicando fallback no update...");
-                const sanitizedUpdates = { ...updates };
-                delete sanitizedUpdates.alto_custo;
+            if (isSchemaColumnError(error)) {
+                console.warn("[farmaciaService] Coluna opcional não encontrada no Supabase durante update. Executando fallback sanitizado...", error.message);
+                hasOrigemColumnInDb = false;
+                hasAltoCustoColumnInDb = false;
 
-                if (Object.keys(sanitizedUpdates).length === 0) {
+                const fallbackPayload = sanitizeUpdates(true);
+
+                if (Object.keys(fallbackPayload).length === 0) {
                     const { data: currentData, error: currentErr } = await supabase
                         .from('farmacia_medicamentos')
-                        .select(MEDICAMENTO_COLUMNS)
+                        .select(MEDICAMENTO_STRICT_COLUMNS)
                         .eq('id', id)
                         .single();
 
                     if (currentErr) throw currentErr;
-                    return {
-                        ...(currentData as any),
-                        alto_custo: altoCustoValue
-                    } as FarmaciaMedicamento;
+                    data = currentData;
+                } else {
+                    const retry = await supabase
+                        .from('farmacia_medicamentos')
+                        .update(fallbackPayload)
+                        .eq('id', id)
+                        .select()
+                        .single();
+
+                    if (retry.error) throw retry.error;
+                    data = retry.data;
                 }
-
-                const retry = await supabase
-                    .from('farmacia_medicamentos')
-                    .update(sanitizedUpdates)
-                    .eq('id', id)
-                    .select()
-                    .single();
-
-                if (retry.error) throw retry.error;
-                return {
-                    ...retry.data,
-                    alto_custo: hasAltoCustoUpdate ? altoCustoValue : retry.data.alto_custo
-                };
+            } else {
+                throw error;
             }
-            throw error;
+        }
+
+        invalidateMedicamentosCache();
+
+        if (data) {
+            const localOrigemMap = getLocalLotesOrigemMap();
+            const localInfo = localOrigemMap[id];
+            return {
+                ...data,
+                alto_custo: hasAltoCustoUpdate ? altoCustoValue : (data.alto_custo ?? false),
+                origem: updates.origem ?? data.origem ?? localInfo?.origem,
+                doador_nome: updates.doador_nome ?? data.doador_nome ?? localInfo?.doador_nome,
+                documento_origem: updates.documento_origem ?? data.documento_origem ?? localInfo?.documento_origem
+            };
         }
 
         return data;
@@ -470,12 +618,11 @@ export const registrarMovimentacao = async (
 
         if (error) {
             const errMsg = error.message || '';
-            if (errMsg.includes('column') || errMsg.includes('schema cache') || error.code === 'PGRST204') {
-                console.warn('[farmaciaService] Colunas médicas não encontradas na tabela farmacia_movimentacoes. Executando inserção sem dados médicos.', errMsg);
-                const { medico_crm, medico_uf, medico_nome, medico_consulta_data, ...movClean } = mov as any;
+            if (isSchemaColumnError(error)) {
+                console.warn('[farmaciaService] Coluna opcional não encontrada na tabela farmacia_movimentacoes. Executando inserção sanitizada.', errMsg);
                 const retry = await supabase
                     .from('farmacia_movimentacoes')
-                    .insert([movClean])
+                    .insert([payloadToInsert])
                     .select()
                     .single();
 
