@@ -15,6 +15,7 @@ interface ConsultasReportPdfGeneratorProps {
     queuePositions: Record<string, number>;
     state: AppState;
     currentUser: User;
+    appliedFiltersDescription?: string;
     onClose: () => void;
 }
 
@@ -26,6 +27,7 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
     queuePositions,
     state,
     currentUser,
+    appliedFiltersDescription,
     onClose
 }) => {
     const [isGenerating, setIsGenerating] = useState(false);
@@ -104,7 +106,7 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
 
             if (b.status === 'Solicitado') map[key].solicitados += itemQty;
             else if (b.status === 'Agendado') map[key].agendados += itemQty;
-            else if (b.status === 'Fila de espera') map[key].fila += itemQty;
+            else if (b.status === 'Fila de espera' || b.status === 'Aguardando Data') map[key].fila += itemQty;
             else if (b.status === 'Realizado') map[key].realizados += itemQty;
         });
 
@@ -118,7 +120,7 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
         return procedureQuantities.reduce((acc, curr) => acc + curr.quantity, 0);
     }, [procedureQuantities]);
 
-    // 2. LISTA PACIENTE X PROCEDIMENTO (Ordem Alfabética de Pacientes)
+    // 2. LISTA PACIENTE X PROCEDIMENTO (Agrupada por Procedimento e Sequência da Fila/Nome)
     const sortedBookingsList = useMemo(() => {
         if (reportType === 'simplificado') {
             return [];
@@ -129,22 +131,35 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
             : [...bookings];
 
         return list.sort((a, b) => {
+            // 1. Agrupar por Procedimento
+            const procA = formatProcedimentoLabel(a.procedimento) || '';
+            const procB = formatProcedimentoLabel(b.procedimento) || '';
+            const procComp = procA.localeCompare(procB, 'pt-BR', { sensitivity: 'base' });
+            if (procComp !== 0) return procComp;
+
+            // 2. Posição na fila
+            const posA = queuePositions[a.id] || 999999;
+            const posB = queuePositions[b.id] || 999999;
+            if (posA !== posB) return posA - posB;
+
+            // 3. Ordem alfabética de Pacientes
             const nameA = a.paciente?.name || '';
             const nameB = b.paciente?.name || '';
             const nameComparison = nameA.localeCompare(nameB, 'pt-BR', { sensitivity: 'base' });
             if (nameComparison !== 0) return nameComparison;
 
+            // 4. Data de solicitação
             const dateA = a.solicitation_date ? new Date(a.solicitation_date + 'T00:00:00').getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
             const dateB = b.solicitation_date ? new Date(b.solicitation_date + 'T00:00:00').getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
             return dateB - dateA;
         });
-    }, [bookings, reportType]);
+    }, [bookings, reportType, queuePositions]);
 
     // Paginação para PDF A4
-    const SUMMARY_ITEMS_PER_PAGE = 18;
+    const SUMMARY_ITEMS_PER_PAGE = appliedFiltersDescription ? 15 : 18;
     const summaryPagesCount = Math.max(1, Math.ceil(procedureQuantities.length / SUMMARY_ITEMS_PER_PAGE));
 
-    const DETAIL_ITEMS_PER_PAGE = 13;
+    const DETAIL_ITEMS_PER_PAGE = appliedFiltersDescription ? 11 : 13;
     const detailPagesCount = reportType === 'simplificado' ? 0 : Math.ceil(sortedBookingsList.length / DETAIL_ITEMS_PER_PAGE);
 
     const totalPages = summaryPagesCount + (detailPagesCount > 0 ? detailPagesCount : (reportType === 'simplificado' ? 0 : 1));
@@ -277,9 +292,9 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
                     totalPages={totalPages}
                     isGenerating={isGenerating}
                 >
-                    <div className="flex flex-col gap-3.5 h-full">
+                    <div className="flex flex-col gap-3 h-full">
                         {/* Título da Seção */}
-                        <div className="flex flex-col border-b-2 border-slate-900 pb-2.5">
+                        <div className="flex flex-col border-b-2 border-slate-900 pb-2">
                             <div className="flex items-center justify-between">
                                 <h1 className="text-[11pt] font-black uppercase tracking-tight text-slate-900 leading-normal">
                                     {reportType === 'simplificado' ? 'RELATÓRIO SIMPLIFICADO - QUANTITATIVO POR PROCEDIMENTO' : 'QUANTITATIVO POR PROCEDIMENTO'}
@@ -290,34 +305,43 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
                                     </span>
                                 </div>
                             </div>
-                            <div className="flex items-center justify-between text-[7.5pt] font-semibold text-slate-600 mt-1.5">
+                            <div className="flex items-center justify-between text-[7pt] font-semibold text-slate-600 mt-1">
                                 <span>Emissor: <strong className="text-slate-900 uppercase">{currentUser.name}</strong></span>
-                                <span>Procedimentos com Atendimento: <strong className="text-slate-900">{procedureQuantities.length}</strong></span>
+                                <span>Data de Emissão: <strong className="text-slate-900">{new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong></span>
+                                <span>Procedimentos: <strong className="text-slate-900">{procedureQuantities.length}</strong></span>
                             </div>
                         </div>
+
+                        {/* Bloco de Filtros Aplicados */}
+                        {isFirstSummary && appliedFiltersDescription && (
+                            <div className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-[6.5pt] text-slate-700">
+                                <span className="font-black uppercase text-slate-900 block mb-0.5">Filtros Utilizados neste Relatório:</span>
+                                <span className="font-semibold leading-relaxed text-slate-800">{appliedFiltersDescription}</span>
+                            </div>
+                        )}
 
                         {/* Cards Resumo no primeiro topo */}
                         {isFirstSummary && (
                             <div className="grid grid-cols-4 gap-2">
-                                <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex flex-col justify-between">
-                                    <span className="text-[6.5pt] font-black text-slate-500 uppercase tracking-wider block leading-tight">Total Solicitações</span>
-                                    <span className="text-[12pt] font-black text-slate-900 leading-none mt-1">{totalQuantityCount}</span>
+                                <div className="p-2 bg-slate-50 border border-slate-200 rounded-lg flex flex-col justify-between">
+                                    <span className="text-[6pt] font-black text-slate-500 uppercase tracking-wider block leading-tight">Total Solicitações</span>
+                                    <span className="text-[11pt] font-black text-slate-900 leading-none mt-1">{totalQuantityCount}</span>
                                 </div>
-                                <div className="p-2.5 bg-sky-50/70 border border-sky-200 rounded-lg flex flex-col justify-between">
-                                    <span className="text-[6.5pt] font-black text-sky-700 uppercase tracking-wider block leading-tight">Solicitados</span>
-                                    <span className="text-[12pt] font-black text-sky-800 leading-none mt-1">
+                                <div className="p-2 bg-sky-50/70 border border-sky-200 rounded-lg flex flex-col justify-between">
+                                    <span className="text-[6pt] font-black text-sky-700 uppercase tracking-wider block leading-tight">Solicitados</span>
+                                    <span className="text-[11pt] font-black text-sky-800 leading-none mt-1">
                                         {procedureQuantities.reduce((acc, c) => acc + c.solicitados, 0)}
                                     </span>
                                 </div>
-                                <div className="p-2.5 bg-indigo-50/70 border border-indigo-200 rounded-lg flex flex-col justify-between">
-                                    <span className="text-[6.5pt] font-black text-indigo-700 uppercase tracking-wider block leading-tight">Agendados</span>
-                                    <span className="text-[12pt] font-black text-indigo-800 leading-none mt-1">
+                                <div className="p-2 bg-indigo-50/70 border border-indigo-200 rounded-lg flex flex-col justify-between">
+                                    <span className="text-[6pt] font-black text-indigo-700 uppercase tracking-wider block leading-tight">Agendados</span>
+                                    <span className="text-[11pt] font-black text-indigo-800 leading-none mt-1">
                                         {procedureQuantities.reduce((acc, c) => acc + c.agendados, 0)}
                                     </span>
                                 </div>
-                                <div className="p-2.5 bg-amber-50/70 border border-amber-200 rounded-lg flex flex-col justify-between">
-                                    <span className="text-[6.5pt] font-black text-amber-700 uppercase tracking-wider block leading-tight">Em Fila</span>
-                                    <span className="text-[12pt] font-black text-amber-800 leading-none mt-1">
+                                <div className="p-2 bg-amber-50/70 border border-amber-200 rounded-lg flex flex-col justify-between">
+                                    <span className="text-[6pt] font-black text-amber-700 uppercase tracking-wider block leading-tight">Em Fila</span>
+                                    <span className="text-[11pt] font-black text-amber-800 leading-none mt-1">
                                         {procedureQuantities.reduce((acc, c) => acc + c.fila, 0)}
                                     </span>
                                 </div>
@@ -338,7 +362,7 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
                                     {chunk.length === 0 ? (
                                         <tr>
                                             <td colSpan={3} className="px-4 py-8 text-center text-slate-400 font-bold">
-                                                Nenhum procedimento com agendamentos registrado.
+                                                Nenhum procedimento correspondente aos filtros.
                                             </td>
                                         </tr>
                                     ) : (
@@ -394,7 +418,7 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
             currentPageNum++;
         }
 
-        // --- PÁGINAS DE LISTA PACIENTE X PROCEDIMENTO ---
+        // --- PÁGINAS DE LISTA PACIENTE X PROCEDIMENTO (MODO COMPLETO) ---
         if (reportType !== 'simplificado') {
             if (sortedBookingsList.length === 0) {
                 pages.push(
@@ -408,11 +432,11 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
                         <div className="flex flex-col gap-4 h-full">
                             <div className="flex flex-col border-b-2 border-slate-900 pb-2">
                                 <h1 className="text-[11pt] font-black uppercase tracking-tight text-slate-900">
-                                    LISTA PACIENTE X PROCEDIMENTO
+                                    LISTA DETALHADA DE PACIENTES POR PROCEDIMENTO
                                 </h1>
                             </div>
                             <div className="flex-1 flex items-center justify-center border border-slate-200 rounded-lg bg-white text-slate-400 font-bold uppercase text-xs">
-                                Nenhum registro de agendamento encontrado para este relatório.
+                                Nenhum agendamento encontrado para este relatório com os filtros aplicados.
                             </div>
                         </div>
                     </PageWrapper>
@@ -429,145 +453,143 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
                             totalPages={totalPages}
                             isGenerating={isGenerating}
                         >
-                            <div className="flex flex-col gap-3.5 h-full">
+                            <div className="flex flex-col gap-3 h-full">
                                 {/* Header da Lista */}
                                 <div className="flex flex-col border-b-2 border-slate-900 pb-2">
                                     <div className="flex items-center justify-between">
                                         <h1 className="text-[11pt] font-black uppercase tracking-tight text-slate-900">
-                                            LISTA PACIENTE X PROCEDIMENTO
+                                            LISTA DETALHADA DE PACIENTES POR PROCEDIMENTO
                                         </h1>
                                         <div className="inline-flex items-center justify-center px-2.5 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200">
                                             <span className="text-[7pt] font-black uppercase leading-none">
-                                                Total: {sortedBookingsList.length} Registros
+                                                Total: {sortedBookingsList.length} Pacientes
                                             </span>
                                         </div>
                                     </div>
-                                    <div className="flex items-center justify-between text-[7.5pt] font-semibold text-slate-600 mt-1">
+                                    <div className="flex items-center justify-between text-[7pt] font-semibold text-slate-600 mt-1">
                                         <span>Emissor: <strong className="text-slate-900 uppercase">{currentUser.name}</strong></span>
                                         <span>Exibindo: <strong>{i + 1} a {Math.min(i + DETAIL_ITEMS_PER_PAGE, sortedBookingsList.length)}</strong></span>
+                                        <span>Data: <strong>{new Date().toLocaleDateString('pt-BR')}</strong></span>
                                     </div>
                                 </div>
 
-                                {/* Tabela com as 6 colunas exatas */}
+                                {/* Bloco de Filtros Aplicados */}
+                                {appliedFiltersDescription && (
+                                    <div className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[6pt] text-slate-700">
+                                        <span className="font-black uppercase text-slate-900 mr-1">Filtros:</span>
+                                        <span className="font-semibold text-slate-800">{appliedFiltersDescription}</span>
+                                    </div>
+                                )}
+
+                                {/* Tabela Detalhada com Agrupamento por Procedimento */}
                                 <div className="border border-slate-200 rounded-lg overflow-hidden flex flex-col bg-white flex-1">
                                     <table className="w-full text-left border-collapse">
                                         <thead className="bg-slate-900 text-white">
                                             <tr className="text-[6.5pt] font-black uppercase tracking-wider">
-                                                <th className="px-2 py-2 text-center w-[8%] border-r border-slate-700">Posição</th>
-                                                <th className="px-2 py-2 text-center w-[12%] border-r border-slate-700">Solicitado</th>
-                                                <th className="px-3 py-2 w-[30%] border-r border-slate-700">Paciente / CPF</th>
-                                                <th className="px-3 py-2 w-[25%] border-r border-slate-700">Procedimento</th>
-                                                <th className="px-2 py-2 text-center w-[13%] border-r border-slate-700">Data Agendada</th>
-                                                <th className="px-2 py-2 text-center w-[12%]">Status</th>
+                                                <th className="px-2 py-2 text-center w-12 border-r border-slate-700">Fila</th>
+                                                <th className="px-2 py-2 text-center w-18 border-r border-slate-700">Solicitado</th>
+                                                <th className="px-3 py-2 border-r border-slate-700">Paciente / Documentos</th>
+                                                <th className="px-3 py-2 border-r border-slate-700">Procedimento Vinculado</th>
+                                                <th className="px-2 py-2 text-center w-24 border-r border-slate-700">Agendamento</th>
+                                                <th className="px-2 py-2 text-center w-18">Status</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-slate-100 uppercase text-[7pt] font-semibold text-slate-700">
+                                        <tbody className="divide-y divide-slate-100 uppercase text-[6.5pt] font-semibold text-slate-700">
                                             {chunk.map((b, idx) => {
-                                                const globalIdx = i + idx + 1;
-                                                const queuePos = queuePositions[b.id];
-                                                const isWaitlist = b.status === 'Fila de espera';
+                                                const isWaitlist = b.status === 'Fila de espera' || b.status === 'Aguardando Data' || b.status === 'Solicitado';
+                                                const queuePos = queuePositions[b.id] ?? b.queue_position;
 
                                                 return (
                                                     <tr key={b.id || idx} className="hover:bg-slate-50/50">
-                                                        {/* 1. Posição */}
-                                                        <td className="px-2 py-2 text-center font-black border-r border-slate-100 align-middle">
-                                                            <div className="flex items-center justify-center">
-                                                                {isWaitlist && queuePos ? (
-                                                                    <span className="inline-flex items-center justify-center px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[6.5pt] font-black leading-normal min-w-[26px]">
-                                                                        {queuePos}º
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="text-slate-400 font-mono text-[6.5pt]">
-                                                                        #{globalIdx}
-                                                                    </span>
-                                                                )}
-                                                            </div>
+                                                        {/* 1. Posição na Fila */}
+                                                        <td className="px-2 py-2 text-center border-r border-slate-100 font-mono font-bold align-middle">
+                                                            {isWaitlist && queuePos ? (
+                                                                <span className="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300 text-[6.5pt] font-black">
+                                                                    {queuePos}º
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-slate-400 font-mono text-[7pt]">
+                                                                    #{i + idx + 1}
+                                                                </span>
+                                                            )}
                                                         </td>
 
-                                                        {/* 2. Solicitado */}
-                                                        <td className="px-2 py-2 text-center font-mono border-r border-slate-100 text-slate-600 text-[6.5pt] align-middle">
+                                                        {/* 2. Data da Solicitação */}
+                                                        <td className="px-2 py-2 text-center border-r border-slate-100 font-mono text-slate-600 align-middle">
                                                             {formatDateBr(b.solicitation_date || (b.created_at ? b.created_at.split('T')[0] : null))}
                                                         </td>
 
-                                                        {/* 3. Paciente / CPF */}
+                                                        {/* 3. Paciente e Documentos */}
                                                         <td className="px-3 py-2 border-r border-slate-100 align-middle">
-                                                            <div className="flex flex-col gap-0.5">
-                                                                {b.priority === 'Especial' && (
-                                                                    <span className="inline-block text-[5.5pt] font-black uppercase text-amber-950 bg-amber-200 border border-amber-400 px-1.5 py-0.2 rounded w-fit mb-0.5">
-                                                                        ★ AGENDAMENTO ESPECIAL
-                                                                    </span>
+                                                            <div className="font-extrabold text-slate-900 text-[7pt] leading-tight">
+                                                                {formatPatientName(b.paciente?.name)}
+                                                            </div>
+                                                            <div className="text-[6pt] text-slate-500 font-mono flex items-center gap-1.5 mt-0.5">
+                                                                <span>CPF: {formatCpf(b.paciente?.cpf)}</span>
+                                                                {b.paciente?.sus_number && (
+                                                                    <span>• SUS: {b.paciente.sus_number}</span>
                                                                 )}
-                                                                <div className="font-extrabold text-slate-900 leading-snug break-words">
-                                                                    {formatPatientName(b.paciente?.name, b.paciente?.nickname)}
-                                                                </div>
-                                                                <div className="text-[6pt] text-slate-500 font-mono leading-none">
-                                                                    CPF: {formatCpf(b.paciente?.cpf)}
-                                                                </div>
                                                             </div>
                                                         </td>
 
-                                                        {/* 4. Procedimento */}
+                                                        {/* 4. Procedimento Vinculado */}
                                                         <td className="px-3 py-2 border-r border-slate-100 align-middle">
-                                                            <div className="flex flex-col gap-0.5">
-                                                                <div className="font-bold text-slate-900 leading-snug break-words">
-                                                                    {formatProcedimentoLabel(b.procedimento) || 'Procedimento não informado'}
-                                                                </div>
-                                                                <div className="flex flex-wrap items-center gap-1">
-                                                                    {b.procedimento?.code && (
-                                                                        <span className="text-[6pt] font-mono font-bold text-slate-500 leading-none">
-                                                                            CÓD: {b.procedimento.code}
-                                                                        </span>
-                                                                    )}
-                                                                    {b.tipo_atendimento && (b.status === 'Agendado' || b.status === 'Realizado' || (!!b.appointment_date && b.status !== 'Fila de espera' && b.status !== 'Aguardando Data')) && (
-                                                                        <span className={`text-[5.5pt] font-black uppercase px-1 py-0.2 rounded border leading-none ${
-                                                                            b.tipo_atendimento === 'INTERNO'
-                                                                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                                                                : 'bg-purple-50 text-purple-800 border-purple-200'
-                                                                        }`}>
-                                                                            {b.tipo_atendimento === 'INTERNO' 
-                                                                                ? 'INTERNO (MUNICIPAL)' 
-                                                                                : `EXTERNO • ${b.prestador || 'PRESTADOR FORA'}${b.municipio ? ` (${b.municipio})` : ''}`}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
+                                                            <div className="font-extrabold text-slate-900 text-[7pt] leading-tight">
+                                                                {formatProcedimentoLabel(b.procedimento) || 'Procedimento não informado'}
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5 text-[5.5pt] text-slate-500 mt-0.5">
+                                                                {b.procedimento?.code && (
+                                                                    <span className="font-mono bg-slate-100 px-1 py-0.2 rounded border border-slate-200">
+                                                                        {b.procedimento.code}
+                                                                    </span>
+                                                                )}
+                                                                <span className={`px-1 py-0.2 rounded font-black uppercase ${
+                                                                    (b.tipo_atendimento || 'INTERNO') === 'INTERNO'
+                                                                        ? 'bg-emerald-50 text-emerald-800'
+                                                                        : 'bg-purple-50 text-purple-800'
+                                                                }`}>
+                                                                    {(b.tipo_atendimento || 'INTERNO') === 'INTERNO' ? 'INTERNO' : 'EXTERNO'}
+                                                                </span>
                                                             </div>
                                                         </td>
 
                                                         {/* 5. Data Agendada */}
-                                                        <td className="px-2 py-2 text-center font-mono border-r border-slate-100 text-[6.5pt] align-middle">
-                                                            <div className="flex items-center justify-center">
-                                                                {b.status !== 'Fila de espera' && b.status !== 'Aguardando Data' && b.appointment_date ? (
-                                                                    <span className="font-bold text-slate-900 leading-tight">
+                                                        <td className="px-2 py-2 text-center border-r border-slate-100 font-mono align-middle">
+                                                            {b.appointment_date ? (
+                                                                <div className="flex flex-col items-center">
+                                                                    <span className="font-bold text-slate-800 text-[7pt]">
                                                                         {formatDateBr(b.appointment_date)}
-                                                                        {b.appointment_time ? ` ${b.appointment_time.substring(0, 5)}` : ''}
                                                                     </span>
-                                                                ) : (
-                                                                    <span className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[6pt] font-black uppercase text-amber-900 bg-amber-100 border border-amber-300 leading-normal min-w-[76px]">
-                                                                        Aguardando Vaga
-                                                                    </span>
-                                                                )}
-                                                            </div>
+                                                                    {b.appointment_time && (
+                                                                        <span className="text-[5.5pt] text-slate-500">
+                                                                            {b.appointment_time.substring(0, 5)}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            ) : (
+                                                                <span className="inline-block px-1.5 py-0.5 rounded text-[5.5pt] font-black uppercase text-amber-800 bg-amber-50 border border-amber-200">
+                                                                    Aguardando Vaga
+                                                                </span>
+                                                            )}
                                                         </td>
 
                                                         {/* 6. Status */}
                                                         <td className="px-2 py-2 text-center align-middle">
                                                             <div className="flex items-center justify-center">
-                                                                <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-[6pt] font-black uppercase tracking-tight leading-normal min-w-[70px] border ${
+                                                                <span className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[5.5pt] font-black uppercase tracking-tight leading-normal min-w-[62px] border ${
                                                                     b.status === 'Solicitado'
                                                                         ? 'bg-sky-50 text-sky-800 border-sky-300'
                                                                         : b.status === 'Agendado'
                                                                         ? 'bg-indigo-50 text-indigo-800 border-indigo-300'
                                                                         : b.status === 'Realizado'
                                                                         ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                                                                        : b.status === 'Fila de espera'
+                                                                        : b.status === 'Fila de espera' || b.status === 'Aguardando Data'
                                                                         ? 'bg-amber-100 text-amber-900 border-amber-300'
-                                                                        : b.status === 'Aguardando Data'
-                                                                        ? 'bg-violet-50 text-violet-800 border-violet-300'
-                                                                        : b.status === 'Retorno'
-                                                                        ? 'bg-teal-50 text-teal-800 border-teal-300'
+                                                                        : b.status === 'Pausada' || b.is_paused
+                                                                        ? 'bg-amber-50 text-amber-900 border-amber-300'
                                                                         : 'bg-rose-50 text-rose-800 border-rose-300'
                                                                 }`}>
-                                                                    {b.status}
+                                                                    {b.is_paused ? 'Pausada' : b.status}
                                                                 </span>
                                                             </div>
                                                         </td>
