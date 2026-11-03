@@ -8,51 +8,29 @@ import {
     Search, 
     BarChart3, 
     Users, 
-    Calendar, 
-    Check, 
+    Calendar as CalendarIcon, 
     ChevronDown, 
-    ChevronUp, 
+    ChevronLeft, 
+    ChevronRight, 
     AlertCircle, 
-    CheckCircle2, 
-    Clock, 
-    Building2, 
-    Car, 
-    Sparkles,
-    Loader2,
-    FileQuestion,
-    ListFilter,
-    Stethoscope
+    Stethoscope,
+    Layers
 } from 'lucide-react';
 import { ConsultaAgendamento, ConsultaProcedimento, ConsultaVaga, AppState, User } from '../../types';
 import * as db from '../../services/consultasService';
-import { formatProcedimentoLabel, normalizeSolicitationDate } from '../../services/consultasService';
+import { normalizeSolicitationDate } from '../../services/consultasService';
 import { ConsultasReportPdfGenerator } from './ConsultasReportPdfGenerator';
 
-export interface ReportFiltersState {
-    periodoTipo: 'solicitacao' | 'agendamento';
-    dataInicio: string;
-    dataFim: string;
-    procedimentoIds: string[];
-    tipoProcedimento: 'TODOS' | 'Consulta' | 'Exame' | 'Cirurgia';
-    demanda: 'TODAS' | 'INTERNO' | 'EXTERNO';
-    prioridade: 'TODAS' | 'Normal' | 'Urgente' | 'Especial';
-    status: 'TODOS' | 'Aguardando Vaga' | 'Definir Data' | 'Agendado' | 'Realizado' | 'Pausada' | 'Retorno' | 'Cancelado';
-    situacaoFila: 'TODAS' | 'VAGA_LIVRE' | 'AGUARDANDO_FILA' | 'TOP_1' | 'TOP_3' | 'TOP_5' | 'TOP_10';
-    pacienteSearch: string;
-}
-
-const DEFAULT_FILTERS: ReportFiltersState = {
-    periodoTipo: 'solicitacao',
-    dataInicio: '',
-    dataFim: '',
-    procedimentoIds: [],
-    tipoProcedimento: 'TODOS',
-    demanda: 'TODAS',
-    prioridade: 'TODAS',
-    status: 'TODOS',
-    situacaoFila: 'TODAS',
-    pacienteSearch: ''
-};
+// Lista oficial dos 7 status disponíveis para seleção
+const ALL_STATUS_OPTIONS = [
+    { id: 'Aguardando Vaga', label: 'Aguardando Vaga' },
+    { id: 'Definir Data', label: 'Definir Data' },
+    { id: 'Agendado', label: 'Agendado' },
+    { id: 'Realizado', label: 'Realizado' },
+    { id: 'Retorno', label: 'Retorno' },
+    { id: 'Pausada', label: 'Pausada' },
+    { id: 'Cancelado', label: 'Cancelado' }
+];
 
 interface ConsultasReportModalProps {
     isOpen: boolean;
@@ -71,44 +49,65 @@ export const ConsultasReportModal: React.FC<ConsultasReportModalProps> = ({
     state: appState,
     currentUser
 }) => {
-    // Estado de dados puros carregados diretamente do banco de dados (origem real)
-    const [loading, setLoading] = useState(true);
+    // Dados carregados de origem real
+    const [loading, setLoading] = useState(false);
     const [allBookings, setAllBookings] = useState<ConsultaAgendamento[]>([]);
     const [procedures, setProcedures] = useState<ConsultaProcedimento[]>(initialProcedures);
     const [allVagas, setAllVagas] = useState<ConsultaVaga[]>(initialVagas);
     const [queuePositions, setQueuePositions] = useState<Record<string, number>>({});
 
-    // Modo de visualização: Simplificado ou Completo
+    // Modo ativo no cabeçalho: Simplificado vs Completo
     const [reportType, setReportType] = useState<'simplificado' | 'completo'>('simplificado');
-    
-    // Controle de expansão do painel de filtros
-    const [isFiltersPanelOpen, setIsFiltersPanelOpen] = useState(true);
 
-    // Estado dos filtros
-    const [filters, setFilters] = useState<ReportFiltersState>({ ...DEFAULT_FILTERS });
+    // --- FILTRO 1: PERÍODO ---
+    const [periodoTipo, setPeriodoTipo] = useState<'solicitacao' | 'agendamento'>('solicitacao');
+    const [dataInicio, setDataInicio] = useState<string>(''); // YYYY-MM-DD
+    const [dataFim, setDataFim] = useState<string>(''); // YYYY-MM-DD
+    const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+    const [calendarPlacement, setCalendarPlacement] = useState<'bottom' | 'top'>('bottom');
+    const [calendarViewDate, setCalendarViewDate] = useState<Date>(new Date());
+    const [calendarSelecting, setCalendarSelecting] = useState<'start' | 'end'>('start');
+    const [hoverDate, setHoverDate] = useState<string | null>(null);
+    const calendarCardRef = useRef<HTMLDivElement>(null);
 
-    // Pesquisa interna no dropdown de procedimentos
-    const [procDropdownSearch, setProcDropdownSearch] = useState('');
+    // --- FILTRO 2: PROCEDIMENTO ---
+    const [selectedProcIds, setSelectedProcIds] = useState<string[]>([]);
     const [isProcDropdownOpen, setIsProcDropdownOpen] = useState(false);
-    const procDropdownRef = useRef<HTMLDivElement>(null);
+    const [procDropdownPlacement, setProcDropdownPlacement] = useState<'bottom' | 'top'>('bottom');
+    const [procSearch, setProcSearch] = useState('');
+    const procCardRef = useRef<HTMLDivElement>(null);
 
-    // Controle do gerador de PDF
+    // --- FILTRO 3: STATUS ---
+    const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+    const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+    const [statusDropdownPlacement, setStatusDropdownPlacement] = useState<'bottom' | 'top'>('bottom');
+    const [statusSearch, setStatusSearch] = useState('');
+    const statusCardRef = useRef<HTMLDivElement>(null);
+
+    // --- ESTADO CONFIRMADO (APLICADO) ---
+    const [appliedFilters, setAppliedFilters] = useState<{
+        periodoTipo: 'solicitacao' | 'agendamento';
+        dataInicio: string;
+        dataFim: string;
+        selectedProcIds: string[];
+        selectedStatuses: string[];
+    }>({
+        periodoTipo: 'solicitacao',
+        dataInicio: '',
+        dataFim: '',
+        selectedProcIds: [],
+        selectedStatuses: []
+    });
+
+    // Modal de Alerta Customizado (substitui alert nativo)
+    const [alertMessage, setAlertMessage] = useState<string | null>(null);
+
+    // Controle de Geração de PDF
     const [isPrintingReport, setIsPrintingReport] = useState(false);
-    const [pdfExportMode, setPdfExportMode] = useState<'simplificado' | 'completo'>('simplificado');
+    const [pdfMode, setPdfMode] = useState<'simplificado' | 'completo'>('simplificado');
 
-    // Fechar dropdown de procedimentos ao clicar fora
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (procDropdownRef.current && !procDropdownRef.current.contains(event.target as Node)) {
-                setIsProcDropdownOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-
-    // Carregar dados frescos diretamente do banco de dados
-    const fetchFreshData = async () => {
+    // Carregar dados reais ao abrir o modal
+    const loadFreshData = async () => {
         setLoading(true);
         try {
             const [freshBookings, freshProcs, freshVagas] = await Promise.all([
@@ -121,7 +120,7 @@ export const ConsultasReportModal: React.FC<ConsultasReportModalProps> = ({
             setProcedures(freshProcs || []);
             setAllVagas(freshVagas || []);
 
-            // Calcular posições da fila por procedimento conforme regra oficial
+            // Calcular posições oficiais da fila
             const isWaitlistItem = (b: ConsultaAgendamento) => 
                 !b.status || 
                 b.status === 'Fila de espera' || 
@@ -153,7 +152,7 @@ export const ConsultasReportModal: React.FC<ConsultasReportModalProps> = ({
 
             setQueuePositions(positionMap);
         } catch (error) {
-            console.error('[ConsultasReportModal] Erro ao carregar dados do banco:', error);
+            console.error('[ConsultasReportModal] Erro ao carregar agendamentos:', error);
         } finally {
             setLoading(false);
         }
@@ -161,319 +160,332 @@ export const ConsultasReportModal: React.FC<ConsultasReportModalProps> = ({
 
     useEffect(() => {
         if (isOpen) {
-            fetchFreshData();
+            loadFreshData();
         }
     }, [isOpen]);
 
-    // Mapa de elegibilidade de vaga livre
+    // Fechar dropdowns ao clicar fora
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (calendarCardRef.current && !calendarCardRef.current.contains(event.target as Node)) {
+                setIsCalendarOpen(false);
+            }
+            if (procCardRef.current && !procCardRef.current.contains(event.target as Node)) {
+                setIsProcDropdownOpen(false);
+            }
+            if (statusCardRef.current && !statusCardRef.current.contains(event.target as Node)) {
+                setIsStatusDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    // Controle inteligente de posicionamento vertical (abre para cima ou para baixo conforme espaço)
+    const toggleCalendarPopover = (selectingMode: 'start' | 'end') => {
+        if (!isCalendarOpen && calendarCardRef.current) {
+            const rect = calendarCardRef.current.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - rect.bottom;
+            if (spaceBelow < 380 && rect.top > 380) {
+                setCalendarPlacement('top');
+            } else {
+                setCalendarPlacement('bottom');
+            }
+        }
+        setCalendarSelecting(selectingMode);
+        setIsCalendarOpen(!isCalendarOpen);
+        setIsProcDropdownOpen(false);
+        setIsStatusDropdownOpen(false);
+    };
+
+    const toggleProcDropdown = () => {
+        if (!isProcDropdownOpen && procCardRef.current) {
+            const rect = procCardRef.current.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - rect.bottom;
+            // Se o espaço abaixo for menor que 520px e houver mais espaço acima, abre para cima
+            if (spaceBelow < 520 && rect.top > 520) {
+                setProcDropdownPlacement('top');
+            } else {
+                setProcDropdownPlacement('bottom');
+            }
+        }
+        setIsProcDropdownOpen(!isProcDropdownOpen);
+        setIsCalendarOpen(false);
+        setIsStatusDropdownOpen(false);
+    };
+
+    const toggleStatusDropdown = () => {
+        if (!isStatusDropdownOpen && statusCardRef.current) {
+            const rect = statusCardRef.current.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - rect.bottom;
+            if (spaceBelow < 380 && rect.top > 380) {
+                setStatusDropdownPlacement('top');
+            } else {
+                setStatusDropdownPlacement('bottom');
+            }
+        }
+        setIsStatusDropdownOpen(!isStatusDropdownOpen);
+        setIsCalendarOpen(false);
+        setIsProcDropdownOpen(false);
+    };
+
+    // Mapa de elegibilidade para 'Definir Data' / Vaga Livre
     const eligibilityMap = useMemo(() => {
         return db.getQueueEligibilityMap(allBookings, allVagas);
     }, [allBookings, allVagas]);
 
-    // Contagem de filtros ativos
-    const activeFiltersCount = useMemo(() => {
-        let count = 0;
-        if (filters.dataInicio || filters.dataFim) count++;
-        if (filters.procedimentoIds.length > 0) count++;
-        if (filters.tipoProcedimento !== 'TODOS') count++;
-        if (filters.demanda !== 'TODAS') count++;
-        if (filters.prioridade !== 'TODAS') count++;
-        if (filters.status !== 'TODOS') count++;
-        if (filters.situacaoFila !== 'TODAS') count++;
-        if (filters.pacienteSearch.trim()) count++;
-        return count;
-    }, [filters]);
-
-    // Resetar filtros
-    const handleResetFilters = () => {
-        setFilters({ ...DEFAULT_FILTERS });
-        setProcDropdownSearch('');
+    // Formatadores de data
+    const formatBrDate = (isoStr: string) => {
+        if (!isoStr) return '';
+        const parts = isoStr.split('-');
+        if (parts.length === 3) {
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        }
+        return isoStr;
     };
 
-    // Aplicar filtros diretamente sobre o conjunto total de agendamentos
-    const filteredBookings = useMemo(() => {
-        return allBookings.filter(b => {
-            // 1. Filtro por Período
-            if (filters.periodoTipo === 'solicitacao') {
-                const solDate = normalizeSolicitationDate(b);
-                if (filters.dataInicio && (!solDate || solDate < filters.dataInicio)) return false;
-                if (filters.dataFim && (!solDate || solDate > filters.dataFim)) return false;
-            } else if (filters.periodoTipo === 'agendamento') {
-                const appDate = b.appointment_date ? b.appointment_date.split('T')[0] : '';
-                if (filters.dataInicio || filters.dataFim) {
-                    if (!appDate) return false;
-                    if (filters.dataInicio && appDate < filters.dataInicio) return false;
-                    if (filters.dataFim && appDate > filters.dataFim) return false;
-                }
-            }
-
-            // 2. Filtro por Procedimento
-            if (filters.procedimentoIds.length > 0) {
-                const pId = b.procedimento_id || b.procedimento?.id;
-                if (!pId || !filters.procedimentoIds.includes(pId)) return false;
-            }
-
-            // 3. Filtro por Tipo de Procedimento (Consulta / Exame / Cirurgia)
-            if (filters.tipoProcedimento !== 'TODOS') {
-                const pType = b.procedimento?.type;
-                if (!pType || pType.toLowerCase() !== filters.tipoProcedimento.toLowerCase()) return false;
-            }
-
-            // 4. Filtro por Demanda (Geral / Interna / Externa)
-            if (filters.demanda !== 'TODAS') {
-                const tipoAtendimento = b.tipo_atendimento || 'INTERNO';
-                if (filters.demanda === 'INTERNO' && tipoAtendimento !== 'INTERNO') return false;
-                if (filters.demanda === 'EXTERNO' && tipoAtendimento !== 'EXTERNO') return false;
-            }
-
-            // 5. Filtro por Prioridade (Normal / Urgente / Especial)
-            if (filters.prioridade !== 'TODAS') {
-                const pNormal = (b.priority || 'Normal').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                const targetNormal = filters.prioridade.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                if (!pNormal.includes(targetNormal)) return false;
-            }
-
-            // 6. Filtro por Status
-            if (filters.status !== 'TODOS') {
-                if (filters.status === 'Aguardando Vaga') {
-                    const isQueue = b.status === 'Fila de espera' || b.status === 'Aguardando Data' || b.status === 'Solicitado';
-                    if (!isQueue) return false;
-                } else if (filters.status === 'Definir Data') {
-                    const isQueue = (b.status === 'Fila de espera' || b.status === 'Aguardando Data' || b.status === 'Solicitado') && !b.is_paused;
-                    const isEligible = eligibilityMap.get(b.id)?.isEligible;
-                    if (!isQueue || !isEligible) return false;
-                } else if (filters.status === 'Pausada') {
-                    if (b.status !== 'Pausada' && !b.is_paused) return false;
-                } else if (filters.status === 'Cancelado') {
-                    const isCanceled = b.status === 'Cancelado' || b.status === 'Cancelada' || !!b.canceled_at;
-                    if (!isCanceled) return false;
-                } else {
-                    if (b.status !== filters.status) return false;
-                }
-            }
-
-            // 7. Filtro por Situação na Fila
-            if (filters.situacaoFila !== 'TODAS') {
-                const isWaitlist = b.status === 'Fila de espera' || b.status === 'Aguardando Data' || b.status === 'Solicitado';
-                const pos = queuePositions[b.id] ?? b.queue_position;
-
-                if (filters.situacaoFila === 'VAGA_LIVRE') {
-                    const isEligible = eligibilityMap.get(b.id)?.isEligible;
-                    if (!isWaitlist || !isEligible) return false;
-                } else if (filters.situacaoFila === 'AGUARDANDO_FILA') {
-                    if (!isWaitlist) return false;
-                } else if (filters.situacaoFila === 'TOP_1') {
-                    if (!isWaitlist || pos !== 1) return false;
-                } else if (filters.situacaoFila === 'TOP_3') {
-                    if (!isWaitlist || !pos || pos > 3) return false;
-                } else if (filters.situacaoFila === 'TOP_5') {
-                    if (!isWaitlist || !pos || pos > 5) return false;
-                } else if (filters.situacaoFila === 'TOP_10') {
-                    if (!isWaitlist || !pos || pos > 10) return false;
-                }
-            }
-
-            // 8. Filtro por Paciente (Nome ou CPF)
-            if (filters.pacienteSearch.trim()) {
-                const term = filters.pacienteSearch.toLowerCase().trim();
-                const cleanTermCpf = term.replace(/\D/g, '');
-                
-                const patName = (b.paciente?.name || '').toLowerCase();
-                const patCpf = (b.paciente?.cpf || '').replace(/\D/g, '');
-                const patSus = (b.paciente?.sus_number || '').replace(/\D/g, '');
-
-                const matchesName = patName.includes(term);
-                const matchesCpf = cleanTermCpf ? patCpf.includes(cleanTermCpf) : false;
-                const matchesSus = cleanTermCpf ? patSus.includes(cleanTermCpf) : false;
-
-                if (!matchesName && !matchesCpf && !matchesSus) return false;
-            }
-
-            return true;
+    // Confirmação explícita dos critérios aplicados
+    const handleApplyFilters = () => {
+        setAppliedFilters({
+            periodoTipo,
+            dataInicio,
+            dataFim,
+            selectedProcIds: [...selectedProcIds],
+            selectedStatuses: [...selectedStatuses]
         });
-    }, [allBookings, filters, eligibilityMap, queuePositions]);
+        setIsCalendarOpen(false);
+        setIsProcDropdownOpen(false);
+        setIsStatusDropdownOpen(false);
+    };
 
-    // Agrupamento dos resultados por procedimento
-    const groupedProcedures = useMemo(() => {
-        const map: Record<string, {
-            id: string;
-            code?: string;
-            name: string;
-            type: string;
-            totalQty: number;
-            solicitados: number;
-            agendados: number;
-            fila: number;
-            realizados: number;
-            pausados: number;
-            bookings: ConsultaAgendamento[];
-        }> = {};
-
-        filteredBookings.forEach(b => {
-            const pId = b.procedimento_id || b.procedimento?.id || 'SEM_ID';
-            const pName = formatProcedimentoLabel(b.procedimento) || 'OUTRO PROCEDIMENTO';
-            const key = pId !== 'SEM_ID' ? pId : `name_${pName}`;
-
-            if (!map[key]) {
-                map[key] = {
-                    id: key,
-                    code: b.procedimento?.code,
-                    name: pName,
-                    type: b.procedimento?.type || 'Consulta',
-                    totalQty: 0,
-                    solicitados: 0,
-                    agendados: 0,
-                    fila: 0,
-                    realizados: 0,
-                    pausados: 0,
-                    bookings: []
-                };
-            }
-
-            const qty = b.quantity || 1;
-            map[key].totalQty += qty;
-            map[key].bookings.push(b);
-
-            if (b.status === 'Solicitado') map[key].solicitados += qty;
-            else if (b.status === 'Agendado') map[key].agendados += qty;
-            else if (b.status === 'Realizado') map[key].realizados += qty;
-            else if (b.status === 'Pausada' || b.is_paused) map[key].pausados += qty;
-            else if (b.status === 'Fila de espera' || b.status === 'Aguardando Data') map[key].fila += qty;
+    // Limpar todos os filtros
+    const handleClearFilters = () => {
+        setDataInicio('');
+        setDataFim('');
+        setSelectedProcIds([]);
+        setSelectedStatuses([]);
+        setAppliedFilters({
+            periodoTipo,
+            dataInicio: '',
+            dataFim: '',
+            selectedProcIds: [],
+            selectedStatuses: []
         });
+        setIsCalendarOpen(false);
+        setIsProcDropdownOpen(false);
+        setIsStatusDropdownOpen(false);
+    };
 
-        // Ordenar os procedimentos por maior quantidade total e depois por ordem alfabética
-        return Object.values(map).sort((a, b) => b.totalQty - a.totalQty || a.name.localeCompare(b.name));
-    }, [filteredBookings]);
+    // Procedimentos ordenados alfabeticamente e filtrados pela busca
+    const filteredProcList = useMemo(() => {
+        const sorted = [...procedures].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        if (!procSearch.trim()) return sorted;
+        const s = procSearch.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        return sorted.filter(p => {
+            const nameNorm = (p.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            const codeNorm = (p.code || '').toLowerCase();
+            return nameNorm.includes(s) || codeNorm.includes(s);
+        });
+    }, [procedures, procSearch]);
 
-    // Total de solicitações encontradas
-    const totalSolicitacoes = useMemo(() => {
-        return filteredBookings.reduce((acc, b) => acc + (b.quantity || 1), 0);
-    }, [filteredBookings]);
-
-    // Descrição textual dos filtros aplicados para exibição e para o PDF
-    const appliedFiltersDescription = useMemo(() => {
+    // Resumo descritivo dos filtros ativos (para barra inferior e PDF)
+    const appliedFiltersText = useMemo(() => {
         const parts: string[] = [];
 
         // Período
-        if (filters.dataInicio || filters.dataFim) {
-            const tipoLabel = filters.periodoTipo === 'solicitacao' ? 'Solicitação' : 'Agendamento';
-            const inicio = filters.dataInicio ? filters.dataInicio.split('-').reverse().join('/') : 'Início';
-            const fim = filters.dataFim ? filters.dataFim.split('-').reverse().join('/') : 'Fim';
-            parts.push(`Período (${tipoLabel}): ${inicio} até ${fim}`);
+        if (appliedFilters.dataInicio || appliedFilters.dataFim) {
+            const label = appliedFilters.periodoTipo === 'solicitacao' ? 'Solicitação' : 'Agendamento';
+            const ini = formatBrDate(appliedFilters.dataInicio) || 'Início';
+            const fim = formatBrDate(appliedFilters.dataFim) || 'Fim';
+            parts.push(`${label}: ${ini} a ${fim}`);
+        } else {
+            parts.push(`${appliedFilters.periodoTipo === 'solicitacao' ? 'Solicitação' : 'Agendamento'}: Todo o histórico`);
         }
 
         // Procedimentos
-        if (filters.procedimentoIds.length > 0) {
-            if (filters.procedimentoIds.length === 1) {
-                const found = procedures.find(p => p.id === filters.procedimentoIds[0]);
-                parts.push(`Procedimento: ${found ? (found.code ? `[${found.code}] ${found.name}` : found.name) : 'Selecionado'}`);
-            } else {
-                parts.push(`Procedimentos: ${filters.procedimentoIds.length} selecionados`);
-            }
+        if (appliedFilters.selectedProcIds.length === 0) {
+            parts.push('Todos os procedimentos');
+        } else if (appliedFilters.selectedProcIds.length === 1) {
+            const p = procedures.find(item => item.id === appliedFilters.selectedProcIds[0]);
+            parts.push(`1 procedimento (${p?.code ? `${p.code} - ${p.name}` : p?.name || 'Selecionado'})`);
         } else {
-            parts.push('Procedimento: Todos');
-        }
-
-        // Tipo
-        if (filters.tipoProcedimento !== 'TODOS') {
-            parts.push(`Tipo: ${filters.tipoProcedimento}`);
-        }
-
-        // Demanda
-        if (filters.demanda !== 'TODAS') {
-            parts.push(`Demanda: ${filters.demanda === 'INTERNO' ? 'Interna (Municipal)' : 'Externa (Fora)'}`);
-        }
-
-        // Prioridade
-        if (filters.prioridade !== 'TODAS') {
-            parts.push(`Prioridade: ${filters.prioridade}`);
+            parts.push(`${appliedFilters.selectedProcIds.length} procedimentos selecionados`);
         }
 
         // Status
-        if (filters.status !== 'TODOS') {
-            parts.push(`Status: ${filters.status}`);
-        }
-
-        // Situação na fila
-        if (filters.situacaoFila !== 'TODAS') {
-            const sitMap: Record<string, string> = {
-                'VAGA_LIVRE': 'Vaga Livre (Elegível)',
-                'AGUARDANDO_FILA': 'Aguardando na Fila',
-                'TOP_1': '1º Lugar da Fila',
-                'TOP_3': 'Top 3 (1º ao 3º)',
-                'TOP_5': 'Top 5 (1º ao 5º)',
-                'TOP_10': 'Top 10 (1º ao 10º)'
-            };
-            parts.push(`Fila: ${sitMap[filters.situacaoFila] || filters.situacaoFila}`);
-        }
-
-        // Paciente
-        if (filters.pacienteSearch.trim()) {
-            parts.push(`Paciente/CPF: "${filters.pacienteSearch.trim()}"`);
+        if (appliedFilters.selectedStatuses.length === 0) {
+            parts.push('Todos os status');
+        } else if (appliedFilters.selectedStatuses.length === 1) {
+            parts.push(`Status: ${appliedFilters.selectedStatuses[0]}`);
+        } else {
+            parts.push(`${appliedFilters.selectedStatuses.length} status selecionados`);
         }
 
         return parts.join(' • ');
-    }, [filters, procedures]);
+    }, [appliedFilters, procedures]);
 
-    // Formatação de data brasileira
-    const formatDateBr = (d?: string | null) => {
-        if (!d) return '-';
-        const raw = d.includes('T') ? d.split('T')[0] : d;
-        const parts = raw.split('-');
-        if (parts.length !== 3) return d;
-        return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    };
+    // Disparar Exportação aplicando rigorosamente: OU dentro de cada filtro, E entre filtros diferentes
+    const handleTriggerExport = (mode: 'simplificado' | 'completo') => {
+        // Assegurar aplicação prévia dos critérios atuais caso o usuário clique direto no botão de exportar
+        const currentCriteria = {
+            periodoTipo,
+            dataInicio,
+            dataFim,
+            selectedProcIds: [...selectedProcIds],
+            selectedStatuses: [...selectedStatuses]
+        };
+        setAppliedFilters(currentCriteria);
 
-    // Formatação de CPF
-    const formatCpf = (cpf?: string) => {
-        if (!cpf) return 'Não informado';
-        const clean = cpf.replace(/\D/g, '');
-        if (clean.length === 11) {
-            return clean.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+        const filtered = allBookings.filter(b => {
+            // 1. FILTRO PERÍODO (E)
+            if (currentCriteria.periodoTipo === 'solicitacao') {
+                const solDate = normalizeSolicitationDate(b);
+                if (currentCriteria.dataInicio && (!solDate || solDate < currentCriteria.dataInicio)) return false;
+                if (currentCriteria.dataFim && (!solDate || solDate > currentCriteria.dataFim)) return false;
+            } else {
+                const appDate = b.appointment_date ? b.appointment_date.split('T')[0] : '';
+                if (currentCriteria.dataInicio || currentCriteria.dataFim) {
+                    if (!appDate) return false;
+                    if (currentCriteria.dataInicio && appDate < currentCriteria.dataInicio) return false;
+                    if (currentCriteria.dataFim && appDate > currentCriteria.dataFim) return false;
+                }
+            }
+
+            // 2. FILTRO PROCEDIMENTO (OU dentro de procedimentos selecionados)
+            if (currentCriteria.selectedProcIds.length > 0) {
+                const pId = b.procedimento_id || b.procedimento?.id;
+                if (!pId || !currentCriteria.selectedProcIds.includes(pId)) return false;
+            }
+
+            // 3. FILTRO STATUS (OU dentro de status selecionados)
+            if (currentCriteria.selectedStatuses.length > 0) {
+                const matches = currentCriteria.selectedStatuses.some(st => {
+                    if (st === 'Aguardando Vaga') {
+                        return b.status === 'Fila de espera' || b.status === 'Aguardando Data' || b.status === 'Solicitado';
+                    }
+                    if (st === 'Definir Data') {
+                        const isWait = (b.status === 'Fila de espera' || b.status === 'Aguardando Data' || b.status === 'Solicitado') && !b.is_paused;
+                        const isEligible = eligibilityMap.get(b.id)?.isEligible;
+                        return isWait && isEligible;
+                    }
+                    if (st === 'Pausada') {
+                        return b.status === 'Pausada' || b.is_paused;
+                    }
+                    if (st === 'Cancelado') {
+                        return b.status === 'Cancelado' || b.status === 'Cancelada' || !!b.canceled_at;
+                    }
+                    return b.status === st;
+                });
+                if (!matches) return false;
+            }
+            return true;
+        });
+
+        if (filtered.length === 0) {
+            setAlertMessage('Nenhum registro encontrado para os filtros selecionados. Experimente ajustar o período, procedimentos ou status para exportar.');
+            return;
         }
-        return cpf;
-    };
 
-    // Disparar exportação PDF
-    const handleExportPdf = (mode: 'simplificado' | 'completo') => {
-        setPdfExportMode(mode);
+        setPdfMode(mode);
         setIsPrintingReport(true);
     };
+
+    // --- LÓGICA DO CALENDÁRIO POPOVER ---
+    const handleDayClick = (dateStr: string) => {
+        if (!dataInicio || (dataInicio && dataFim)) {
+            // Primeiro clique: define data inicial
+            setDataInicio(dateStr);
+            setDataFim('');
+            setCalendarSelecting('end');
+        } else if (dataInicio && !dataFim) {
+            // Segundo clique: define data final
+            if (dateStr < dataInicio) {
+                // Inverte de forma inteligente se o usuário clicou numa data anterior
+                setDataFim(dataInicio);
+                setDataInicio(dateStr);
+            } else {
+                setDataFim(dateStr);
+            }
+            setCalendarSelecting('start');
+            setIsCalendarOpen(false);
+        }
+    };
+
+    // Geração dos dias do mês para o calendário
+    const calendarDays = useMemo(() => {
+        const year = calendarViewDate.getFullYear();
+        const month = calendarViewDate.getMonth();
+        const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0 (Dom) a 6 (Sáb)
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        const days: Array<{ dateStr: string; dayNum: number; isCurrentMonth: boolean }> = [];
+
+        // Dias do mês anterior para preencher a primeira semana
+        const daysInPrevMonth = new Date(year, month, 0).getDate();
+        for (let i = firstDayOfMonth - 1; i >= 0; i--) {
+            const d = daysInPrevMonth - i;
+            const prevMonthDate = new Date(year, month - 1, d);
+            const dateStr = prevMonthDate.toISOString().split('T')[0];
+            days.push({ dateStr, dayNum: d, isCurrentMonth: false });
+        }
+
+        // Dias do mês atual
+        for (let d = 1; d <= daysInMonth; d++) {
+            const m = String(month + 1).padStart(2, '0');
+            const dayStr = String(d).padStart(2, '0');
+            const dateStr = `${year}-${m}-${dayStr}`;
+            days.push({ dateStr, dayNum: d, isCurrentMonth: true });
+        }
+
+        // Completar a grade até 35 ou 42 células
+        const remaining = 42 - days.length;
+        for (let d = 1; d <= remaining && days.length < 35; d++) {
+            const nextMonthDate = new Date(year, month + 1, d);
+            const dateStr = nextMonthDate.toISOString().split('T')[0];
+            days.push({ dateStr, dayNum: d, isCurrentMonth: false });
+        }
+
+        return days;
+    }, [calendarViewDate]);
+
+    const monthNames = [
+        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
 
     if (!isOpen) return null;
 
     return createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in font-sans">
-            <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-6xl max-h-[94vh] overflow-hidden border border-slate-100 flex flex-col transform transition-all animate-scale-in">
-                
-                {/* 1. HEADER DO MODAL */}
-                <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-gradient-to-r from-slate-50 via-white to-sky-50/30 shrink-0">
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <div className="p-2 bg-sky-600 text-white rounded-xl shadow-sm">
-                                <FileDown className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <h3 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-                                    Relatórios de Regulação e Atendimentos
-                                </h3>
-                                <p className="text-xs text-slate-500 font-semibold">
-                                    Configure filtros combináveis, pré-visualize o quantitativo e exporte relatórios consolidados em PDF.
-                                </p>
-                            </div>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200 font-sans overflow-x-hidden">
+            {/* MODAL PRINCIPAL: 90% DA VIEWPORT, MÁXIMO 1700px, ALTURA MÁXIMA 95vh */}
+            <div className="bg-white rounded-3xl shadow-2xl w-[90vw] max-w-[1700px] max-h-[95vh] overflow-visible border border-slate-100 flex flex-col transform transition-all animate-in zoom-in-95 duration-200 my-auto">
+
+                {/* 1. CABEÇALHO INSTITUCIONAL */}
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0 rounded-t-3xl">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-sky-600 text-white rounded-2xl shadow-sm">
+                            <FileDown className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                                Relatórios de Regulação e Atendimentos
+                            </h3>
+                            <p className="text-xs text-slate-500 font-semibold">
+                                Configure o período, os procedimentos e o status para gerar relatórios consolidados em PDF.
+                            </p>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2 self-end sm:self-center">
-                        {/* Seletor de Modo Simplificado vs Completo */}
-                        <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
+                    <div className="flex items-center gap-3">
+                        {/* Seletor rápido de tipo de relatório */}
+                        <div className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200">
                             <button
                                 type="button"
                                 onClick={() => setReportType('simplificado')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                                className={`px-3.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
                                     reportType === 'simplificado'
                                     ? 'bg-sky-600 text-white shadow-xs'
-                                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                                    : 'text-slate-600 hover:text-slate-900'
                                 }`}
                             >
                                 <BarChart3 className="w-3.5 h-3.5" />
@@ -482,10 +494,10 @@ export const ConsultasReportModal: React.FC<ConsultasReportModalProps> = ({
                             <button
                                 type="button"
                                 onClick={() => setReportType('completo')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                                className={`px-3.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
                                     reportType === 'completo'
                                     ? 'bg-sky-600 text-white shadow-xs'
-                                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                                    : 'text-slate-600 hover:text-slate-900'
                                 }`}
                             >
                                 <Users className="w-3.5 h-3.5" />
@@ -493,11 +505,11 @@ export const ConsultasReportModal: React.FC<ConsultasReportModalProps> = ({
                             </button>
                         </div>
 
-                        {/* Botão fechar */}
-                        <button 
+                        {/* Botão Fechar */}
+                        <button
                             type="button"
-                            onClick={onClose} 
-                            className="p-2 hover:bg-slate-200/80 rounded-xl text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                            onClick={onClose}
+                            className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
                             title="Fechar modal"
                         >
                             <X className="w-5 h-5" />
@@ -505,722 +517,609 @@ export const ConsultasReportModal: React.FC<ConsultasReportModalProps> = ({
                     </div>
                 </div>
 
-                {/* 2. PAINEL DE FILTROS COMBINÁVEIS */}
-                <div className="border-b border-slate-200 bg-slate-50/70 shrink-0">
-                    <div className="px-6 py-2.5 flex items-center justify-between border-b border-slate-200/60 bg-white">
-                        <div className="flex items-center gap-2">
-                            <ListFilter className="w-4 h-4 text-sky-600" />
-                            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-800">
-                                Filtros Personalizados
+                {/* 2. CORPO DO MODAL — DISTRIBUIÇÃO HORIZONTAL: PERÍODO (28%), PROCEDIMENTO (47%), STATUS (25%) */}
+                <div className="p-6 bg-slate-50/50 space-y-5">
+                    <div className="grid grid-cols-1 lg:grid-cols-[28%_47%_25%] gap-4 items-start">
+
+                        {/* CARD 1 — PERÍODO (28%) */}
+                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3 relative" ref={calendarCardRef}>
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                                    <CalendarIcon className="w-4 h-4 text-sky-600" />
+                                    <span>Período</span>
+                                </label>
+                            </div>
+
+                            {/* Toggle Pill: Solicitação vs Agendamento */}
+                            <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-xl border border-slate-200/80 text-xs font-bold">
+                                <button
+                                    type="button"
+                                    onClick={() => setPeriodoTipo('solicitacao')}
+                                    className={`py-1.5 rounded-lg transition-all text-center cursor-pointer ${
+                                        periodoTipo === 'solicitacao'
+                                            ? 'bg-sky-600 text-white shadow-xs font-black'
+                                            : 'text-slate-600 hover:text-slate-900'
+                                    }`}
+                                >
+                                    Solicitação
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPeriodoTipo('agendamento')}
+                                    className={`py-1.5 rounded-lg transition-all text-center cursor-pointer ${
+                                        periodoTipo === 'agendamento'
+                                            ? 'bg-sky-600 text-white shadow-xs font-black'
+                                            : 'text-slate-600 hover:text-slate-900'
+                                    }`}
+                                >
+                                    Agendamento
+                                </button>
+                            </div>
+
+                            {/* Campos De: e Até: com Popover */}
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <span className="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">De:</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleCalendarPopover('start')}
+                                        className="w-full flex items-center gap-2 px-2.5 py-2.5 rounded-xl border border-slate-200 bg-white hover:border-sky-500 text-xs font-bold text-slate-800 transition-all text-left shadow-2xs cursor-pointer h-11"
+                                    >
+                                        <CalendarIcon className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                                        <span className="truncate">{formatBrDate(dataInicio) || 'DD/MM/AAAA'}</span>
+                                    </button>
+                                </div>
+
+                                <div>
+                                    <span className="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">Até:</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleCalendarPopover('end')}
+                                        className="w-full flex items-center gap-2 px-2.5 py-2.5 rounded-xl border border-slate-200 bg-white hover:border-sky-500 text-xs font-bold text-slate-800 transition-all text-left shadow-2xs cursor-pointer h-11"
+                                    >
+                                        <CalendarIcon className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                                        <span className="truncate">{formatBrDate(dataFim) || 'DD/MM/AAAA'}</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Subtexto auxiliar de período */}
+                            <span className="block text-[11px] font-bold text-slate-500">
+                                {dataInicio || dataFim
+                                    ? `Intervalo selecionado (${formatBrDate(dataInicio) || 'Início'} até ${formatBrDate(dataFim) || 'Fim'})`
+                                    : 'Todo o histórico de registros'}
                             </span>
-                            {activeFiltersCount > 0 ? (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-sky-100 text-sky-800 border border-sky-200">
-                                    {activeFiltersCount} {activeFiltersCount === 1 ? 'filtro ativo' : 'filtros ativos'}
-                                </span>
-                            ) : (
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                                    (Exibindo todos os registros)
-                                </span>
+
+                            {/* Popover de Calendário com Seleção de Intervalo (Abertura Inteligente) */}
+                            {isCalendarOpen && (
+                                <div 
+                                    className={`absolute left-0 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3.5 w-76 animate-in fade-in zoom-in-95 duration-150 ${
+                                        calendarPlacement === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
+                                    }`}
+                                >
+                                    {/* Header do Calendário: Mês e Navegação */}
+                                    <div className="flex items-center justify-between mb-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1))}
+                                            className="p-1 hover:bg-slate-100 rounded-lg text-slate-600 cursor-pointer"
+                                        >
+                                            <ChevronLeft className="w-4 h-4" />
+                                        </button>
+                                        <span className="text-xs font-black uppercase text-slate-800">
+                                            {monthNames[calendarViewDate.getMonth()]} {calendarViewDate.getFullYear()}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1))}
+                                            className="p-1 hover:bg-slate-100 rounded-lg text-slate-600 cursor-pointer"
+                                        >
+                                            <ChevronRight className="w-4 h-4" />
+                                        </button>
+                                    </div>
+
+                                    {/* Dias da semana */}
+                                    <div className="grid grid-cols-7 text-center text-[10px] font-black uppercase text-slate-400 mb-1">
+                                        <span>D</span>
+                                        <span>S</span>
+                                        <span>T</span>
+                                        <span>Q</span>
+                                        <span>Q</span>
+                                        <span>S</span>
+                                        <span>S</span>
+                                    </div>
+
+                                    {/* Grade de dias com destaque do intervalo */}
+                                    <div className="grid grid-cols-7 gap-y-1 text-xs">
+                                        {calendarDays.map((d, idx) => {
+                                            const isStart = dataInicio === d.dateStr;
+                                            const isEnd = dataFim === d.dateStr;
+                                            const inRange = dataInicio && dataFim && d.dateStr > dataInicio && d.dateStr < dataFim;
+                                            const inHoverRange = dataInicio && !dataFim && hoverDate && d.dateStr > dataInicio && d.dateStr <= hoverDate;
+
+                                            return (
+                                                <button
+                                                    key={idx}
+                                                    type="button"
+                                                    onMouseEnter={() => setHoverDate(d.dateStr)}
+                                                    onClick={() => handleDayClick(d.dateStr)}
+                                                    className={`py-1 text-center font-bold text-xs transition-all relative cursor-pointer ${
+                                                        !d.isCurrentMonth ? 'text-slate-300' : 'text-slate-700'
+                                                    } ${
+                                                        isStart || isEnd
+                                                            ? 'bg-sky-600 text-white rounded-lg font-black shadow-xs'
+                                                            : inRange || inHoverRange
+                                                            ? 'bg-sky-50 text-sky-800 font-extrabold'
+                                                            : 'hover:bg-slate-100 rounded-lg'
+                                                    }`}
+                                                >
+                                                    {d.dayNum}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {/* Ações rápidas do Calendário */}
+                                    <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] font-bold">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setDataInicio('');
+                                                setDataFim('');
+                                            }}
+                                            className="text-rose-600 hover:underline cursor-pointer"
+                                        >
+                                            Limpar
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsCalendarOpen(false)}
+                                            className="text-sky-700 font-extrabold hover:underline cursor-pointer"
+                                        >
+                                            Concluir
+                                        </button>
+                                    </div>
+                                </div>
                             )}
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        {/* CARD 2 — PROCEDIMENTO (47% — MAIOR LARGURA PARA DESCRIÇÕES EXTENSAS) */}
+                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3 relative" ref={procCardRef}>
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                                    <Stethoscope className="w-4 h-4 text-sky-600" />
+                                    <span>Procedimento</span>
+                                </label>
+                                {selectedProcIds.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedProcIds([]);
+                                        }}
+                                        className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
+                                    >
+                                        Limpar seleção
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* REGRA OBRIGATÓRIA DA SEÇÃO 5:
+                                O CAMPO PRINCIPAL APRESENTA APENAS UM RESUMO FIXO E COMPACTO:
+                                - Nenhuma seleção: "Todos os procedimentos"
+                                - Uma seleção: "1 procedimento selecionado"
+                                - Múltiplas seleções: "X procedimentos selecionados"
+                                Isso impede que o campo aumente de altura quando muitos forem selecionados! */}
+                            <div 
+                                onClick={toggleProcDropdown}
+                                className="h-11 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:border-sky-500 transition-all cursor-pointer flex items-center justify-between shadow-2xs group"
+                            >
+                                <div className="flex items-center gap-2 overflow-hidden">
+                                    {selectedProcIds.length === 0 ? (
+                                        <span className="text-xs text-slate-500 font-semibold truncate">
+                                            Todos os procedimentos
+                                        </span>
+                                    ) : selectedProcIds.length === 1 ? (
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-black bg-sky-50 text-sky-800 border border-sky-200/90 truncate">
+                                            1 procedimento selecionado
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-black bg-sky-50 text-sky-800 border border-sky-200/90 truncate">
+                                            {selectedProcIds.length} procedimentos selecionados
+                                        </span>
+                                    )}
+                                </div>
+                                <ChevronDown className={`w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-transform shrink-0 ml-2 ${isProcDropdownOpen ? 'rotate-180' : ''}`} />
+                            </div>
+
+                            {/* Subtexto com contador dinâmico */}
+                            <span className="block text-[11px] font-bold text-slate-500">
+                                {selectedProcIds.length === 0
+                                    ? `Todos os procedimentos (${procedures.length} disponíveis)`
+                                    : `${selectedProcIds.length} de ${procedures.length} procedimentos selecionados`}
+                            </span>
+
+                            {/* DROPDOWN DE PROCEDIMENTOS:
+                                - Altura de aproximadamente 500px no desktop (h-[500px])
+                                - Abertura automática para cima ou para baixo
+                                - Pesquisa fixa no topo
+                                - Contador fixo no rodapé
+                                - Rolagem vertical exclusiva da lista
+                                - Nomes completos SEM RETICÊNCIAS (sem truncate), com quebra de linha */}
+                            {isProcDropdownOpen && (
+                                <div 
+                                    className={`absolute left-0 right-0 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3.5 flex flex-col animate-in fade-in zoom-in-95 duration-150 h-[500px] max-h-[75vh] ${
+                                        procDropdownPlacement === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
+                                    }`}
+                                >
+                                    {/* 1. Campo de Busca Fixo na parte superior */}
+                                    <div className="relative mb-2 shrink-0">
+                                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                        <input
+                                            type="text"
+                                            placeholder="Buscar procedimento por código ou nome..."
+                                            value={procSearch}
+                                            onChange={e => setProcSearch(e.target.value)}
+                                            className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 outline-none focus:border-sky-500 bg-slate-50 focus:bg-white text-slate-800 font-medium"
+                                            autoFocus
+                                        />
+                                    </div>
+
+                                    {/* 2. Controles de Selecionar Todos / Limpar Seleção (Fixo) */}
+                                    <div className="flex items-center justify-between py-1.5 px-2 mb-1 border-b border-slate-100 text-xs font-bold shrink-0 bg-slate-50/70 rounded-lg">
+                                        <label className="flex items-center gap-2 cursor-pointer text-slate-700 hover:text-slate-900 select-none">
+                                            <input
+                                                type="checkbox"
+                                                checked={procedures.length > 0 && selectedProcIds.length === procedures.length}
+                                                onChange={e => {
+                                                    if (e.target.checked) {
+                                                        setSelectedProcIds(procedures.map(p => p.id));
+                                                    } else {
+                                                        setSelectedProcIds([]);
+                                                    }
+                                                }}
+                                                className="rounded text-sky-600 focus:ring-sky-500 w-4 h-4 cursor-pointer"
+                                            />
+                                            <span>Selecionar todos</span>
+                                        </label>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedProcIds([])}
+                                            className="text-sky-700 hover:underline cursor-pointer"
+                                        >
+                                            Limpar seleção
+                                        </button>
+                                    </div>
+
+                                    {/* 3. Lista de Procedimentos com ROLAGEM VERTICAL EXCLUSIVA
+                                        EXIBIÇÃO INTEGRAL: SEM TRUNCATE, QUEBRA AUTOMÁTICA DE LINHA */}
+                                    <div className="overflow-y-auto flex-1 divide-y divide-slate-100 pr-1 text-xs">
+                                        {filteredProcList.length === 0 ? (
+                                            <div className="text-center py-10 text-slate-400 text-xs font-medium">
+                                                Nenhum procedimento encontrado com o termo informado.
+                                            </div>
+                                        ) : (
+                                            filteredProcList.map(proc => {
+                                                const isChecked = selectedProcIds.includes(proc.id);
+                                                return (
+                                                    <label
+                                                        key={proc.id}
+                                                        className={`flex items-start gap-3 p-2.5 hover:bg-slate-50 cursor-pointer rounded-xl transition-colors select-none ${
+                                                            isChecked ? 'bg-sky-50/60' : ''
+                                                        }`}
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isChecked}
+                                                            onChange={() => {
+                                                                if (isChecked) {
+                                                                    setSelectedProcIds(selectedProcIds.filter(id => id !== proc.id));
+                                                                } else {
+                                                                    setSelectedProcIds([...selectedProcIds, proc.id]);
+                                                                }
+                                                            }}
+                                                            className="rounded text-sky-600 focus:ring-sky-500 w-4 h-4 mt-0.5 shrink-0 cursor-pointer"
+                                                        />
+                                                        {/* Nome e Código Completos com quebra de linha sem reticências */}
+                                                        <div className="flex-1 whitespace-normal break-words leading-relaxed">
+                                                            {proc.code && (
+                                                                <span className="font-mono font-black text-slate-900 mr-1.5">
+                                                                    {proc.code} —
+                                                                </span>
+                                                            )}
+                                                            <span className="font-bold text-slate-800 uppercase">
+                                                                {proc.name}
+                                                            </span>
+                                                        </div>
+                                                    </label>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+
+                                    {/* 4. Contador de Selecionados Fixo na parte inferior */}
+                                    <div className="mt-2 pt-2 border-t border-slate-100 shrink-0">
+                                        <div className="p-2 rounded-xl bg-sky-50 text-sky-800 text-xs font-black text-center border border-sky-100">
+                                            {selectedProcIds.length} de {procedures.length} procedimentos selecionados
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* CARD 3 — STATUS (25%) */}
+                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3 relative" ref={statusCardRef}>
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                                    <Layers className="w-4 h-4 text-sky-600" />
+                                    <span>Status</span>
+                                </label>
+                                {selectedStatuses.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedStatuses([]);
+                                        }}
+                                        className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
+                                    >
+                                        Limpar
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Campo Principal compacto para o Status */}
+                            <div 
+                                onClick={toggleStatusDropdown}
+                                className="h-11 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:border-sky-500 transition-all cursor-pointer flex items-center justify-between shadow-2xs group"
+                            >
+                                <div className="flex items-center gap-2 overflow-hidden">
+                                    {selectedStatuses.length === 0 ? (
+                                        <span className="text-xs text-slate-500 font-semibold truncate">
+                                            Todos os status
+                                        </span>
+                                    ) : selectedStatuses.length === 1 ? (
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-black bg-sky-50 text-sky-800 border border-sky-200/90 truncate">
+                                            {selectedStatuses[0]}
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-black bg-sky-50 text-sky-800 border border-sky-200/90 truncate">
+                                            {selectedStatuses.length} status selecionados
+                                        </span>
+                                    )}
+                                </div>
+                                <ChevronDown className={`w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-transform shrink-0 ml-2 ${isStatusDropdownOpen ? 'rotate-180' : ''}`} />
+                            </div>
+
+                            {/* Subtexto com contador */}
+                            <span className="block text-[11px] font-bold text-slate-500">
+                                {selectedStatuses.length === 0
+                                    ? `Todos os status selecionados (${ALL_STATUS_OPTIONS.length})`
+                                    : `${selectedStatuses.length} de ${ALL_STATUS_OPTIONS.length} status selecionados`}
+                            </span>
+
+                            {/* Popover Dropdown Múltiplo de Status */}
+                            {isStatusDropdownOpen && (
+                                <div 
+                                    className={`absolute left-0 right-0 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3.5 max-h-80 flex flex-col animate-in fade-in zoom-in-95 duration-150 ${
+                                        statusDropdownPlacement === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
+                                    }`}
+                                >
+                                    {/* Controles de Selecionar Todos / Limpar */}
+                                    <div className="flex items-center justify-between py-1.5 px-2 mb-2 border-b border-slate-100 text-xs font-bold bg-slate-50/70 rounded-lg shrink-0">
+                                        <label className="flex items-center gap-2 cursor-pointer text-slate-700 hover:text-slate-900 select-none">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedStatuses.length === ALL_STATUS_OPTIONS.length}
+                                                onChange={e => {
+                                                    if (e.target.checked) {
+                                                        setSelectedStatuses(ALL_STATUS_OPTIONS.map(s => s.id));
+                                                    } else {
+                                                        setSelectedStatuses([]);
+                                                    }
+                                                }}
+                                                className="rounded text-sky-600 focus:ring-sky-500 w-4 h-4 cursor-pointer"
+                                            />
+                                            <span>Selecionar todos</span>
+                                        </label>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedStatuses([])}
+                                            className="text-sky-700 hover:underline cursor-pointer"
+                                        >
+                                            Limpar seleção
+                                        </button>
+                                    </div>
+
+                                    {/* Lista de Status com Checkboxes */}
+                                    <div className="overflow-y-auto flex-1 divide-y divide-slate-100 text-xs">
+                                        {ALL_STATUS_OPTIONS.map(st => {
+                                            const isChecked = selectedStatuses.includes(st.id);
+                                            return (
+                                                <label
+                                                    key={st.id}
+                                                    className={`flex items-center gap-2.5 p-2 hover:bg-slate-50 cursor-pointer rounded-lg transition-colors select-none ${
+                                                        isChecked ? 'bg-sky-50/60' : ''
+                                                    }`}
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isChecked}
+                                                        onChange={() => {
+                                                            if (isChecked) {
+                                                                setSelectedStatuses(selectedStatuses.filter(id => id !== st.id));
+                                                            } else {
+                                                                setSelectedStatuses([...selectedStatuses, st.id]);
+                                                            }
+                                                        }}
+                                                        className="rounded text-sky-600 focus:ring-sky-500 w-4 h-4 cursor-pointer"
+                                                    />
+                                                    <span className="font-bold text-slate-800">
+                                                        {st.label}
+                                                    </span>
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {/* Rodapé do Dropdown */}
+                                    <div className="mt-2 pt-2 border-t border-slate-100 shrink-0">
+                                        <div className="p-1.5 rounded-xl bg-sky-50 text-sky-800 text-[11px] font-black text-center border border-sky-100">
+                                            {selectedStatuses.length} de {ALL_STATUS_OPTIONS.length} status selecionados
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                    </div>
+
+                    {/* 3. ÁREA DE RESUMO REORGANIZADA COM QUEBRA DE LINHA DINÂMICA E BOTÕES DE AÇÃO */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2">
+                        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600 max-w-4xl">
+                            <span className="font-extrabold text-slate-800 shrink-0">Filtros aplicados:</span>
+                            <div className="inline-flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200/80 text-slate-800 font-bold leading-relaxed">
+                                <CalendarIcon className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                                <span>{appliedFiltersText}</span>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
                             <button
                                 type="button"
-                                onClick={handleResetFilters}
-                                className="px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-                                title="Limpar todos os filtros"
+                                onClick={handleClearFilters}
+                                className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-extrabold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
                             >
-                                <RotateCcw className="w-3 h-3" />
+                                <RotateCcw className="w-3.5 h-3.5" />
                                 <span>Limpar Filtros</span>
                             </button>
 
                             <button
                                 type="button"
-                                onClick={() => setIsFiltersPanelOpen(!isFiltersPanelOpen)}
-                                className="px-2.5 py-1 text-[11px] font-bold text-sky-700 hover:bg-sky-50 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                                onClick={handleApplyFilters}
+                                className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-sm shadow-sky-600/20 active:scale-95"
                             >
-                                {isFiltersPanelOpen ? (
-                                    <>
-                                        <span>Recolher</span>
-                                        <ChevronUp className="w-3.5 h-3.5" />
-                                    </>
-                                ) : (
-                                    <>
-                                        <span>Expandir Filtros</span>
-                                        <ChevronDown className="w-3.5 h-3.5" />
-                                    </>
-                                )}
+                                <Filter className="w-3.5 h-3.5" />
+                                <span>Aplicar Filtros</span>
                             </button>
                         </div>
                     </div>
-
-                    {isFiltersPanelOpen && (
-                        <div className="p-4 sm:p-5 space-y-3.5 animate-in fade-in duration-150">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                                
-                                {/* FILTRO 1: PERÍODO COM BASE EM SOLICITAÇÃO OU AGENDAMENTO */}
-                                <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-2xs space-y-2">
-                                    <div className="flex items-center justify-between">
-                                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                                            <Calendar className="w-3.5 h-3.5 text-sky-600" />
-                                            <span>Período</span>
-                                        </label>
-                                        <div className="flex items-center gap-1 text-[9px] font-extrabold uppercase">
-                                            <button
-                                                type="button"
-                                                onClick={() => setFilters({ ...filters, periodoTipo: 'solicitacao' })}
-                                                className={`px-1.5 py-0.5 rounded transition-all cursor-pointer ${
-                                                    filters.periodoTipo === 'solicitacao' 
-                                                        ? 'bg-sky-600 text-white' 
-                                                        : 'text-slate-500 hover:bg-slate-100'
-                                                }`}
-                                            >
-                                                Solicitação
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setFilters({ ...filters, periodoTipo: 'agendamento' })}
-                                                className={`px-1.5 py-0.5 rounded transition-all cursor-pointer ${
-                                                    filters.periodoTipo === 'agendamento' 
-                                                        ? 'bg-sky-600 text-white' 
-                                                        : 'text-slate-500 hover:bg-slate-100'
-                                                }`}
-                                            >
-                                                Agendamento
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div>
-                                            <span className="block text-[9px] font-bold text-slate-400 uppercase mb-0.5">De:</span>
-                                            <input
-                                                type="date"
-                                                value={filters.dataInicio}
-                                                onChange={e => setFilters({ ...filters, dataInicio: e.target.value })}
-                                                className="w-full text-xs font-semibold px-2 py-1.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-sky-500 outline-none text-slate-800"
-                                            />
-                                        </div>
-                                        <div>
-                                            <span className="block text-[9px] font-bold text-slate-400 uppercase mb-0.5">Até:</span>
-                                            <input
-                                                type="date"
-                                                value={filters.dataFim}
-                                                onChange={e => setFilters({ ...filters, dataFim: e.target.value })}
-                                                className="w-full text-xs font-semibold px-2 py-1.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-sky-500 outline-none text-slate-800"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* FILTRO 2: PROCEDIMENTO (TODOS OU MÚLTIPLOS COM DROPDOWN DE BUSCA) */}
-                                <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-2xs space-y-2 relative" ref={procDropdownRef}>
-                                    <div className="flex items-center justify-between">
-                                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                                            <Stethoscope className="w-3.5 h-3.5 text-indigo-600" />
-                                            <span>Procedimento</span>
-                                        </label>
-                                        {filters.procedimentoIds.length > 0 && (
-                                            <button
-                                                type="button"
-                                                onClick={() => setFilters({ ...filters, procedimentoIds: [] })}
-                                                className="text-[9px] font-bold text-rose-600 hover:underline cursor-pointer"
-                                            >
-                                                Limpar ({filters.procedimentoIds.length})
-                                            </button>
-                                        )}
-                                    </div>
-
-                                    {/* Botão de seleção múltipla */}
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsProcDropdownOpen(!isProcDropdownOpen)}
-                                        className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-white text-xs font-semibold text-slate-800 transition-all cursor-pointer"
-                                    >
-                                        <span className="truncate">
-                                            {filters.procedimentoIds.length === 0
-                                                ? 'Todos os procedimentos'
-                                                : `${filters.procedimentoIds.length} selecionado(s)`}
-                                        </span>
-                                        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isProcDropdownOpen ? 'rotate-180' : ''}`} />
-                                    </button>
-
-                                    {/* Dropdown de procedimentos com busca */}
-                                    {isProcDropdownOpen && (
-                                        <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white rounded-2xl shadow-xl border border-slate-200 p-2.5 max-h-60 flex flex-col animate-in fade-in zoom-in-95 duration-150">
-                                            <div className="relative mb-2">
-                                                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                                                <input
-                                                    type="text"
-                                                    placeholder="Buscar por nome ou código..."
-                                                    value={procDropdownSearch}
-                                                    onChange={e => setProcDropdownSearch(e.target.value)}
-                                                    className="w-full pl-8 pr-2 py-1 text-xs rounded-lg border border-slate-200 outline-none focus:border-sky-500 bg-slate-50"
-                                                    autoFocus
-                                                />
-                                            </div>
-
-                                            <div className="overflow-y-auto flex-1 divide-y divide-slate-100 text-xs">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setFilters({ ...filters, procedimentoIds: [] });
-                                                        setIsProcDropdownOpen(false);
-                                                    }}
-                                                    className={`w-full text-left px-2 py-1.5 rounded-lg flex items-center justify-between transition-colors ${
-                                                        filters.procedimentoIds.length === 0 ? 'bg-sky-50 text-sky-700 font-extrabold' : 'hover:bg-slate-50 text-slate-700'
-                                                    }`}
-                                                >
-                                                    <span>Todos os procedimentos</span>
-                                                    {filters.procedimentoIds.length === 0 && <Check className="w-3.5 h-3.5" />}
-                                                </button>
-
-                                                {procedures
-                                                    .filter(p => {
-                                                        if (!procDropdownSearch.trim()) return true;
-                                                        const s = procDropdownSearch.toLowerCase();
-                                                        return (p.name || '').toLowerCase().includes(s) || (p.code || '').toLowerCase().includes(s);
-                                                    })
-                                                    .slice(0, 100)
-                                                    .map(proc => {
-                                                        const isSelected = filters.procedimentoIds.includes(proc.id);
-                                                        return (
-                                                            <button
-                                                                key={proc.id}
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    const exists = filters.procedimentoIds.includes(proc.id);
-                                                                    const updated = exists 
-                                                                        ? filters.procedimentoIds.filter(id => id !== proc.id)
-                                                                        : [...filters.procedimentoIds, proc.id];
-                                                                    setFilters({ ...filters, procedimentoIds: updated });
-                                                                }}
-                                                                className={`w-full text-left px-2 py-1.5 rounded-lg flex items-center justify-between transition-colors ${
-                                                                    isSelected ? 'bg-sky-50 text-sky-800 font-bold' : 'hover:bg-slate-50 text-slate-700'
-                                                                }`}
-                                                            >
-                                                                <div className="truncate pr-2">
-                                                                    <span className="block truncate leading-tight">{formatProcedimentoLabel(proc)}</span>
-                                                                    {proc.code && (
-                                                                        <span className="text-[9px] font-mono text-slate-400">{proc.code}</span>
-                                                                    )}
-                                                                </div>
-                                                                {isSelected && <Check className="w-3.5 h-3.5 text-sky-600 shrink-0" />}
-                                                            </button>
-                                                        );
-                                                    })}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* FILTRO 3: TIPO E DEMANDA */}
-                                <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-2xs space-y-2">
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div>
-                                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 block mb-1">
-                                                Tipo
-                                            </label>
-                                            <select
-                                                value={filters.tipoProcedimento}
-                                                onChange={e => setFilters({ ...filters, tipoProcedimento: e.target.value as any })}
-                                                className="w-full text-xs font-semibold px-2 py-1.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-sky-500 outline-none text-slate-800"
-                                            >
-                                                <option value="TODOS">Todos</option>
-                                                <option value="Consulta">Consulta</option>
-                                                <option value="Exame">Exame</option>
-                                                <option value="Cirurgia">Cirurgia</option>
-                                            </select>
-                                        </div>
-
-                                        <div>
-                                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 block mb-1">
-                                                Demanda
-                                            </label>
-                                            <select
-                                                value={filters.demanda}
-                                                onChange={e => setFilters({ ...filters, demanda: e.target.value as any })}
-                                                className="w-full text-xs font-semibold px-2 py-1.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-sky-500 outline-none text-slate-800"
-                                            >
-                                                <option value="TODAS">Geral (Todas)</option>
-                                                <option value="INTERNO">Interna</option>
-                                                <option value="EXTERNO">Externa</option>
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    {/* Sub-linha com prioridade */}
-                                    <div>
-                                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 block mb-1">
-                                            Prioridade
-                                        </label>
-                                        <div className="grid grid-cols-4 gap-1">
-                                            {(['TODAS', 'Normal', 'Urgente', 'Especial'] as const).map(p => (
-                                                <button
-                                                    key={p}
-                                                    type="button"
-                                                    onClick={() => setFilters({ ...filters, prioridade: p })}
-                                                    className={`py-1 text-[10px] font-extrabold uppercase rounded-lg border transition-all cursor-pointer text-center ${
-                                                        filters.prioridade === p
-                                                            ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
-                                                            : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200'
-                                                    }`}
-                                                >
-                                                    {p === 'TODAS' ? 'Todas' : p}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* FILTRO 4: STATUS E SITUAÇÃO NA FILA */}
-                                <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-2xs space-y-2">
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div>
-                                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 block mb-1">
-                                                Status
-                                            </label>
-                                            <select
-                                                value={filters.status}
-                                                onChange={e => setFilters({ ...filters, status: e.target.value as any })}
-                                                className="w-full text-xs font-semibold px-2 py-1.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-sky-500 outline-none text-slate-800"
-                                            >
-                                                <option value="TODOS">Todos os Status</option>
-                                                <option value="Aguardando Vaga">Aguardando Vaga</option>
-                                                <option value="Definir Data">Definir Data (Vaga Livre)</option>
-                                                <option value="Agendado">Agendado</option>
-                                                <option value="Realizado">Realizado</option>
-                                                <option value="Retorno">Retorno</option>
-                                                <option value="Pausada">Pausada</option>
-                                                <option value="Cancelado">Cancelado</option>
-                                            </select>
-                                        </div>
-
-                                        <div>
-                                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 block mb-1">
-                                                Situação na Fila
-                                            </label>
-                                            <select
-                                                value={filters.situacaoFila}
-                                                onChange={e => setFilters({ ...filters, situacaoFila: e.target.value as any })}
-                                                className="w-full text-xs font-semibold px-2 py-1.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-sky-500 outline-none text-slate-800"
-                                            >
-                                                <option value="TODAS">Todas as situações</option>
-                                                <option value="VAGA_LIVRE">Vaga Livre (1º Elegível)</option>
-                                                <option value="AGUARDANDO_FILA">Aguardando na Fila</option>
-                                                <option value="TOP_1">1º Lugar da Fila</option>
-                                                <option value="TOP_3">Top 3 (1º ao 3º)</option>
-                                                <option value="TOP_5">Top 5 (1º ao 5º)</option>
-                                                <option value="TOP_10">Top 10 (1º ao 10º)</option>
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    {/* Busca Paciente por Nome ou CPF */}
-                                    <div>
-                                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 block mb-1">
-                                            Paciente (Nome ou CPF)
-                                        </label>
-                                        <div className="relative">
-                                            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                                            <input
-                                                type="text"
-                                                placeholder="Nome do paciente ou CPF..."
-                                                value={filters.pacienteSearch}
-                                                onChange={e => setFilters({ ...filters, pacienteSearch: e.target.value })}
-                                                className="w-full pl-8 pr-2 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-sky-500 outline-none text-slate-800"
-                                            />
-                                            {filters.pacienteSearch && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setFilters({ ...filters, pacienteSearch: '' })}
-                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                                                >
-                                                    <X className="w-3.5 h-3.5" />
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Barra de Ações de Filtros */}
-                            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/80">
-                                <div className="text-[11px] font-semibold text-slate-500 flex items-center gap-2">
-                                    <span>Filtros aplicados:</span>
-                                    <span className="font-extrabold text-slate-800 line-clamp-1 max-w-xl">
-                                        {appliedFiltersDescription || 'Nenhum filtro específico aplicado.'}
-                                    </span>
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={handleResetFilters}
-                                        className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-extrabold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                                    >
-                                        <RotateCcw className="w-3.5 h-3.5" />
-                                        <span>Limpar Filtros</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={fetchFreshData}
-                                        className="px-4 py-1.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-sm shadow-sky-600/20 active:scale-95"
-                                    >
-                                        <Filter className="w-3.5 h-3.5" />
-                                        <span>Aplicar Filtros</span>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
                 </div>
 
-                {/* 3. RESUMO RÁPIDO DE QUANTITATIVOS E RESULTADOS */}
-                <div className="px-6 py-3 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3 shrink-0">
-                    <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-2">
-                            <BarChart3 className="w-4 h-4 text-sky-400" />
-                            <span className="text-xs font-black uppercase tracking-wider">
-                                {reportType === 'simplificado' ? 'Pré-visualização Simplificada' : 'Pré-visualização Completa com Pacientes'}
-                            </span>
-                        </div>
-                        <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-slate-800 text-sky-300 border border-slate-700">
-                            {groupedProcedures.length} {groupedProcedures.length === 1 ? 'Procedimento' : 'Procedimentos'}
-                        </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-300">Total Encontrado:</span>
-                        <span className="text-sm font-black text-sky-300 bg-sky-950/80 px-3 py-0.5 rounded-lg border border-sky-800 font-mono">
-                            {totalSolicitacoes} {totalSolicitacoes === 1 ? 'Solicitação' : 'Solicitações'}
-                        </span>
-                    </div>
-                </div>
-
-                {/* 4. MODAL BODY (PRÉ-VISUALIZAÇÃO DINÂMICA) */}
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 min-h-0 bg-slate-50/40">
-                    {loading ? (
-                        <div className="flex flex-col items-center justify-center py-20 space-y-3">
-                            <Loader2 className="w-10 h-10 text-sky-600 animate-spin" />
-                            <p className="text-xs font-extrabold uppercase text-slate-500 tracking-wider">
-                                Consultando dados em tempo real no banco de dados...
-                            </p>
-                        </div>
-                    ) : filteredBookings.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-16 px-4 bg-white rounded-3xl border border-dashed border-slate-300 text-center space-y-3 shadow-2xs">
-                            <div className="p-4 bg-slate-100 rounded-full text-slate-400">
-                                <FileQuestion className="w-10 h-10" />
-                            </div>
-                            <h4 className="text-base font-black text-slate-800">
-                                Nenhum registro encontrado para os filtros selecionados
-                            </h4>
-                            <p className="text-xs text-slate-500 max-w-md font-medium">
-                                Experimente alterar o período de busca, limpar filtros de paciente ou selecionar outros procedimentos para visualizar os quantitativos.
-                            </p>
-                            <button
-                                type="button"
-                                onClick={handleResetFilters}
-                                className="mt-2 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
-                            >
-                                <RotateCcw className="w-3.5 h-3.5" />
-                                <span>Restaurar Filtros Padrão</span>
-                            </button>
-                        </div>
-                    ) : (
-                        <>
-                            {/* MODO SIMPLIFICADO: TABELA QUANTITATIVA CONSOLIDADA POR PROCEDIMENTO */}
-                            {reportType === 'simplificado' && (
-                                <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-sm">
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left border-collapse">
-                                            <thead>
-                                                <tr className="bg-slate-100 text-[10px] font-black uppercase text-slate-600 border-b border-slate-200">
-                                                    <th className="px-4 py-3">Código</th>
-                                                    <th className="px-4 py-3">Procedimento</th>
-                                                    <th className="px-4 py-3 text-center w-28">Tipo</th>
-                                                    <th className="px-4 py-3 text-center w-28">Em Fila</th>
-                                                    <th className="px-4 py-3 text-center w-28">Agendados</th>
-                                                    <th className="px-4 py-3 text-center w-28">Realizados</th>
-                                                    <th className="px-4 py-3 text-center w-36 bg-slate-200/60">Total</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
-                                                {groupedProcedures.map(group => (
-                                                    <tr key={group.id} className="hover:bg-slate-50/80 transition-colors">
-                                                        <td className="px-4 py-2.5 font-mono text-[11px] font-bold text-slate-500">
-                                                            {group.code ? (
-                                                                <span className="bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                                                                    {group.code}
-                                                                </span>
-                                                            ) : '-'}
-                                                        </td>
-                                                        <td className="px-4 py-2.5">
-                                                            <div className="font-extrabold text-slate-900 uppercase">
-                                                                {group.name}
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-4 py-2.5 text-center">
-                                                            <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-black uppercase border ${
-                                                                group.type === 'Exame'
-                                                                    ? 'bg-sky-50 text-sky-800 border-sky-200'
-                                                                    : group.type === 'Consulta'
-                                                                    ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
-                                                                    : 'bg-rose-50 text-rose-800 border-rose-200'
-                                                            }`}>
-                                                                {group.type}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-2.5 text-center font-mono font-bold text-amber-700">
-                                                            {group.fila + group.solicitados}
-                                                        </td>
-                                                        <td className="px-4 py-2.5 text-center font-mono font-bold text-indigo-700">
-                                                            {group.agendados}
-                                                        </td>
-                                                        <td className="px-4 py-2.5 text-center font-mono font-bold text-emerald-700">
-                                                            {group.realizados}
-                                                        </td>
-                                                        <td className="px-4 py-2.5 text-center font-mono font-black text-slate-900 text-sm bg-slate-50/50">
-                                                            {group.totalQty}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                            <tfoot className="bg-slate-100 border-t-2 border-slate-300 text-xs font-black text-slate-900">
-                                                <tr>
-                                                    <td colSpan={3} className="px-4 py-3 uppercase text-right tracking-wider">
-                                                        Total Geral Consolidado:
-                                                    </td>
-                                                    <td className="px-4 py-3 text-center font-mono font-black text-amber-800">
-                                                        {groupedProcedures.reduce((acc, g) => acc + g.fila + g.solicitados, 0)}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-center font-mono font-black text-indigo-800">
-                                                        {groupedProcedures.reduce((acc, g) => acc + g.agendados, 0)}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-center font-mono font-black text-emerald-800">
-                                                        {groupedProcedures.reduce((acc, g) => acc + g.realizados, 0)}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-center font-mono font-black text-sky-950 text-base bg-slate-200/70">
-                                                        {totalSolicitacoes}
-                                                    </td>
-                                                </tr>
-                                            </tfoot>
-                                        </table>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* MODO COMPLETO: AGRUPAMENTO POR PROCEDIMENTO COM LISTAGEM DOS PACIENTES VINCULADOS */}
-                            {reportType === 'completo' && (
-                                <div className="space-y-5 animate-in fade-in duration-150">
-                                    {groupedProcedures.map((group, groupIdx) => (
-                                        <div key={group.id} className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-sm">
-                                            {/* Cabeçalho do Procedimento */}
-                                            <div className="p-4 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                                <div className="flex items-center gap-2.5">
-                                                    <span className="w-6 h-6 rounded-lg bg-sky-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">
-                                                        #{groupIdx + 1}
-                                                    </span>
-                                                    <div>
-                                                        <h4 className="text-sm font-extrabold uppercase tracking-tight flex items-center gap-2">
-                                                            <span>{group.name}</span>
-                                                            {group.code && (
-                                                                <span className="text-[10px] font-mono text-sky-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
-                                                                    CÓD: {group.code}
-                                                                </span>
-                                                            )}
-                                                        </h4>
-                                                    </div>
-                                                </div>
-
-                                                <div className="flex items-center gap-2 self-end sm:self-center">
-                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase border ${
-                                                        group.type === 'Exame'
-                                                            ? 'bg-sky-950 text-sky-300 border-sky-800'
-                                                            : group.type === 'Consulta'
-                                                            ? 'bg-indigo-950 text-indigo-300 border-indigo-800'
-                                                            : 'bg-rose-950 text-rose-300 border-rose-800'
-                                                    }`}>
-                                                        {group.type}
-                                                    </span>
-                                                    <span className="text-xs font-black uppercase px-2.5 py-0.5 rounded-full bg-slate-800 text-sky-200 border border-slate-700 font-mono">
-                                                        {group.totalQty} {group.totalQty === 1 ? 'Paciente' : 'Pacientes'}
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            {/* Tabela de Pacientes Vinculados a este Procedimento */}
-                                            <div className="overflow-x-auto">
-                                                <table className="w-full text-left border-collapse">
-                                                    <thead>
-                                                        <tr className="bg-slate-100 text-[10px] font-black uppercase text-slate-600 border-b border-slate-200">
-                                                            <th className="px-3 py-2 text-center w-16">Posição</th>
-                                                            <th className="px-3 py-2 text-center w-28">Solicitado</th>
-                                                            <th className="px-4 py-2">Paciente / CPF / Cartão SUS</th>
-                                                            <th className="px-3 py-2 text-center w-36">Data Agendada</th>
-                                                            <th className="px-3 py-2 text-center w-28">Demanda</th>
-                                                            <th className="px-3 py-2 text-center w-28">Prioridade</th>
-                                                            <th className="px-3 py-2 text-center w-28">Status</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700 uppercase">
-                                                        {group.bookings
-                                                            .sort((a, b) => {
-                                                                const posA = queuePositions[a.id] || 999999;
-                                                                const posB = queuePositions[b.id] || 999999;
-                                                                if (posA !== posB) return posA - posB;
-                                                                const nameA = a.paciente?.name || '';
-                                                                const nameB = b.paciente?.name || '';
-                                                                return nameA.localeCompare(nameB);
-                                                            })
-                                                            .map((booking, idx) => {
-                                                                const isWaitlist = booking.status === 'Fila de espera' || booking.status === 'Aguardando Data' || booking.status === 'Solicitado';
-                                                                const queuePos = queuePositions[booking.id] ?? booking.queue_position;
-
-                                                                return (
-                                                                    <tr key={booking.id} className="hover:bg-slate-50/70 transition-colors">
-                                                                        <td className="px-3 py-2 text-center font-black">
-                                                                            {isWaitlist && queuePos ? (
-                                                                                <span className="inline-block px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-300 text-[10px] font-black">
-                                                                                    {queuePos}º
-                                                                                </span>
-                                                                            ) : (
-                                                                                <span className="text-slate-400 font-mono text-xs">
-                                                                                    #{idx + 1}
-                                                                                </span>
-                                                                            )}
-                                                                        </td>
-                                                                        <td className="px-3 py-2 text-center font-mono text-slate-600 text-[11px]">
-                                                                            {formatDateBr(booking.solicitation_date || (booking.created_at ? booking.created_at.split('T')[0] : null))}
-                                                                        </td>
-                                                                        <td className="px-4 py-2">
-                                                                            <div className="font-extrabold text-slate-900 leading-tight">
-                                                                                {booking.paciente?.name || 'PACIENTE NÃO INFORMADO'}
-                                                                            </div>
-                                                                            <div className="text-[10px] text-slate-500 font-mono flex items-center gap-2 mt-0.5">
-                                                                                <span>CPF: {formatCpf(booking.paciente?.cpf)}</span>
-                                                                                {booking.paciente?.sus_number && (
-                                                                                    <span>• SUS: {booking.paciente.sus_number}</span>
-                                                                                )}
-                                                                            </div>
-                                                                        </td>
-                                                                        <td className="px-3 py-2 text-center font-mono text-[11px]">
-                                                                            {booking.appointment_date ? (
-                                                                                <span className="font-bold text-slate-800">
-                                                                                    {formatDateBr(booking.appointment_date)}
-                                                                                    {booking.appointment_time ? ` às ${booking.appointment_time.substring(0, 5)}` : ''}
-                                                                                </span>
-                                                                            ) : (
-                                                                                <span className="inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase text-amber-800 bg-amber-50 border border-amber-200">
-                                                                                    Aguardando Vaga
-                                                                                </span>
-                                                                            )}
-                                                                        </td>
-                                                                        <td className="px-3 py-2 text-center">
-                                                                            <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase border ${
-                                                                                (booking.tipo_atendimento || 'INTERNO') === 'INTERNO'
-                                                                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                                                                    : 'bg-purple-50 text-purple-800 border-purple-200'
-                                                                            }`}>
-                                                                                {(booking.tipo_atendimento || 'INTERNO') === 'INTERNO' ? 'INTERNO' : 'EXTERNO'}
-                                                                            </span>
-                                                                        </td>
-                                                                        <td className="px-3 py-2 text-center">
-                                                                            <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase border ${
-                                                                                booking.priority === 'Especial'
-                                                                                    ? 'bg-purple-50 text-purple-800 border-purple-200'
-                                                                                    : booking.priority === 'Urgente'
-                                                                                    ? 'bg-rose-50 text-rose-800 border-rose-200'
-                                                                                    : 'bg-slate-50 text-slate-700 border-slate-200'
-                                                                            }`}>
-                                                                                {booking.priority || 'Normal'}
-                                                                            </span>
-                                                                        </td>
-                                                                        <td className="px-3 py-2 text-center">
-                                                                            <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
-                                                                                booking.status === 'Solicitado'
-                                                                                    ? 'bg-sky-50 text-sky-800 border-sky-200'
-                                                                                    : booking.status === 'Agendado'
-                                                                                    ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
-                                                                                    : booking.status === 'Realizado'
-                                                                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                                                                    : booking.status === 'Pausada' || booking.is_paused
-                                                                                    ? 'bg-amber-100 text-amber-900 border-amber-300'
-                                                                                    : booking.status === 'Cancelado' || booking.status === 'Cancelada'
-                                                                                    ? 'bg-rose-50 text-rose-800 border-rose-200'
-                                                                                    : 'bg-amber-50 text-amber-800 border-amber-200'
-                                                                            }`}>
-                                                                                {booking.is_paused ? 'Pausada' : booking.status}
-                                                                            </span>
-                                                                        </td>
-                                                                    </tr>
-                                                                );
-                                                            })}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </>
-                    )}
-                </div>
-
-                {/* 5. FOOTER DE EXPORTAÇÃO */}
-                <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                {/* 4. RODAPÉ INSTITUCIONAL (EXPORTAÇÃO DIRETA) */}
+                <div className="px-6 py-4 bg-white border-t border-slate-100 flex items-center justify-between rounded-b-3xl shrink-0">
                     <button
                         type="button"
                         onClick={onClose}
-                        className="w-full sm:w-auto px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-extrabold rounded-xl text-xs uppercase tracking-wider active:scale-95 transition-all cursor-pointer shadow-2xs"
+                        className="px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-extrabold rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer shadow-2xs"
                     >
                         Fechar
                     </button>
 
-                    <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
+                    <div className="flex items-center gap-3">
                         <button
                             type="button"
-                            disabled={loading || filteredBookings.length === 0}
-                            onClick={() => handleExportPdf('simplificado')}
-                            className={`w-full sm:w-auto px-4 py-2.5 font-extrabold rounded-xl text-xs uppercase tracking-wider active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm ${
-                                loading || filteredBookings.length === 0
-                                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-200'
-                                    : 'bg-white hover:bg-sky-50 text-sky-800 border border-sky-300 hover:border-sky-400'
-                            }`}
+                            onClick={() => handleTriggerExport('simplificado')}
+                            className="px-4 py-2.5 bg-white hover:bg-sky-50 text-sky-700 border border-sky-300 font-extrabold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer shadow-2xs active:scale-95"
                         >
                             <FileDown className="w-4 h-4 text-sky-600" />
-                            <span>Exportar Simplificado ({groupedProcedures.length} Procedimentos)</span>
+                            <span>Exportar Simplificado</span>
                         </button>
 
                         <button
                             type="button"
-                            disabled={loading || filteredBookings.length === 0}
-                            onClick={() => handleExportPdf('completo')}
-                            className={`w-full sm:w-auto px-5 py-2.5 font-extrabold rounded-xl text-xs uppercase tracking-wider active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md ${
-                                loading || filteredBookings.length === 0
-                                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                                    : 'bg-sky-600 hover:bg-sky-700 text-white shadow-sky-600/20'
-                            }`}
+                            onClick={() => handleTriggerExport('completo')}
+                            className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-sky-600/20 active:scale-95"
                         >
                             <FileDown className="w-4 h-4 text-white" />
-                            <span>Exportar Completo ({totalSolicitacoes} Pacientes)</span>
+                            <span>Exportar Completo</span>
                         </button>
                     </div>
                 </div>
 
             </div>
 
-            {/* GERADOR DE PDF REAL */}
+            {/* MODAL DE ALERTA CUSTOMIZADO (SEM ALERT NATIVO) */}
+            {alertMessage && (
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
+                    <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-5 max-w-md w-full space-y-4 animate-in zoom-in-95 duration-150">
+                        <div className="flex items-start gap-3">
+                            <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                                <AlertCircle className="w-5 h-5" />
+                            </div>
+                            <div className="flex-1">
+                                <h4 className="text-sm font-extrabold text-slate-900">Aviso sobre o Relatório</h4>
+                                <p className="text-xs text-slate-600 mt-1 font-medium leading-relaxed">{alertMessage}</p>
+                            </div>
+                        </div>
+                        <div className="flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setAlertMessage(null)}
+                                className="px-4 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold uppercase transition-all"
+                            >
+                                Entendido
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* GERADOR DE PDF REAL PRESERVADO */}
             {isPrintingReport && (
                 <ConsultasReportPdfGenerator
-                    reportType={pdfExportMode}
-                    demandaFilter={filters.demanda}
-                    bookings={filteredBookings}
+                    reportType={pdfMode}
+                    bookings={allBookings.filter(b => {
+                        // Período
+                        if (appliedFilters.periodoTipo === 'solicitacao') {
+                            const solDate = normalizeSolicitationDate(b);
+                            if (appliedFilters.dataInicio && (!solDate || solDate < appliedFilters.dataInicio)) return false;
+                            if (appliedFilters.dataFim && (!solDate || solDate > appliedFilters.dataFim)) return false;
+                        } else {
+                            const appDate = b.appointment_date ? b.appointment_date.split('T')[0] : '';
+                            if (appliedFilters.dataInicio || appliedFilters.dataFim) {
+                                if (!appDate) return false;
+                                if (appliedFilters.dataInicio && appDate < appliedFilters.dataInicio) return false;
+                                if (appliedFilters.dataFim && appDate > appliedFilters.dataFim) return false;
+                            }
+                        }
+
+                        // Procedimento
+                        if (appliedFilters.selectedProcIds.length > 0) {
+                            const pId = b.procedimento_id || b.procedimento?.id;
+                            if (!pId || !appliedFilters.selectedProcIds.includes(pId)) return false;
+                        }
+
+                        // Status
+                        if (appliedFilters.selectedStatuses.length > 0) {
+                            const matches = appliedFilters.selectedStatuses.some(st => {
+                                if (st === 'Aguardando Vaga') {
+                                    return b.status === 'Fila de espera' || b.status === 'Aguardando Data' || b.status === 'Solicitado';
+                                }
+                                if (st === 'Definir Data') {
+                                    const isWait = (b.status === 'Fila de espera' || b.status === 'Aguardando Data' || b.status === 'Solicitado') && !b.is_paused;
+                                    const isEligible = eligibilityMap.get(b.id)?.isEligible;
+                                    return isWait && isEligible;
+                                }
+                                if (st === 'Pausada') {
+                                    return b.status === 'Pausada' || b.is_paused;
+                                }
+                                if (st === 'Cancelado') {
+                                    return b.status === 'Cancelado' || b.status === 'Cancelada' || !!b.canceled_at;
+                                }
+                                return b.status === st;
+                            });
+                            if (!matches) return false;
+                        }
+                        return true;
+                    })}
                     procedures={procedures}
                     queuePositions={queuePositions}
                     state={appState}
                     currentUser={currentUser}
-                    appliedFiltersDescription={appliedFiltersDescription}
+                    appliedFiltersDescription={appliedFiltersText}
                     onClose={() => setIsPrintingReport(false)}
                 />
             )}
@@ -1228,4 +1127,3 @@ export const ConsultasReportModal: React.FC<ConsultasReportModalProps> = ({
         document.body
     );
 };
-
