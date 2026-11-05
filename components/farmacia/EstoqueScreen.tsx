@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, FarmaciaMedicamento, FarmaciaMovimentacao } from '../../types';
-import { Package, Plus, Edit, Trash2, Calendar, AlertTriangle, ChevronRight, CheckCircle2, TrendingUp, Info, Loader2, Sparkles, SlidersHorizontal, X, XCircle, Search, Pill, ArrowLeft, ArrowUpRight, ArrowDownRight, Scale, ShieldCheck, ShoppingBag, Gift, Building2, HeartHandshake } from 'lucide-react';
+import { Package, Plus, Edit, Trash2, Calendar, AlertTriangle, ChevronRight, CheckCircle2, TrendingUp, Info, Loader2, Sparkles, SlidersHorizontal, X, XCircle, Search, Pill, ArrowLeft, ArrowUpRight, ArrowDownRight, Scale, ShieldCheck, ShieldAlert, ShoppingBag, Gift, Building2, HeartHandshake } from 'lucide-react';
 import * as db from '../../services/farmaciaService';
 import { isDesistenciaMovimentacao } from '../../utils/farmaciaDesistenciaUtils';
 import { useFarmaciaAlert } from './FarmaciaAlertContext';

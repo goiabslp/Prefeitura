@@ -779,6 +779,6 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true,
+    sourcemap: false, // Desabilitado para proteção do código-fonte em produção
   }
 });

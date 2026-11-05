@@ -372,7 +372,7 @@ export const ConsultasReportModal: React.FC<ConsultasReportModalProps> = ({
                         return b.status === 'Pausada' || b.is_paused;
                     }
                     if (st === 'Cancelado') {
-                        return b.status === 'Cancelado' || b.status === 'Cancelada' || !!b.canceled_at;
+                        return b.status === 'Cancelado' || (b.status as string) === 'Cancelada' || !!b.canceled_at;
                     }
                     return b.status === st;
                 });
@@ -1107,7 +1107,7 @@ export const ConsultasReportModal: React.FC<ConsultasReportModalProps> = ({
                                     return b.status === 'Pausada' || b.is_paused;
                                 }
                                 if (st === 'Cancelado') {
-                                    return b.status === 'Cancelado' || b.status === 'Cancelada' || !!b.canceled_at;
+                                    return b.status === 'Cancelado' || (b.status as string) === 'Cancelada' || !!b.canceled_at;
                                 }
                                 return b.status === st;
                             });

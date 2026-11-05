@@ -12,6 +12,54 @@ export default async function handler(req: Request) {
     });
   }
 
+
+  // 1. Verificação Estrita de Segurança e Autenticação de Sessão Municipal
+  const authHeader = req.headers.get('Authorization') || req.headers.get('authorization');
+  if (!authHeader || !authHeader.toLowerCase().startsWith('bearer ')) {
+    return new Response(JSON.stringify({ 
+      error: 'Acesso não autorizado', 
+      details: 'Token de autenticação de sessão municipal obrigatório para utilizar este serviço.' 
+    }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+
+  if (supabaseUrl && supabaseAnonKey) {
+    try {
+      const verifyRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+        method: 'GET',
+        headers: {
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!verifyRes.ok) {
+        return new Response(JSON.stringify({ 
+          error: 'Sessão inválida ou expirada', 
+          details: 'Por motivos de segurança e conformidade com a LGPD, autentique-se novamente.' 
+        }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    } catch (authErr) {
+      console.error('[Segurança] Falha ao verificar autenticação Supabase:', authErr);
+      return new Response(JSON.stringify({ 
+        error: 'Falha na validação de segurança', 
+        details: 'Não foi possível validar o token com o servidor central de segurança.' 
+      }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }
+
   try {
     const { tipo, dados } = await req.json();
 

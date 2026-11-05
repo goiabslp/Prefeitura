@@ -1,3 +1,4 @@
+import { getAuthHeaders } from '../../services/geminiService';
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   Wallet, Banknote, CheckCircle2, FileText, PenTool, ClipboardList,
@@ -258,7 +259,7 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
           try {
             const res = await fetch('/api/gemini', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: await getAuthHeaders(),
               body: JSON.stringify(payloadData)
             });
             

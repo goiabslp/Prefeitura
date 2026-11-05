@@ -1,3 +1,20 @@
+import { supabase } from './supabaseClient';
+
+export async function getAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  };
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+  } catch (err) {
+    console.warn('[geminiService] Falha ao obter access_token:', err);
+  }
+  return headers;
+}
+
 export const generateDocumentContent = async (
   topic: string, 
   tone: string, 
@@ -15,7 +32,7 @@ export const generateDocumentContent = async (
 
     const res = await fetch('/api/gemini', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await getAuthHeaders(),
       body: JSON.stringify(payload)
     });
     
@@ -50,7 +67,7 @@ export const polishMotivoWithAI = async (rawSpeechText: string): Promise<string>
   try {
     const res = await fetch('/api/gemini', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await getAuthHeaders(),
       body: JSON.stringify({
         tipo: 'lapidar_motivo',
         dados: { promptText: rawSpeechText.trim() }
@@ -149,7 +166,7 @@ export const generateMateriaJornalWithAI = async (dados: {
   try {
     const res = await fetch('/api/gemini', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await getAuthHeaders(),
       body: JSON.stringify({
         tipo: 'materia_jornal',
         dados

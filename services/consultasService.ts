@@ -3889,7 +3889,7 @@ export const solicitarCancelamentoAgendamento = async (params: {
             paciente_nome: targetBooking.paciente?.name || 'Paciente não informado',
             paciente_cpf: formattedCpf,
             procedimento_nome: targetBooking.procedimento?.name || 'Procedimento não informado',
-            procedimento_categoria: targetBooking.procedimento?.type || targetBooking.procedimento?.category || 'Geral',
+            procedimento_categoria: targetBooking.procedimento?.type || (targetBooking.procedimento as any)?.category || 'Geral',
             protocolo: (targetBooking as any).protocolo || agendamentoId.substring(0, 8).toUpperCase(),
             prioridade: targetBooking.priority || 'Normal',
             situacao_agendamento: targetBooking.status || 'Solicitado',

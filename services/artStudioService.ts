@@ -1,3 +1,4 @@
+import { getAuthHeaders } from './geminiService';
 import { 
   ArtLogoItem, 
   ArtReferenceItem, 
@@ -1146,7 +1147,7 @@ export const artStudioService = {
 
       const res = await fetch('/api/gemini', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify(payload)
       });
 
@@ -1363,7 +1364,7 @@ export const artStudioService = {
     try {
       const res = await fetch('/api/gemini', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           tipo: 'art_chat_editor',
           dados: {
@@ -1438,7 +1439,7 @@ export const artStudioService = {
     try {
       const res = await fetch('/api/gemini', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           tipo: 'art_autofill_fields',
           dados: { description: cleanDesc }

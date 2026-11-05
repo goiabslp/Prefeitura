@@ -1,3 +1,4 @@
+import { getAuthHeaders } from './geminiService';
 import { User } from '../types';
 import { executeAITool, SYSTEM_AI_TOOLS, ToolExecutionResult } from './systemAITools';
 import { isSuperAdminUser } from './permissionService';
@@ -184,7 +185,7 @@ export async function sendAIMessage({
 
     const res = await fetch('/api/gemini', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await getAuthHeaders(),
       body: JSON.stringify({
         tipo: 'assistente_operacional',
         dados: {

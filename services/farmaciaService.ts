@@ -120,19 +120,11 @@ export const getMedicamentos = async (forceRefresh = false): Promise<FarmaciaMed
                 }
 
                 const fallbackCols = hasAltoCustoColumnInDb === false ? MEDICAMENTO_STRICT_COLUMNS : MEDICAMENTO_BASE_COLUMNS;
-                queryRes = await supabase
-                    .from('farmacia_medicamentos')
-                    .select(fallbackCols)
-                    .order('nome', { ascending: true })
-                    .range(from, from + step - 1);
+                queryRes = (await supabase.from('farmacia_medicamentos').select(fallbackCols).order('nome', { ascending: true }).range(from, from + step - 1)) as any;
 
                 if (queryRes.error && isSchemaColumnError(queryRes.error)) {
                     hasAltoCustoColumnInDb = false;
-                    queryRes = await supabase
-                        .from('farmacia_medicamentos')
-                        .select(MEDICAMENTO_STRICT_COLUMNS)
-                        .order('nome', { ascending: true })
-                        .range(from, from + step - 1);
+                    queryRes = (await supabase.from('farmacia_medicamentos').select(MEDICAMENTO_STRICT_COLUMNS).order('nome', { ascending: true }).range(from, from + step - 1)) as any;
                 }
             } else if (!queryRes.error) {
                 if (hasOrigemColumnInDb === null) hasOrigemColumnInDb = true;
