@@ -23,6 +23,7 @@ import {
   registrarNaoCompareceu,
   cancelarSenha,
   solicitarAvaliacaoImediataUPA,
+  resolverClassificacaoAutomaticaPorIdade,
   getDataOperacionalHoje,
   inicializarSeedSeVazio,
   zerarTodosDadosAutoSenha
@@ -31,7 +32,7 @@ import { PacienteFormModal } from '../consultas/pacientes/PacienteFormModal';
 import { AutoSenhaEmissaoCard, AutoSenhaClassificacaoAtendimento } from './AutoSenhaEmissaoCard';
 import { AutoSenhaChamadaCard } from './AutoSenhaChamadaCard';
 import { HistoricoFilaModal } from './HistoricoFilaModal';
-import { calculateAgeYears, formatCpf } from '../../utils/cpfUtils';
+import { formatCpf } from '../../utils/cpfUtils';
 import { supabase } from '../../services/supabaseClient';
 
 interface AutoSenhaControleScreenProps {
@@ -63,6 +64,7 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
   // Classificação e Ação Principal
   const [novoNome, setNovoNome] = useState('');
   const [classificacaoSelecionada, setClassificacaoSelecionada] = useState<AutoSenhaClassificacaoAtendimento>('NORMAL');
+  const [classificacaoAjustadaManualmente, setClassificacaoAjustadaManualmente] = useState(false);
   const [isGerando, setIsGerando] = useState(false);
   const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
@@ -133,17 +135,26 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
   }, [unidadeId]);
 
   const handleSelecionarPaciente = (p: ConsultaPaciente, meta?: { isNew: boolean }) => {
+    const trocouDePaciente = Boolean(pacienteSelecionado && pacienteSelecionado.id !== p.id);
+    const manterEscolhaManualMesmaOperacao =
+      classificacaoAjustadaManualmente &&
+      (!pacienteSelecionado || pacienteSelecionado.id === p.id);
+
     setPacienteSelecionado(p);
     setPacienteLocalizadoMeta(meta || { isNew: false });
     setNovoNome(p.name);
-    if (classificacaoSelecionada !== 'AVALIACAO_IMEDIATA') {
-      const idade = calculateAgeYears(p.birth_date);
-      if (idade !== null && idade >= 80) {
-        setClassificacaoSelecionada('ESPECIAL');
-      } else if (idade !== null && idade >= 60) {
-        setClassificacaoSelecionada('PRIORITARIO');
-      }
+
+    // Recalcula automaticamente ao localizar novo/outro paciente, preservando escolha manual apenas na mesma operação
+    if (trocouDePaciente || !manterEscolhaManualMesmaOperacao) {
+      const { prioridade } = resolverClassificacaoAutomaticaPorIdade(p.birth_date);
+      setClassificacaoSelecionada(prioridade);
+      setClassificacaoAjustadaManualmente(false);
     }
+  };
+
+  const handleAlterarClassificacaoManual = (novaClassificacao: AutoSenhaClassificacaoAtendimento) => {
+    setClassificacaoSelecionada(novaClassificacao);
+    setClassificacaoAjustadaManualmente(true);
   };
 
   // Ação Principal Adaptável: Emissão de Senha OU Solicitação de Avaliação Imediata
@@ -162,6 +173,11 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
       return;
     }
 
+    // Validação da classificação por idade atual caso não tenha sido ajustada manualmente
+    const prioridadeValidada = classificacaoAjustadaManualmente
+      ? classificacaoSelecionada
+      : resolverClassificacaoAutomaticaPorIdade(pacienteSelecionado.birth_date).prioridade;
+
     setIsGerando(true);
     try {
       const senhaCriada = await gerarSenha({
@@ -169,9 +185,11 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
         paciente_id: pacienteSelecionado.id,
         paciente_cpf: pacienteSelecionado.cpf,
         paciente_cartao_sus: pacienteSelecionado.sus_number,
+        paciente_birth_date: pacienteSelecionado.birth_date,
+        prioridade_ajuste_manual: classificacaoAjustadaManualmente,
         cidadao_nome: pacienteSelecionado.name,
-        prioridade_tipo: classificacaoSelecionada,
-        prioridade_categoria: classificacaoSelecionada === 'NORMAL' ? 'Geral' : undefined,
+        prioridade_tipo: prioridadeValidada,
+        prioridade_categoria: prioridadeValidada === 'NORMAL' ? 'Geral' : undefined,
         guiche: guicheAtual,
         atendente_id: currentUser?.id,
         atendente_nome: currentUser?.name || 'Recepção'
@@ -181,6 +199,7 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
       setPacienteLocalizadoMeta(null);
       setNovoNome('');
       setClassificacaoSelecionada('NORMAL');
+      setClassificacaoAjustadaManualmente(false);
       mostrarSucesso(`Senha ${senhaCriada.numero} gerada com sucesso para ${senhaCriada.cidadao_nome}!`);
       await carregarDados();
     } catch (err: any) {
@@ -293,6 +312,11 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
 
       setUpaUrgenciaNome('');
       setUpaUrgenciaQueixa('');
+      setPacienteSelecionado(null);
+      setPacienteLocalizadoMeta(null);
+      setNovoNome('');
+      setClassificacaoSelecionada('NORMAL');
+      setClassificacaoAjustadaManualmente(false);
       setModalUpaUrgenciaAberto(false);
       mostrarSucesso('Solicitação de Avaliação Imediata registrada e enviada à equipe assistencial! Encaminhe o cidadão presencialmente sem depender da fila.', 6000);
     } catch (err: any) {
@@ -437,14 +461,17 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
                 pacienteLocalizadoMeta={pacienteLocalizadoMeta}
                 cidadaoNome={novoNome}
                 classificacao={classificacaoSelecionada}
+                classificacaoAjustadaManualmente={classificacaoAjustadaManualmente}
                 isSubmitting={isGerando}
                 onAbrirLocalizarCpf={() => setModalNovoPacienteAberto(true)}
                 onLimparPaciente={() => {
                   setPacienteSelecionado(null);
                   setPacienteLocalizadoMeta(null);
                   setNovoNome('');
+                  setClassificacaoSelecionada('NORMAL');
+                  setClassificacaoAjustadaManualmente(false);
                 }}
-                onClassificacaoChange={setClassificacaoSelecionada}
+                onClassificacaoChange={handleAlterarClassificacaoManual}
                 onSubmitAcaoPrincipal={handleAcaoPrincipal}
               />
             </section>

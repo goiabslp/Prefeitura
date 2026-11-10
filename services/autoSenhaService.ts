@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { calculateAgeYears } from '../utils/cpfUtils';
 import {
   getActivePermissionUser,
   getActiveGlobalModuleSettings,
@@ -404,11 +405,37 @@ export async function salvarConfiguracao(
 // ----------------------------------------------------------------------
 // GERAÇÃO E CADASTRO DE SENHAS
 // ----------------------------------------------------------------------
+export interface ClassificacaoPorIdadeResult {
+  idade: number | null;
+  prioridade: AutoSenhaPrioridadeTipo;
+}
+
+/**
+ * Calcula a idade atual pela data de nascimento e determina automaticamente
+ * a classificação de senha aplicável (<60 Normal, 60-79 Prioritário, 80+ Especial).
+ * Nunca retorna AVALIACAO_IMEDIATA automaticamente.
+ */
+export function resolverClassificacaoAutomaticaPorIdade(
+  birthDate?: string | null,
+  referenceDate?: Date
+): ClassificacaoPorIdadeResult {
+  const idade = calculateAgeYears(birthDate, referenceDate);
+  if (idade !== null && idade >= 80) {
+    return { idade, prioridade: 'ESPECIAL' };
+  }
+  if (idade !== null && idade >= 60) {
+    return { idade, prioridade: 'PRIORITARIO' };
+  }
+  return { idade, prioridade: 'NORMAL' };
+}
+
 export interface GerarSenhaPayload {
   unidade_id: AutoSenhaUnidadeId;
   paciente_id?: string;
   paciente_cpf?: string;
   paciente_cartao_sus?: string;
+  paciente_birth_date?: string;
+  prioridade_ajuste_manual?: boolean;
   cidadao_nome: string;
   prioridade_tipo: AutoSenhaPrioridadeTipo;
   prioridade_categoria?: AutoSenhaPrioridadeCategoria | string;
@@ -417,8 +444,28 @@ export interface GerarSenhaPayload {
   atendente_nome?: string;
 }
 
+const PRIORIDADES_VALIDAS_SENHA: ReadonlySet<AutoSenhaPrioridadeTipo> = new Set([
+  'NORMAL',
+  'PRIORITARIO',
+  'ESPECIAL'
+]);
+
 export async function gerarSenha(payload: GerarSenhaPayload): Promise<AutoSenhaItem> {
   assertCanAccessAutoSenhaUnidade(payload.unidade_id, 'operacional');
+
+  if (!payload.cidadao_nome || !payload.cidadao_nome.trim()) {
+    throw new Error('Informe o paciente antes de emitir a senha.');
+  }
+  if (!PRIORIDADES_VALIDAS_SENHA.has(payload.prioridade_tipo)) {
+    throw new Error('Classificação inválida para emissão de senha na fila convencional.');
+  }
+
+  // Recalcula/valida na hora da emissão com base na data de nascimento atual, preservando ajuste manual justificado
+  let prioridadeFinal: AutoSenhaPrioridadeTipo = payload.prioridade_tipo;
+  if (!payload.prioridade_ajuste_manual && payload.paciente_birth_date) {
+    prioridadeFinal = resolverClassificacaoAutomaticaPorIdade(payload.paciente_birth_date).prioridade;
+  }
+
   const dataHoje = getDataOperacionalHoje();
   const agora = new Date().toISOString();
 
@@ -426,12 +473,12 @@ export async function gerarSenha(payload: GerarSenhaPayload): Promise<AutoSenhaI
   const todasSenhas = await getSenhas(payload.unidade_id, dataHoje);
 
   // Filtrar pela prioridade no dia daquela unidade
-  const senhasMesmoTipo = todasSenhas.filter(s => s.prioridade_tipo === payload.prioridade_tipo);
+  const senhasMesmoTipo = todasSenhas.filter(s => s.prioridade_tipo === prioridadeFinal);
   const proximoSequencial = senhasMesmoTipo.length + 1;
 
   let prefixo = 'N';
-  if (payload.prioridade_tipo === 'PRIORITARIO') prefixo = 'P';
-  else if (payload.prioridade_tipo === 'ESPECIAL') prefixo = 'E';
+  if (prioridadeFinal === 'PRIORITARIO') prefixo = 'P';
+  else if (prioridadeFinal === 'ESPECIAL') prefixo = 'E';
 
   const numeroFormatado = `${prefixo}${String(proximoSequencial).padStart(3, '0')}`;
 
@@ -445,8 +492,8 @@ export async function gerarSenha(payload: GerarSenhaPayload): Promise<AutoSenhaI
     paciente_cpf: payload.paciente_cpf,
     paciente_cartao_sus: payload.paciente_cartao_sus,
     cidadao_nome: payload.cidadao_nome.trim(),
-    prioridade_tipo: payload.prioridade_tipo,
-    prioridade_categoria: payload.prioridade_categoria || (payload.prioridade_tipo === 'NORMAL' ? 'Geral' : undefined),
+    prioridade_tipo: prioridadeFinal,
+    prioridade_categoria: payload.prioridade_categoria || (prioridadeFinal === 'NORMAL' ? 'Geral' : undefined),
     status: 'AGUARDANDO',
     guiche: payload.guiche || 'Recepção',
     atendente_id: payload.atendente_id,

@@ -67,22 +67,81 @@ export const formatBirthDateBr = (dateStr?: string | null): string => {
 };
 
 /**
- * Calcula idade em anos completos a partir da data de nascimento YYYY-MM-DD.
+ * Retorna ano, mês (0-11) e dia atuais no fuso horário oficial de Brasília (ou da data de referência).
  */
-export const calculateAgeYears = (dateStr?: string | null): number | null => {
+const getReferenceYmd = (referenceDate?: Date): { year: number; monthIndex: number; day: number } => {
+  const ref = referenceDate || new Date();
+  if (!referenceDate) {
+    try {
+      const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+      const parts = formatter.formatToParts(ref);
+      const y = Number(parts.find(p => p.type === 'year')?.value);
+      const m = Number(parts.find(p => p.type === 'month')?.value);
+      const d = Number(parts.find(p => p.type === 'day')?.value);
+      if (y && m && d) {
+        return { year: y, monthIndex: m - 1, day: d };
+      }
+    } catch {
+      // Fallback para data local se Intl com timeZone não estiver disponível
+    }
+  }
+  return {
+    year: ref.getFullYear(),
+    monthIndex: ref.getMonth(),
+    day: ref.getDate()
+  };
+};
+
+/**
+ * Calcula idade completa em anos na data atual (ou de referência), considerando dia, mês e ano
+ * a partir de data YYYY-MM-DD (com ou sem horário ISO) ou DD/MM/AAAA, sem mutar o dado original.
+ */
+export const calculateAgeYears = (dateStr?: string | null, referenceDate?: Date): number | null => {
   if (!dateStr) return null;
   const cleanPart = String(dateStr).split('T')[0].trim();
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(cleanPart);
-  if (!match) return null;
 
-  const birthYear = Number(match[1]);
-  const birthMonth = Number(match[2]) - 1;
-  const birthDay = Number(match[3]);
-  const today = new Date();
+  let birthYear: number;
+  let birthMonth: number;
+  let birthDay: number;
 
-  let age = today.getFullYear() - birthYear;
-  const mDiff = today.getMonth() - birthMonth;
-  if (mDiff < 0 || (mDiff === 0 && today.getDate() < birthDay)) {
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(cleanPart);
+  const brMatch = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(cleanPart);
+
+  if (isoMatch) {
+    birthYear = Number(isoMatch[1]);
+    birthMonth = Number(isoMatch[2]) - 1;
+    birthDay = Number(isoMatch[3]);
+  } else if (brMatch) {
+    birthDay = Number(brMatch[1]);
+    birthMonth = Number(brMatch[2]) - 1;
+    birthYear = Number(brMatch[3]);
+  } else {
+    return null;
+  }
+
+  if (birthMonth < 0 || birthMonth > 11 || birthDay < 1 || birthDay > 31 || birthYear < 1850) {
+    return null;
+  }
+
+  // Valida data existente no calendário (ex.: rejeita 31/02)
+  const probe = new Date(Date.UTC(birthYear, birthMonth, birthDay));
+  if (
+    probe.getUTCFullYear() !== birthYear ||
+    probe.getUTCMonth() !== birthMonth ||
+    probe.getUTCDate() !== birthDay
+  ) {
+    return null;
+  }
+
+  const today = getReferenceYmd(referenceDate);
+  let age = today.year - birthYear;
+  const mDiff = today.monthIndex - birthMonth;
+  if (mDiff < 0 || (mDiff === 0 && today.day < birthDay)) {
     age--;
   }
   return age >= 0 ? age : null;

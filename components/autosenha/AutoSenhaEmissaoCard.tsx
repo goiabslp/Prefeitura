@@ -11,12 +11,57 @@ import { formatCpf, formatBirthDateBr, calculateAgeYears } from '../../utils/cpf
 
 export type AutoSenhaClassificacaoAtendimento = AutoSenhaPrioridadeTipo | 'AVALIACAO_IMEDIATA';
 
+interface ClassificacaoConfigItem {
+  id: AutoSenhaClassificacaoAtendimento;
+  titulo: string;
+  subtitulo: string;
+  selectedClasses: string;
+  subtitleSelectedClass: string;
+  showAlertIcon?: boolean;
+}
+
+const UNSELECTED_CARD_CLASSES =
+  'bg-slate-50/70 hover:bg-slate-100/80 border-slate-200 hover:border-slate-300 text-slate-700 shadow-none';
+
+const CLASSIFICACOES_ATENDIMENTO: ClassificacaoConfigItem[] = [
+  {
+    id: 'NORMAL',
+    titulo: 'Normal',
+    subtitulo: 'Fila geral',
+    selectedClasses: 'bg-sky-600 border-sky-700 text-white shadow-md shadow-sky-600/20',
+    subtitleSelectedClass: 'text-sky-100'
+  },
+  {
+    id: 'PRIORITARIO',
+    titulo: 'Prioritário',
+    subtitulo: 'Idoso 60-79, PCD',
+    selectedClasses: 'bg-amber-500 border-amber-600 text-white shadow-md shadow-amber-500/20',
+    subtitleSelectedClass: 'text-amber-50'
+  },
+  {
+    id: 'ESPECIAL',
+    titulo: 'Especial',
+    subtitulo: 'Idoso 80+',
+    selectedClasses: 'bg-purple-600 border-purple-700 text-white shadow-md shadow-purple-600/20',
+    subtitleSelectedClass: 'text-purple-100'
+  },
+  {
+    id: 'AVALIACAO_IMEDIATA',
+    titulo: 'AVALIAÇÃO IMEDIATA',
+    subtitulo: 'Situação que exige avaliação imediata.',
+    selectedClasses: 'bg-red-600 border-red-700 text-white shadow-md shadow-red-600/25',
+    subtitleSelectedClass: 'text-red-100',
+    showAlertIcon: true
+  }
+];
+
 export interface AutoSenhaEmissaoCardProps {
   unidadeTipo: 'PSF' | 'UPA';
   pacienteSelecionado: ConsultaPaciente | null;
   pacienteLocalizadoMeta?: { isNew: boolean } | null;
   cidadaoNome: string;
   classificacao: AutoSenhaClassificacaoAtendimento;
+  classificacaoAjustadaManualmente?: boolean;
   isSubmitting: boolean;
   onAbrirLocalizarCpf: () => void;
   onLimparPaciente: () => void;
@@ -30,6 +75,7 @@ export const AutoSenhaEmissaoCard: React.FC<AutoSenhaEmissaoCardProps> = ({
   pacienteLocalizadoMeta,
   cidadaoNome,
   classificacao,
+  classificacaoAjustadaManualmente = false,
   isSubmitting,
   onAbrirLocalizarCpf,
   onLimparPaciente,
@@ -178,86 +224,69 @@ export const AutoSenhaEmissaoCard: React.FC<AutoSenhaEmissaoCardProps> = ({
             <span>{pacienteSelecionado ? 'Localizar Outro Paciente' : 'Localizar Paciente'}</span>
           </button>
 
-          {/* 4 Classificações de Atendimento em Linha Única no Desktop */}
+          {/* 4 Classificações de Atendimento com Seleção Exclusiva */}
           <div>
-            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">
-              Classificação de Atendimento / Prioridade Legal
-            </label>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400">
+                Classificação de Atendimento / Prioridade Legal
+              </label>
+              {pacienteSelecionado && !isAvaliacaoImediata && (
+                <span className="text-[10px] font-bold text-slate-500">
+                  {classificacaoAjustadaManualmente
+                    ? 'Seleção manual preservada nesta operação'
+                    : idadePaciente !== null
+                      ? `Selecionada automaticamente (${idadePaciente} anos)`
+                      : 'Classificação padrão (nascimento não informado)'}
+                </span>
+              )}
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-              {/* NORMAL — Azul */}
-              <button
-                type="button"
-                onClick={() => onClassificacaoChange('NORMAL')}
-                aria-pressed={classificacao === 'NORMAL'}
-                className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
-                  classificacao === 'NORMAL'
-                    ? 'bg-sky-600 border-sky-600 text-white shadow-md shadow-sky-600/25'
-                    : 'bg-sky-50/50 border-sky-200 text-slate-700 hover:border-sky-400 hover:bg-sky-50'
-                }`}
-              >
-                <div className="text-xs font-black uppercase tracking-wide">Normal</div>
-                <div className={`text-[10px] mt-1 leading-snug ${classificacao === 'NORMAL' ? 'text-sky-100' : 'text-slate-500'}`}>
-                  Fila geral
-                </div>
-              </button>
-
-              {/* PRIORITÁRIO — Amarelo */}
-              <button
-                type="button"
-                onClick={() => onClassificacaoChange('PRIORITARIO')}
-                aria-pressed={classificacao === 'PRIORITARIO'}
-                className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
-                  classificacao === 'PRIORITARIO'
-                    ? 'bg-amber-500 border-amber-500 text-white shadow-md shadow-amber-500/25'
-                    : 'bg-amber-50/50 border-amber-200 text-slate-700 hover:border-amber-400 hover:bg-amber-50'
-                }`}
-              >
-                <div className="text-xs font-black uppercase tracking-wide">Prioritário</div>
-                <div className={`text-[10px] mt-1 leading-snug ${classificacao === 'PRIORITARIO' ? 'text-amber-100' : 'text-slate-500'}`}>
-                  Idoso 60-79, PCD
-                </div>
-              </button>
-
-              {/* ESPECIAL — Roxo */}
-              <button
-                type="button"
-                onClick={() => onClassificacaoChange('ESPECIAL')}
-                aria-pressed={classificacao === 'ESPECIAL'}
-                className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
-                  classificacao === 'ESPECIAL'
-                    ? 'bg-purple-600 border-purple-600 text-white shadow-md shadow-purple-600/25'
-                    : 'bg-purple-50/50 border-purple-200 text-slate-700 hover:border-purple-400 hover:bg-purple-50'
-                }`}
-              >
-                <div className="text-xs font-black uppercase tracking-wide">Especial</div>
-                <div className={`text-[10px] mt-1 leading-snug ${classificacao === 'ESPECIAL' ? 'text-purple-100' : 'text-slate-500'}`}>
-                  Idoso 80+
-                </div>
-              </button>
-
-              {/* AVALIAÇÃO IMEDIATA — Vermelho */}
-              <button
-                type="button"
-                onClick={() => onClassificacaoChange('AVALIACAO_IMEDIATA')}
-                aria-pressed={isAvaliacaoImediata}
-                className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
-                  isAvaliacaoImediata
-                    ? 'bg-red-600 border-red-600 text-white shadow-md shadow-red-600/30'
-                    : 'bg-red-50/60 border-red-200 text-red-900 hover:border-red-400 hover:bg-red-50'
-                }`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <AlertTriangle
-                    className={`w-3.5 h-3.5 shrink-0 ${isAvaliacaoImediata ? 'text-white' : 'text-red-600'}`}
-                  />
-                  <span className="text-[11px] font-black uppercase tracking-wide leading-tight">
-                    AVALIAÇÃO IMEDIATA
-                  </span>
-                </div>
-                <div className={`text-[10px] mt-1 leading-snug ${isAvaliacaoImediata ? 'text-red-100' : 'text-red-700/80'}`}>
-                  Situação que exige avaliação imediata.
-                </div>
-              </button>
+              {CLASSIFICACOES_ATENDIMENTO.map((item) => {
+                const isSelected = classificacao === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => onClassificacaoChange(item.id)}
+                    aria-pressed={isSelected}
+                    className={`p-3 rounded-2xl border-2 text-left transition-all duration-200 cursor-pointer flex flex-col justify-between ${
+                      isSelected ? item.selectedClasses : UNSELECTED_CARD_CLASSES
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-1.5 w-full">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {item.showAlertIcon && (
+                          <AlertTriangle
+                            className={`w-3.5 h-3.5 shrink-0 transition-colors duration-200 ${
+                              isSelected ? 'text-white' : 'text-slate-500'
+                            }`}
+                          />
+                        )}
+                        <span
+                          className={`font-black uppercase tracking-wide leading-tight ${
+                            item.id === 'AVALIACAO_IMEDIATA' ? 'text-[11px]' : 'text-xs'
+                          }`}
+                        >
+                          {item.titulo}
+                        </span>
+                      </div>
+                      {isSelected && (
+                        <CheckCircle2
+                          className="w-4 h-4 text-white shrink-0"
+                          aria-hidden="true"
+                        />
+                      )}
+                    </div>
+                    <div
+                      className={`text-[10px] mt-1.5 leading-snug transition-colors duration-200 ${
+                        isSelected ? item.subtitleSelectedClass : 'text-slate-500'
+                      }`}
+                    >
+                      {item.subtitulo}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
