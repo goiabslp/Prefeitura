@@ -1,5 +1,11 @@
 import { supabase } from './supabaseClient';
 import {
+  getActivePermissionUser,
+  getActiveGlobalModuleSettings,
+  userCanAccessSubmodule,
+  isSuperAdminUser
+} from './permissionService';
+import {
   AutoSenhaUnidadeId,
   AutoSenhaPrioridadeTipo,
   AutoSenhaPrioridadeCategoria,
@@ -295,6 +301,50 @@ export function notificarRealtimeMudanca(unidadeId: AutoSenhaUnidadeId, evento: 
 }
 
 // ----------------------------------------------------------------------
+// CONTROLE DE ACESSO E ISOLAMENTO POR UNIDADE (AUTOSENHA)
+// ----------------------------------------------------------------------
+const UNIDADE_PERMISSAO_KEYS: Record<AutoSenhaUnidadeId, { controle: string; tv: string }> = {
+  psf1: { controle: 'sub_autosenha_psf1_controle', tv: 'sub_autosenha_psf1_senhatv' },
+  psf2: { controle: 'sub_autosenha_psf2_controle', tv: 'sub_autosenha_psf2_senhatv' },
+  upa: { controle: 'sub_autosenha_upa_controle', tv: 'sub_autosenha_upa_senhatv' }
+};
+
+export function assertCanAccessAutoSenhaUnidade(
+  unidadeId: AutoSenhaUnidadeId,
+  mode: 'operacional' | 'historico' | 'tv' = 'operacional'
+): void {
+  const activeUser = getActivePermissionUser();
+  if (!activeUser) return; // Contexto isolado/kiosk TV sem sessão ativa ligada
+
+  if (isSuperAdminUser(activeUser)) return;
+
+  const globalSettings = getActiveGlobalModuleSettings();
+  const keys = UNIDADE_PERMISSAO_KEYS[unidadeId];
+  if (!keys) {
+    throw new Error('Unidade do AutoSenha inválida.');
+  }
+
+  const canControle = userCanAccessSubmodule(activeUser, 'parent_autosenha', keys.controle, globalSettings);
+  const canDashboard = userCanAccessSubmodule(activeUser, 'parent_autosenha', 'sub_autosenha_dashboard', globalSettings);
+
+  if (mode === 'tv') {
+    const canTv = userCanAccessSubmodule(activeUser, 'parent_autosenha', keys.tv, globalSettings);
+    if (canControle || canTv || canDashboard) return;
+  } else {
+    if (canControle || canDashboard) return;
+  }
+
+  throw new Error(`Acesso negado: você não possui permissão para operar a unidade ${unidadeId.toUpperCase()}.`);
+}
+
+function subtrairDiasDataOperacional(dataIso: string, dias: number): string {
+  const [y, m, d] = dataIso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y || 2026, (m || 1) - 1, d || 1));
+  dt.setUTCDate(dt.getUTCDate() - dias);
+  return dt.toISOString().slice(0, 10);
+}
+
+// ----------------------------------------------------------------------
 // CONFIGURAÇÕES DE UNIDADE
 // ----------------------------------------------------------------------
 export async function getConfiguracao(unidadeId: AutoSenhaUnidadeId): Promise<AutoSenhaConfiguracao> {
@@ -320,6 +370,7 @@ export async function salvarConfiguracao(
   usuarioNome: string,
   usuarioId?: string
 ): Promise<AutoSenhaConfiguracao> {
+  assertCanAccessAutoSenhaUnidade(config.unidade_id, 'operacional');
   config.updated_at = new Date().toISOString();
   saveLocalConfig(config);
 
@@ -367,6 +418,7 @@ export interface GerarSenhaPayload {
 }
 
 export async function gerarSenha(payload: GerarSenhaPayload): Promise<AutoSenhaItem> {
+  assertCanAccessAutoSenhaUnidade(payload.unidade_id, 'operacional');
   const dataHoje = getDataOperacionalHoje();
   const agora = new Date().toISOString();
 
@@ -394,7 +446,7 @@ export async function gerarSenha(payload: GerarSenhaPayload): Promise<AutoSenhaI
     paciente_cartao_sus: payload.paciente_cartao_sus,
     cidadao_nome: payload.cidadao_nome.trim(),
     prioridade_tipo: payload.prioridade_tipo,
-    prioridade_categoria: payload.prioridade_categoria || (payload.prioridade_tipo === 'NORMAL' ? 'Geral' : 'Outra Prioridade Legal'),
+    prioridade_categoria: payload.prioridade_categoria || (payload.prioridade_tipo === 'NORMAL' ? 'Geral' : undefined),
     status: 'AGUARDANDO',
     guiche: payload.guiche || 'Recepção',
     atendente_id: payload.atendente_id,
@@ -439,29 +491,34 @@ export async function gerarSenha(payload: GerarSenhaPayload): Promise<AutoSenhaI
 }
 
 // ----------------------------------------------------------------------
-// CONSULTA DE SENHAS
+// CONSULTA DE SENHAS E ORDENAÇÃO REAL DA FILA
 // ----------------------------------------------------------------------
 export async function getSenhas(
   unidadeId?: AutoSenhaUnidadeId,
   dataOperacional?: string
 ): Promise<AutoSenhaItem[]> {
+  if (unidadeId) {
+    assertCanAccessAutoSenhaUnidade(unidadeId, 'tv');
+  }
   try {
     let query = supabase.from('autosenha_senhas').select('*');
     if (unidadeId) query = query.eq('unidade_id', unidadeId);
     if (dataOperacional) query = query.eq('data_operacional', dataOperacional);
 
     const { data, error } = await query.order('created_at', { ascending: false });
-    if (!error && data && Array.isArray(data) && data.length > 0) {
-      // Atualiza cache das senhas retornadas
+    if (!error && Array.isArray(data)) {
+      // Sincroniza cache local mantendo registros de outras unidades/datas
       const local = getLocalSenhas();
-      const map = new Map<string, AutoSenhaItem>();
-      local.forEach(s => map.set(s.id, s));
-      data.forEach((s: AutoSenhaItem) => map.set(s.id, s));
-      saveLocalSenhas(Array.from(map.values()));
+      const outrosEscopos = local.filter(s => {
+        if (unidadeId && s.unidade_id !== unidadeId) return true;
+        if (dataOperacional && s.data_operacional !== dataOperacional) return true;
+        return false;
+      });
+      saveLocalSenhas([...data, ...outrosEscopos]);
       return data;
     }
   } catch (e) {
-    // fallback
+    // fallback local abaixo
   }
 
   // Fallback Local
@@ -469,6 +526,290 @@ export async function getSenhas(
   if (unidadeId) result = result.filter(s => s.unidade_id === unidadeId);
   if (dataOperacional) result = result.filter(s => s.data_operacional === dataOperacional);
   return result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
+export interface FilaAtualOrdenadaItem {
+  senha: AutoSenhaItem;
+  posicao: number;
+}
+
+/**
+ * Ordena os cidadãos aguardando ('AGUARDANDO') na ordem exata em que serão chamados
+ * pela unidade (respeitando Especial 80+ e a regra de alternância Prioritário : Normal),
+ * sem alterar os contadores persistidos.
+ */
+export function getFilaAtualOrdenada(
+  senhas: AutoSenhaItem[],
+  config?: AutoSenhaConfiguracao | null
+): FilaAtualOrdenadaItem[] {
+  const porOrdemChegada = (a: AutoSenhaItem, b: AutoSenhaItem) => {
+    const diffTempo = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    if (diffTempo !== 0) return diffTempo;
+    return (a.numero_sequencial || 0) - (b.numero_sequencial || 0);
+  };
+
+  const aguardando = senhas.filter(s => s.status === 'AGUARDANDO');
+  if (aguardando.length === 0) return [];
+
+  const especiais = aguardando.filter(s => s.prioridade_tipo === 'ESPECIAL').sort(porOrdemChegada);
+  const prioritarios = aguardando.filter(s => s.prioridade_tipo === 'PRIORITARIO').sort(porOrdemChegada);
+  const normais = aguardando.filter(s => s.prioridade_tipo === 'NORMAL').sort(porOrdemChegada);
+
+  const ordenadas: AutoSenhaItem[] = [...especiais];
+
+  if (config?.regra_alternancia === 'APENAS_PRIORIDADE') {
+    ordenadas.push(...prioritarios, ...normais);
+  } else {
+    const propP = config?.proporcao_prioridade || 2;
+    let contP = config?.contador_prioridade_atual || 0;
+    const pQueue = [...prioritarios];
+    const nQueue = [...normais];
+
+    while (pQueue.length > 0 || nQueue.length > 0) {
+      if (pQueue.length > 0 && contP < propP) {
+        ordenadas.push(pQueue.shift()!);
+        contP += 1;
+      } else if (nQueue.length > 0) {
+        ordenadas.push(nQueue.shift()!);
+        contP = 0;
+      } else if (pQueue.length > 0) {
+        ordenadas.push(pQueue.shift()!);
+        contP = 1;
+      }
+    }
+  }
+
+  return ordenadas.map((senha, idx) => ({
+    senha,
+    posicao: idx + 1
+  }));
+}
+
+export type HistoricoPeriodoFiltro = 'hoje' | '7_dias' | '30_dias' | 'todos' | 'data_especifica';
+
+export interface ConsultarHistoricoAtendimentosParams {
+  unidadeId: AutoSenhaUnidadeId;
+  periodo?: HistoricoPeriodoFiltro;
+  dataEspecifica?: string; // YYYY-MM-DD
+  status?: 'TODOS' | AutoSenhaStatus;
+  prioridade?: 'TODAS' | AutoSenhaPrioridadeTipo;
+  busca?: string;
+  ordem?: 'desc' | 'asc';
+  page?: number;
+  pageSize?: number;
+}
+
+export interface ConsultarHistoricoAtendimentosResult {
+  items: AutoSenhaItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  error?: string;
+  errorType?: 'permissao' | 'conexao' | 'validacao';
+  fonte: 'supabase' | 'local' | 'erro';
+}
+
+function sanitizarTermoPostgrest(termo: string): string {
+  return termo.replace(/[,()*%\\]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Consulta paginada e isolada por unidade de todos os registros históricos de atendimento,
+ * sem alterar ou excluir registros históricos existentes.
+ */
+export async function getHistoricoAtendimentosUnidade(
+  params: ConsultarHistoricoAtendimentosParams
+): Promise<ConsultarHistoricoAtendimentosResult> {
+  const {
+    unidadeId,
+    periodo = 'todos',
+    dataEspecifica,
+    status = 'TODOS',
+    prioridade = 'TODAS',
+    busca = '',
+    ordem = 'desc',
+    page = 1,
+    pageSize = 15
+  } = params;
+
+  const safePage = Math.max(1, Number(page) || 1);
+  const safePageSize = Math.min(50, Math.max(5, Number(pageSize) || 15));
+
+  try {
+    assertCanAccessAutoSenhaUnidade(unidadeId, 'historico');
+  } catch (permErr: any) {
+    return {
+      items: [],
+      total: 0,
+      page: safePage,
+      pageSize: safePageSize,
+      totalPages: 1,
+      error: permErr?.message || 'Sem permissão para consultar o histórico desta unidade.',
+      errorType: 'permissao',
+      fonte: 'erro'
+    };
+  }
+
+  if (periodo === 'data_especifica' && dataEspecifica && !/^\d{4}-\d{2}-\d{2}$/.test(dataEspecifica)) {
+    return {
+      items: [],
+      total: 0,
+      page: safePage,
+      pageSize: safePageSize,
+      totalPages: 1,
+      error: 'Data selecionada inválida para consulta do histórico.',
+      errorType: 'validacao',
+      fonte: 'erro'
+    };
+  }
+
+  const hoje = getDataOperacionalHoje();
+  const termoLimpo = sanitizarTermoPostgrest(busca);
+  const termoLower = termoLimpo.toLowerCase();
+
+  try {
+    let query = supabase
+      .from('autosenha_senhas')
+      .select('*', { count: 'exact' })
+      .eq('unidade_id', unidadeId);
+
+    if (periodo === 'hoje') {
+      query = query.eq('data_operacional', hoje);
+    } else if (periodo === '7_dias') {
+      query = query.gte('data_operacional', subtrairDiasDataOperacional(hoje, 7));
+    } else if (periodo === '30_dias') {
+      query = query.gte('data_operacional', subtrairDiasDataOperacional(hoje, 30));
+    } else if (periodo === 'data_especifica' && dataEspecifica) {
+      query = query.eq('data_operacional', dataEspecifica);
+    }
+
+    if (status && status !== 'TODOS') {
+      query = query.eq('status', status);
+    }
+    if (prioridade && prioridade !== 'TODAS') {
+      query = query.eq('prioridade_tipo', prioridade);
+    }
+    if (termoLimpo) {
+      query = query.or(`cidadao_nome.ilike.%${termoLimpo}%,numero.ilike.%${termoLimpo}%`);
+    }
+
+    const from = (safePage - 1) * safePageSize;
+    const to = from + safePageSize - 1;
+
+    const { data, count, error } = await query
+      .order('created_at', { ascending: ordem === 'asc' })
+      .range(from, to);
+
+    if (!error && Array.isArray(data)) {
+      const lista = data as AutoSenhaItem[];
+      const totalRegistros = typeof count === 'number' ? count : lista.length;
+      const totalPages = Math.max(1, Math.ceil(totalRegistros / safePageSize));
+      return {
+        items: lista,
+        total: totalRegistros,
+        page: safePage,
+        pageSize: safePageSize,
+        totalPages,
+        fonte: 'supabase'
+      };
+    }
+
+    if (error) {
+      const errMsg = String(error.message || '');
+      const errCode = String((error as any).code || '');
+      const isPermError =
+        errCode === '42501' ||
+        /permission|rls|row-level|jwt|unauthorized|forbidden/i.test(errMsg);
+      if (isPermError) {
+        return {
+          items: [],
+          total: 0,
+          page: safePage,
+          pageSize: safePageSize,
+          totalPages: 1,
+          error: 'Acesso negado pela política de segurança ao histórico desta unidade.',
+          errorType: 'permissao',
+          fonte: 'erro'
+        };
+      }
+
+      // Em erro real de rede/banco sem tabela ausente, verificar se há dados locais em cache ou reportar erro real
+      const isMissingTable = errCode === '42P01' || /does not exist|relation/i.test(errMsg);
+      if (!isMissingTable) {
+        return {
+          items: [],
+          total: 0,
+          page: safePage,
+          pageSize: safePageSize,
+          totalPages: 1,
+          error: `Não foi possível carregar o histórico de atendimentos: ${errMsg || 'falha na consulta ao servidor.'}`,
+          errorType: 'conexao',
+          fonte: 'erro'
+        };
+      }
+    }
+  } catch (err: any) {
+    const locaisCheck = getLocalSenhas().filter(s => s.unidade_id === unidadeId);
+    if (locaisCheck.length === 0) {
+      return {
+        items: [],
+        total: 0,
+        page: safePage,
+        pageSize: safePageSize,
+        totalPages: 1,
+        error: err?.message || 'Erro de conexão ao consultar o histórico de atendimentos.',
+        errorType: 'conexao',
+        fonte: 'erro'
+      };
+    }
+  }
+
+  // Fallback Local (apenas para ambiente offline/tabela ainda não provisionada)
+  let filtrados = getLocalSenhas().filter(s => s.unidade_id === unidadeId);
+  if (periodo === 'hoje') {
+    filtrados = filtrados.filter(s => s.data_operacional === hoje);
+  } else if (periodo === '7_dias') {
+    const min = subtrairDiasDataOperacional(hoje, 7);
+    filtrados = filtrados.filter(s => s.data_operacional >= min);
+  } else if (periodo === '30_dias') {
+    const min = subtrairDiasDataOperacional(hoje, 30);
+    filtrados = filtrados.filter(s => s.data_operacional >= min);
+  } else if (periodo === 'data_especifica' && dataEspecifica) {
+    filtrados = filtrados.filter(s => s.data_operacional === dataEspecifica);
+  }
+
+  if (status && status !== 'TODOS') {
+    filtrados = filtrados.filter(s => s.status === status);
+  }
+  if (prioridade && prioridade !== 'TODAS') {
+    filtrados = filtrados.filter(s => s.prioridade_tipo === prioridade);
+  }
+  if (termoLower) {
+    filtrados = filtrados.filter(s =>
+      (s.cidadao_nome || '').toLowerCase().includes(termoLower) ||
+      (s.numero || '').toLowerCase().includes(termoLower)
+    );
+  }
+
+  filtrados.sort((a, b) => {
+    const diff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    return ordem === 'asc' ? diff : -diff;
+  });
+
+  const total = filtrados.length;
+  const totalPages = Math.max(1, Math.ceil(total / safePageSize));
+  const inicio = (safePage - 1) * safePageSize;
+  const items = filtrados.slice(inicio, inicio + safePageSize);
+
+  return {
+    items,
+    total,
+    page: safePage,
+    pageSize: safePageSize,
+    totalPages,
+    fonte: 'local'
+  };
 }
 
 /**
@@ -512,6 +853,35 @@ export async function getSenhasDoPaciente(
   }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
+async function findSenhaParaAcao(
+  senhaId: string,
+  expectedUnidadeId?: AutoSenhaUnidadeId
+): Promise<{ locais: AutoSenhaItem[]; senha: AutoSenhaItem } | null> {
+  const locais = getLocalSenhas();
+  let senha = locais.find(s => s.id === senhaId);
+
+  if (!senha) {
+    try {
+      const { data, error } = await supabase
+        .from('autosenha_senhas')
+        .select('*')
+        .eq('id', senhaId)
+        .maybeSingle();
+      if (!error && data) {
+        senha = data as AutoSenhaItem;
+        locais.unshift(senha);
+      }
+    } catch (e) {}
+  }
+
+  if (!senha) return null;
+  if (expectedUnidadeId && senha.unidade_id !== expectedUnidadeId) {
+    throw new Error(`Acesso negado: esta senha pertence à unidade ${senha.unidade_id.toUpperCase()}.`);
+  }
+  assertCanAccessAutoSenhaUnidade(senha.unidade_id, 'operacional');
+  return { locais, senha };
+}
+
 // ----------------------------------------------------------------------
 // ALGORITMO INTELIGENTE E LEGAL DE CHAMADA DO PRÓXIMO
 // ----------------------------------------------------------------------
@@ -521,6 +891,7 @@ export async function chamarProximo(
   operadorNome = 'Atendente',
   operadorId?: string
 ): Promise<{ senhaChamada: AutoSenhaItem | null; mensagem?: string }> {
+  assertCanAccessAutoSenhaUnidade(unidadeId, 'operacional');
   const dataHoje = getDataOperacionalHoje();
   const senhasHoje = await getSenhas(unidadeId, dataHoje);
 
@@ -656,11 +1027,12 @@ export async function rechamarSenha(
   senhaId: string,
   guiche = 'Recepção',
   operadorNome = 'Atendente',
-  operadorId?: string
+  operadorId?: string,
+  expectedUnidadeId?: AutoSenhaUnidadeId
 ): Promise<AutoSenhaItem | null> {
-  const locais = getLocalSenhas();
-  const senha = locais.find(s => s.id === senhaId);
-  if (!senha) return null;
+  const found = await findSenhaParaAcao(senhaId, expectedUnidadeId);
+  if (!found) return null;
+  const { locais, senha } = found;
 
   const agora = new Date().toISOString();
   senha.status = 'CHAMANDO';
@@ -715,11 +1087,12 @@ export async function rechamarSenha(
 export async function iniciarAtendimento(
   senhaId: string,
   operadorNome = 'Atendente',
-  operadorId?: string
+  operadorId?: string,
+  expectedUnidadeId?: AutoSenhaUnidadeId
 ): Promise<AutoSenhaItem | null> {
-  const locais = getLocalSenhas();
-  const senha = locais.find(s => s.id === senhaId);
-  if (!senha) return null;
+  const found = await findSenhaParaAcao(senhaId, expectedUnidadeId);
+  if (!found) return null;
+  const { locais, senha } = found;
 
   const agora = new Date().toISOString();
   senha.status = 'EM_ATENDIMENTO';
@@ -763,11 +1136,12 @@ export async function iniciarAtendimento(
 export async function concluirAtendimento(
   senhaId: string,
   operadorNome = 'Atendente',
-  operadorId?: string
+  operadorId?: string,
+  expectedUnidadeId?: AutoSenhaUnidadeId
 ): Promise<AutoSenhaItem | null> {
-  const locais = getLocalSenhas();
-  const senha = locais.find(s => s.id === senhaId);
-  if (!senha) return null;
+  const found = await findSenhaParaAcao(senhaId, expectedUnidadeId);
+  if (!found) return null;
+  const { locais, senha } = found;
 
   const agora = new Date().toISOString();
   senha.status = 'CONCLUIDO';
@@ -819,11 +1193,12 @@ export async function concluirAtendimento(
 export async function registrarNaoCompareceu(
   senhaId: string,
   operadorNome = 'Atendente',
-  operadorId?: string
+  operadorId?: string,
+  expectedUnidadeId?: AutoSenhaUnidadeId
 ): Promise<AutoSenhaItem | null> {
-  const locais = getLocalSenhas();
-  const senha = locais.find(s => s.id === senhaId);
-  if (!senha) return null;
+  const found = await findSenhaParaAcao(senhaId, expectedUnidadeId);
+  if (!found) return null;
+  const { locais, senha } = found;
 
   const agora = new Date().toISOString();
   senha.status = 'NAO_COMPARECEU';
@@ -865,11 +1240,12 @@ export async function cancelarSenha(
   senhaId: string,
   motivo: string,
   operadorNome = 'Atendente',
-  operadorId?: string
+  operadorId?: string,
+  expectedUnidadeId?: AutoSenhaUnidadeId
 ): Promise<AutoSenhaItem | null> {
-  const locais = getLocalSenhas();
-  const senha = locais.find(s => s.id === senhaId);
-  if (!senha) return null;
+  const found = await findSenhaParaAcao(senhaId, expectedUnidadeId);
+  if (!found) return null;
+  const { locais, senha } = found;
 
   const agora = new Date().toISOString();
   senha.status = 'CANCELADO';
@@ -905,7 +1281,7 @@ export async function cancelarSenha(
 }
 
 // ----------------------------------------------------------------------
-// PARTICULARIDADE DA UPA — SOLICITAR AVALIAÇÃO IMEDIATA (TRIAGEM CLÍNICA)
+// FLUXO INTEGRADO — SOLICITAR AVALIAÇÃO IMEDIATA (ENCAMINHAMENTO PRESENCIAL)
 // ----------------------------------------------------------------------
 export async function solicitarAvaliacaoImediataUPA(
   cidadaoNome: string,
@@ -913,11 +1289,13 @@ export async function solicitarAvaliacaoImediataUPA(
   operadorNome: string,
   operadorId?: string,
   senhaId?: string,
-  senhaNumero?: string
+  senhaNumero?: string,
+  unidadeId: AutoSenhaUnidadeId = 'upa'
 ): Promise<AutoSenhaAvaliacaoUrgente> {
+  assertCanAccessAutoSenhaUnidade(unidadeId, 'operacional');
   const avaliacao: AutoSenhaAvaliacaoUrgente = {
     id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `urg-${Date.now()}`,
-    unidade_id: 'upa',
+    unidade_id: unidadeId,
     senha_id: senhaId,
     senha_numero: senhaNumero,
     cidadao_nome: cidadaoNome.trim(),
@@ -937,9 +1315,9 @@ export async function solicitarAvaliacaoImediataUPA(
   } catch (e) {}
 
   await registrarAuditoria(
-    'upa',
-    'AVALIACAO_URGENTE_UPA',
-    `ALERTA CLÍNICO UPA: Solicitação de avaliação presencial imediata para ${cidadaoNome}. Queixa: ${motivoQueixa}`,
+    unidadeId,
+    unidadeId === 'upa' ? 'AVALIACAO_URGENTE_UPA' : `AVALIACAO_URGENTE_${unidadeId.toUpperCase()}`,
+    `ALERTA ASSISTENCIAL ${unidadeId.toUpperCase()}: Solicitação de avaliação presencial imediata para ${cidadaoNome}. Queixa: ${motivoQueixa}`,
     avaliacao,
     operadorNome,
     operadorId,
@@ -947,7 +1325,7 @@ export async function solicitarAvaliacaoImediataUPA(
     senhaNumero
   );
 
-  notificarRealtimeMudanca('upa', 'alerta_urgencia_clinica', { avaliacao });
+  notificarRealtimeMudanca(unidadeId, 'alerta_urgencia_clinica', { avaliacao });
   return avaliacao;
 }
 
@@ -1148,27 +1526,41 @@ export async function inicializarSeedSeVazio(): Promise<void> {
 }
 
 /**
- * Zera completamente todos os registros do AutoSenha (senhas, histórico de chamadas,
- * auditoria e avaliações urgentes) tanto no localStorage quanto no banco Supabase,
- * resetando os contadores de alternância para o início limpo em PRODUÇÃO.
+ * Reinicia a fila ativa do dia e os contadores da unidade (ou de todo o módulo para Super Admin),
+ * sem jamais ser executado automaticamente ao carregar o módulo e preservando permissões/isolamento.
  */
-export async function zerarTodosDadosAutoSenha(): Promise<void> {
-  // 1. Limpeza no LocalStorage
+export async function zerarTodosDadosAutoSenha(unidadeId?: AutoSenhaUnidadeId): Promise<void> {
+  if (unidadeId) {
+    assertCanAccessAutoSenhaUnidade(unidadeId, 'operacional');
+  } else {
+    const activeUser = getActivePermissionUser();
+    const globalSettings = getActiveGlobalModuleSettings();
+    if (activeUser && !userCanAccessSubmodule(activeUser, 'parent_autosenha', 'sub_autosenha_dashboard', globalSettings)) {
+      throw new Error('Acesso negado: apenas usuários com permissão administrativa no AutoSenha podem reiniciar todas as unidades.');
+    }
+  }
+
+  const hoje = getDataOperacionalHoje();
+
+  // 1. Limpeza controlada no cache local (isolada pela unidade quando informada)
   if (typeof window !== 'undefined') {
     try {
-      localStorage.removeItem(STORAGE_SENHAS_KEY);
-      localStorage.removeItem(STORAGE_AUDIT_KEY);
-      localStorage.removeItem(STORAGE_URGENTES_KEY);
-      localStorage.setItem(STORAGE_SENHAS_KEY, JSON.stringify([]));
-      localStorage.setItem(STORAGE_AUDIT_KEY, JSON.stringify([]));
-      localStorage.setItem(STORAGE_URGENTES_KEY, JSON.stringify([]));
-
-      // Resetar contadores de alternância das configurações de cada unidade
-      for (const u of AUTOSENHA_UNIDADES) {
-        const cfg = getLocalConfig(u.id);
+      if (unidadeId) {
+        saveLocalSenhas(getLocalSenhas().filter(s => !(s.unidade_id === unidadeId && s.data_operacional === hoje)));
+        const cfg = getLocalConfig(unidadeId);
         cfg.contador_prioridade_atual = 0;
         cfg.contador_normal_atual = 0;
         saveLocalConfig(cfg);
+      } else {
+        localStorage.setItem(STORAGE_SENHAS_KEY, JSON.stringify([]));
+        localStorage.setItem(STORAGE_AUDIT_KEY, JSON.stringify([]));
+        localStorage.setItem(STORAGE_URGENTES_KEY, JSON.stringify([]));
+        for (const u of AUTOSENHA_UNIDADES) {
+          const cfg = getLocalConfig(u.id);
+          cfg.contador_prioridade_atual = 0;
+          cfg.contador_normal_atual = 0;
+          saveLocalConfig(cfg);
+        }
       }
 
       localStorage.setItem('sys_autosenha_producao_limpo_v1', 'true');
@@ -1177,30 +1569,36 @@ export async function zerarTodosDadosAutoSenha(): Promise<void> {
     }
   }
 
-  // 2. Limpeza no Supabase (se as tabelas estiverem provisionadas)
+  // 2. Limpeza controlada no Supabase (somente fila do dia na unidade selecionada para não destruir históricos anteriores)
   try {
-    await Promise.allSettled([
-      supabase.from('autosenha_itens').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-      supabase.from('autosenha_auditoria').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-      supabase.from('autosenha_avaliacoes_urgentes').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-      supabase.from('autosenha_chamadas_historico').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-    ]);
+    if (unidadeId) {
+      await Promise.allSettled([
+        supabase
+          .from('autosenha_senhas')
+          .delete()
+          .eq('unidade_id', unidadeId)
+          .eq('data_operacional', hoje),
+        supabase
+          .from('autosenha_configuracoes')
+          .update({ contador_prioridade_atual: 0, contador_normal_atual: 0 })
+          .eq('unidade_id', unidadeId)
+      ]);
+    } else {
+      await Promise.allSettled([
+        supabase.from('autosenha_senhas').delete().eq('data_operacional', hoje),
+        supabase.from('autosenha_chamadas').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      ]);
+    }
   } catch (e) {
     console.warn('[AutoSenha] Limpeza no Supabase:', e);
   }
 
-  // 3. Notificar todas as telas operacionais conectadas em tempo real
-  for (const u of AUTOSENHA_UNIDADES) {
+  // 3. Notificar telas conectadas apenas do escopo alterado
+  const unidadesNotificar = unidadeId
+    ? AUTOSENHA_UNIDADES.filter(u => u.id === unidadeId)
+    : AUTOSENHA_UNIDADES;
+  for (const u of unidadesNotificar) {
     notificarRealtimeMudanca(u.id, 'dados_zerados', {});
   }
-}
-
-// Auto-execução imediata para garantir zeragem total ao carregar em produção
-if (typeof window !== 'undefined') {
-  try {
-    if (localStorage.getItem('sys_autosenha_producao_limpo_v1') !== 'true') {
-      zerarTodosDadosAutoSenha();
-    }
-  } catch (e) {}
 }
 

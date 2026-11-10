@@ -1,13 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  ArrowLeft, PlusCircle, Bell, RotateCcw, Play, CheckCircle2,
-  UserX, XCircle, Settings, ShieldAlert, Sparkles, Clock, AlertTriangle,
-  Search, Sliders, Volume2, Tv, Users, Activity, FileText, UserCheck, UserPlus, User as UserIcon
+  ArrowLeft, CheckCircle2, Settings, ShieldAlert,
+  Tv, Trash2, AlertCircle
 } from 'lucide-react';
 import {
   AutoSenhaUnidadeId,
-  AutoSenhaPrioridadeTipo,
-  AutoSenhaPrioridadeCategoria,
   AutoSenhaItem,
   AutoSenhaConfiguracao,
   User,
@@ -26,16 +23,16 @@ import {
   registrarNaoCompareceu,
   cancelarSenha,
   solicitarAvaliacaoImediataUPA,
-  formatarDuracaoSegundos,
   getDataOperacionalHoje,
   inicializarSeedSeVazio,
   zerarTodosDadosAutoSenha
 } from '../../services/autoSenhaService';
-import * as db from '../../services/consultasService';
-import { normalizarNumeros, correspondeSequencialNome } from '../../services/pacienteHistoricoService';
 import { PacienteFormModal } from '../consultas/pacientes/PacienteFormModal';
+import { AutoSenhaEmissaoCard, AutoSenhaClassificacaoAtendimento } from './AutoSenhaEmissaoCard';
+import { AutoSenhaChamadaCard } from './AutoSenhaChamadaCard';
+import { HistoricoFilaModal } from './HistoricoFilaModal';
+import { calculateAgeYears, formatCpf } from '../../utils/cpfUtils';
 import { supabase } from '../../services/supabaseClient';
-import { Trash2 } from 'lucide-react';
 
 interface AutoSenhaControleScreenProps {
   unidadeId: AutoSenhaUnidadeId;
@@ -57,31 +54,40 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
   const [config, setConfig] = useState<AutoSenhaConfiguracao | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [guicheAtual, setGuicheAtual] = useState('Recepção 1');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filtroStatus, setFiltroStatus] = useState<string>('TODOS');
 
   // Paciente Vinculado para Emissão
   const [pacienteSelecionado, setPacienteSelecionado] = useState<ConsultaPaciente | null>(null);
-  const [modalLocalizarAberto, setModalLocalizarAberto] = useState(false);
+  const [pacienteLocalizadoMeta, setPacienteLocalizadoMeta] = useState<{ isNew: boolean } | null>(null);
   const [modalNovoPacienteAberto, setModalNovoPacienteAberto] = useState(false);
-  const [buscaPacienteTermo, setBuscaPacienteTermo] = useState('');
-  const [buscaPacienteLoading, setBuscaPacienteLoading] = useState(false);
-  const [pacientesEncontrados, setPacientesEncontrados] = useState<ConsultaPaciente[]>([]);
 
-  // Form de Nova Senha
+  // Classificação e Ação Principal
   const [novoNome, setNovoNome] = useState('');
-  const [novaPrioridade, setNovaPrioridade] = useState<AutoSenhaPrioridadeTipo>('NORMAL');
-  const [novaCategoria, setNovaCategoria] = useState<string>('Geral');
+  const [classificacaoSelecionada, setClassificacaoSelecionada] = useState<AutoSenhaClassificacaoAtendimento>('NORMAL');
   const [isGerando, setIsGerando] = useState(false);
   const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [ausenteConfirmId, setAusenteConfirmId] = useState<string | null>(null);
+  const [confirmarZeragemInline, setConfirmarZeragemInline] = useState(false);
 
   // Modais
+  const [modalHistoricoFilaAberto, setModalHistoricoFilaAberto] = useState(false);
   const [modalCancelarId, setModalCancelarId] = useState<string | null>(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
   const [modalConfigAberto, setModalConfigAberto] = useState(false);
   const [modalUpaUrgenciaAberto, setModalUpaUrgenciaAberto] = useState(false);
   const [upaUrgenciaNome, setUpaUrgenciaNome] = useState('');
   const [upaUrgenciaQueixa, setUpaUrgenciaQueixa] = useState('');
+
+  const mostrarErro = (msg: string) => {
+    setFeedbackError(msg);
+    setTimeout(() => setFeedbackError(null), 5000);
+  };
+
+  const mostrarSucesso = (msg: string, ms = 4000) => {
+    setFeedbackError(null);
+    setFeedbackSuccess(msg);
+    setTimeout(() => setFeedbackSuccess(null), ms);
+  };
 
   // Carregar dados
   const carregarDados = async () => {
@@ -126,86 +132,33 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
     };
   }, [unidadeId]);
 
-  // Funções de formatação e busca de pacientes vinculados
-  const mascararCpf = (cpf?: string | null): string => {
-    if (!cpf) return 'Não informado';
-    const limpo = normalizarNumeros(cpf);
-    if (limpo.length === 11) {
-      return `***.${limpo.substring(3, 6)}.${limpo.substring(6, 9)}-**`;
+  const handleSelecionarPaciente = (p: ConsultaPaciente, meta?: { isNew: boolean }) => {
+    setPacienteSelecionado(p);
+    setPacienteLocalizadoMeta(meta || { isNew: false });
+    setNovoNome(p.name);
+    if (classificacaoSelecionada !== 'AVALIACAO_IMEDIATA') {
+      const idade = calculateAgeYears(p.birth_date);
+      if (idade !== null && idade >= 80) {
+        setClassificacaoSelecionada('ESPECIAL');
+      } else if (idade !== null && idade >= 60) {
+        setClassificacaoSelecionada('PRIORITARIO');
+      }
     }
-    return cpf;
   };
 
-  const mascararSus = (sus?: string | null): string => {
-    if (!sus) return 'Não informado';
-    const limpo = normalizarNumeros(sus);
-    if (limpo.length >= 10) {
-      return `${limpo.substring(0, 3)}•••••${limpo.substring(limpo.length - 4)}`;
-    }
-    return sus;
-  };
+  // Ação Principal Adaptável: Emissão de Senha OU Solicitação de Avaliação Imediata
+  const handleAcaoPrincipal = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  const calcularIdadeAnos = (nascimentoStr?: string | null): number | null => {
-    if (!nascimentoStr) return null;
-    const nasc = new Date(nascimentoStr);
-    if (isNaN(nasc.getTime())) return null;
-    const hoje = new Date();
-    let anos = hoje.getFullYear() - nasc.getFullYear();
-    const m = hoje.getMonth() - nasc.getMonth();
-    if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) anos--;
-    return Math.max(0, anos);
-  };
-
-  const handleBuscarPacientes = async (termo: string) => {
-    setBuscaPacienteTermo(termo);
-    const t = termo.trim();
-    if (!t) {
-      setPacientesEncontrados([]);
+    if (classificacaoSelecionada === 'AVALIACAO_IMEDIATA') {
+      setUpaUrgenciaNome(pacienteSelecionado?.name || '');
+      setUpaUrgenciaQueixa('');
+      setModalUpaUrgenciaAberto(true);
       return;
     }
-    setBuscaPacienteLoading(true);
-    try {
-      const todos = await db.getPacientes();
-      const termoNumeros = normalizarNumeros(t);
-      const termoIsNum = termoNumeros.length >= 3;
 
-      const filtrados = todos.filter(p => {
-        if (termoIsNum) {
-          const cpfLimpo = normalizarNumeros(p.cpf);
-          const susLimpo = normalizarNumeros(p.sus_number);
-          if (cpfLimpo === termoNumeros || (termoNumeros.length >= 6 && cpfLimpo.includes(termoNumeros))) return true;
-          if (susLimpo === termoNumeros || (termoNumeros.length >= 6 && susLimpo.includes(termoNumeros))) return true;
-        }
-        return correspondeSequencialNome(p.name, t);
-      });
-
-      setPacientesEncontrados(filtrados.slice(0, 10));
-    } catch (err) {
-      console.error('Erro ao buscar pacientes:', err);
-    } finally {
-      setBuscaPacienteLoading(false);
-    }
-  };
-
-  const handleSelecionarPaciente = (p: ConsultaPaciente) => {
-    setPacienteSelecionado(p);
-    setNovoNome(p.name);
-    setModalLocalizarAberto(false);
-    const idade = calcularIdadeAnos(p.birth_date);
-    if (idade !== null && idade >= 80) {
-      setNovaPrioridade('ESPECIAL');
-      setNovaCategoria('Idoso 80+ (Prioridade Especial)');
-    } else if (idade !== null && idade >= 60) {
-      setNovaPrioridade('PRIORITARIO');
-      setNovaCategoria('Idoso (60 a 79 anos)');
-    }
-  };
-
-  // Ação: Gerar Senha Vinculada ao Paciente
-  const handleGerarSenha = async (e: React.FormEvent) => {
-    e.preventDefault();
     if (!pacienteSelecionado) {
-      setModalLocalizarAberto(true);
+      setModalNovoPacienteAberto(true);
       return;
     }
 
@@ -217,22 +170,22 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
         paciente_cpf: pacienteSelecionado.cpf,
         paciente_cartao_sus: pacienteSelecionado.sus_number,
         cidadao_nome: pacienteSelecionado.name,
-        prioridade_tipo: novaPrioridade,
-        prioridade_categoria: novaCategoria,
+        prioridade_tipo: classificacaoSelecionada,
+        prioridade_categoria: classificacaoSelecionada === 'NORMAL' ? 'Geral' : undefined,
         guiche: guicheAtual,
         atendente_id: currentUser?.id,
         atendente_nome: currentUser?.name || 'Recepção'
       });
 
       setPacienteSelecionado(null);
+      setPacienteLocalizadoMeta(null);
       setNovoNome('');
-      setNovaPrioridade('NORMAL');
-      setNovaCategoria('Geral');
-      setFeedbackSuccess(`Senha ${senhaCriada.numero} gerada com sucesso para ${senhaCriada.cidadao_nome}!`);
-      setTimeout(() => setFeedbackSuccess(null), 4000);
+      setClassificacaoSelecionada('NORMAL');
+      mostrarSucesso(`Senha ${senhaCriada.numero} gerada com sucesso para ${senhaCriada.cidadao_nome}!`);
       await carregarDados();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      mostrarErro(err?.message || 'Não foi possível emitir a senha.');
     } finally {
       setIsGerando(false);
     }
@@ -240,90 +193,128 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
 
   // Ação: Chamar Próximo
   const handleChamarProximo = async () => {
-    const res = await chamarProximo(
-      unidadeId,
-      guicheAtual,
-      currentUser?.name || 'Recepção',
-      currentUser?.id
-    );
+    try {
+      const res = await chamarProximo(
+        unidadeId,
+        guicheAtual,
+        currentUser?.name || 'Recepção',
+        currentUser?.id
+      );
 
-    if (res.senhaChamada) {
-      setFeedbackSuccess(`Chamando senha ${res.senhaChamada.numero} (${res.senhaChamada.cidadao_nome})`);
-      setTimeout(() => setFeedbackSuccess(null), 4000);
-      await carregarDados();
-    } else if (res.mensagem) {
-      alert(res.mensagem);
+      if (res.senhaChamada) {
+        mostrarSucesso(`Chamando senha ${res.senhaChamada.numero} (${res.senhaChamada.cidadao_nome})`);
+        await carregarDados();
+      } else if (res.mensagem) {
+        mostrarErro(res.mensagem);
+      }
+    } catch (err: any) {
+      mostrarErro(err?.message || 'Não foi possível realizar a chamada.');
     }
   };
 
   // Ação: Rechamar
   const handleRechamar = async (senhaId: string) => {
-    await rechamarSenha(senhaId, guicheAtual, currentUser?.name || 'Recepção', currentUser?.id);
-    await carregarDados();
+    try {
+      await rechamarSenha(senhaId, guicheAtual, currentUser?.name || 'Recepção', currentUser?.id, unidadeId);
+      await carregarDados();
+    } catch (err: any) {
+      mostrarErro(err?.message || 'Falha ao rechamar senha.');
+    }
   };
 
   // Ação: Iniciar
   const handleIniciar = async (senhaId: string) => {
-    await iniciarAtendimento(senhaId, currentUser?.name || 'Recepção', currentUser?.id);
-    await carregarDados();
+    try {
+      await iniciarAtendimento(senhaId, currentUser?.name || 'Recepção', currentUser?.id, unidadeId);
+      await carregarDados();
+    } catch (err: any) {
+      mostrarErro(err?.message || 'Falha ao iniciar atendimento.');
+    }
   };
 
   // Ação: Concluir
   const handleConcluir = async (senhaId: string) => {
-    await concluirAtendimento(senhaId, currentUser?.name || 'Recepção', currentUser?.id);
-    await carregarDados();
+    try {
+      await concluirAtendimento(senhaId, currentUser?.name || 'Recepção', currentUser?.id, unidadeId);
+      await carregarDados();
+    } catch (err: any) {
+      mostrarErro(err?.message || 'Falha ao concluir atendimento.');
+    }
   };
 
-  // Ação: Não Compareceu
+  // Ação: Não Compareceu (confirmação integrada inline na interface)
   const handleNaoCompareceu = async (senhaId: string) => {
-    if (confirm('Confirmar ausência do cidadão após as tentativas de chamada?')) {
-      await registrarNaoCompareceu(senhaId, currentUser?.name || 'Recepção', currentUser?.id);
+    try {
+      await registrarNaoCompareceu(senhaId, currentUser?.name || 'Recepção', currentUser?.id, unidadeId);
+      setAusenteConfirmId(null);
       await carregarDados();
+    } catch (err: any) {
+      mostrarErro(err?.message || 'Falha ao registrar ausência.');
     }
   };
 
   // Ação: Cancelar Senha
   const handleConfirmarCancelamento = async () => {
     if (!modalCancelarId || !motivoCancelamento.trim()) return;
-    await cancelarSenha(modalCancelarId, motivoCancelamento.trim(), currentUser?.name || 'Recepção', currentUser?.id);
-    setModalCancelarId(null);
-    setMotivoCancelamento('');
-    await carregarDados();
+    try {
+      await cancelarSenha(
+        modalCancelarId,
+        motivoCancelamento.trim(),
+        currentUser?.name || 'Recepção',
+        currentUser?.id,
+        unidadeId
+      );
+      setModalCancelarId(null);
+      setMotivoCancelamento('');
+      mostrarSucesso('Senha cancelada com justificativa registrada.');
+      await carregarDados();
+    } catch (err: any) {
+      mostrarErro(err?.message || 'Falha ao cancelar senha.');
+    }
   };
 
-  // Ação: Solicitar Avaliação Imediata (UPA)
+  // Ação: Solicitar Avaliação Imediata (Encaminhamento Assistencial Presencial sem senha comum)
   const handleSolicitarUrgenciaUPA = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!upaUrgenciaNome.trim() || !upaUrgenciaQueixa.trim()) return;
+    const nomeFinal = (upaUrgenciaNome || pacienteSelecionado?.name || '').trim();
+    if (!nomeFinal || !upaUrgenciaQueixa.trim()) return;
 
-    await solicitarAvaliacaoImediataUPA(
-      upaUrgenciaNome.trim(),
-      upaUrgenciaQueixa.trim(),
-      currentUser?.name || 'Recepção UPA',
-      currentUser?.id
-    );
+    setIsGerando(true);
+    try {
+      await solicitarAvaliacaoImediataUPA(
+        nomeFinal,
+        upaUrgenciaQueixa.trim(),
+        currentUser?.name || `Recepção ${unidade.sigla}`,
+        currentUser?.id,
+        undefined,
+        undefined,
+        unidadeId
+      );
 
-    setUpaUrgenciaNome('');
-    setUpaUrgenciaQueixa('');
-    setModalUpaUrgenciaAberto(false);
-    setFeedbackSuccess('Alerta emitido à equipe de saúde! Encaminhe o cidadão imediatamente para acolhimento presencial.');
-    setTimeout(() => setFeedbackSuccess(null), 6000);
+      setUpaUrgenciaNome('');
+      setUpaUrgenciaQueixa('');
+      setModalUpaUrgenciaAberto(false);
+      mostrarSucesso('Solicitação de Avaliação Imediata registrada e enviada à equipe assistencial! Encaminhe o cidadão presencialmente sem depender da fila.', 6000);
+    } catch (err: any) {
+      mostrarErro(err?.message || 'Erro ao registrar alerta de avaliação imediata.');
+    } finally {
+      setIsGerando(false);
+    }
   };
 
-  // Senhas filtradas
-  const senhasFiltradas = useMemo(() => {
-    return senhas.filter(s => {
-      if (filtroStatus !== 'TODOS' && s.status !== filtroStatus) return false;
-      if (searchTerm.trim()) {
-        const termo = searchTerm.toLowerCase();
-        const matchNome = s.cidadao_nome.toLowerCase().includes(termo);
-        const matchNum = s.numero.toLowerCase().includes(termo);
-        const matchPrio = (s.prioridade_categoria || '').toLowerCase().includes(termo);
-        return matchNome || matchNum || matchPrio;
-      }
-      return true;
-    });
-  }, [senhas, filtroStatus, searchTerm]);
+  // Senhas ativas em chamada ou atendimento na unidade (para controles inline na direita)
+  const senhasAtivas = useMemo(() => {
+    return senhas
+      .filter(s => s.unidade_id === unidadeId && (s.status === 'CHAMANDO' || s.status === 'EM_ATENDIMENTO'))
+      .sort((a, b) => new Date(b.last_called_at || b.created_at).getTime() - new Date(a.last_called_at || a.created_at).getTime());
+  }, [senhas, unidadeId]);
+
+  const regraAlternanciaLabel = useMemo(() => {
+    if (config?.regra_alternancia === '1_P_1_N') return '1 PRIORITÁRIO : 1 NORMAL';
+    if (config?.regra_alternancia === '3_P_1_N') return '3 PRIORITÁRIOS : 1 NORMAL';
+    if (config?.regra_alternancia === 'APENAS_PRIORIDADE') return 'APENAS PRIORIDADE LEGAL';
+    return '2 PRIORITÁRIOS : 1 NORMAL';
+  }, [config?.regra_alternancia]);
 
   // Contadores rápidos
   const contadores = useMemo(() => {
@@ -405,518 +396,88 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
         </div>
       </header>
 
-      {/* CONTEÚDO PRINCIPAL (100% DO VIEWPORT SEM CORTES) */}
-      <main className="w-full px-3 sm:px-4 lg:px-6 py-2 sm:py-2.5 flex-1 flex flex-col gap-2 overflow-hidden min-h-0">
-        {/* BANNER INFORMATIVO ESPECÍFICO DA UPA COMPACTO */}
-        {unidade.tipo === 'UPA' && (
-          <div className="bg-amber-50 border border-amber-200/90 rounded-xl p-1.5 px-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 shadow-2xs shrink-0 text-xs">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="p-1 rounded-lg bg-amber-500 text-white shrink-0">
-                <AlertTriangle className="w-3 h-3" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[11px] text-amber-950 font-bold leading-tight">
-                  <span className="font-black uppercase mr-1">Recepção Administrativa da UPA:</span>
-                  As senhas organizam o atendimento no guichê. Casos graves têm acolhimento presencial imediato.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setModalUpaUrgenciaAberto(true)}
-              className="px-2.5 py-1 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-xs active:scale-95 transition-all shrink-0 cursor-pointer flex items-center gap-1"
-            >
-              <ShieldAlert className="w-3 h-3" />
-              Solicitar Avaliação Imediata
-            </button>
-          </div>
-        )}
-
-        {/* FEEDBACK DE AÇÃO */}
+      {/* CONTEÚDO PRINCIPAL (2 ÁREAS PRINCIPAIS + HISTÓRICO VIA MODAL) */}
+      <main className="w-full px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex-1 flex flex-col gap-3 overflow-y-auto min-h-0">
+        {/* FEEDBACKS DE AÇÃO / ERRO (SEM DIÁLOGOS NATIVOS) */}
         {feedbackSuccess && (
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs shrink-0 animate-in fade-in duration-200">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs shrink-0 animate-in fade-in duration-200">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{feedbackSuccess}</span>
           </div>
         )}
 
-        {/* GRID SUPERIOR: CADASTRO DE SENHA + AÇÃO PRINCIPAL CHAMAR (COMPACTO) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 sm:gap-3 items-stretch shrink-0">
-          {/* CARD DE CADASTRO E EMISSÃO DE SENHA (COL 7) */}
-          <section className="lg:col-span-7 bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-3.5 shadow-xs flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <PlusCircle className="w-3.5 h-3.5 text-emerald-600" />
-                  Emitir Nova Senha
-                </h2>
-                <span className="text-[10px] font-bold text-slate-400">
-                  Data: {getDataOperacionalHoje()}
-                </span>
-              </div>
-
-              <form onSubmit={handleGerarSenha} className="space-y-2">
-                {/* Vínculo Obrigatório de Paciente */}
-                {!pacienteSelecionado ? (
-                  <div className="p-2 sm:p-2.5 rounded-xl border border-dashed border-emerald-300 bg-emerald-50/50 flex flex-col sm:flex-row items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black shadow-xs shrink-0">
-                        <UserIcon className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="min-w-0">
-                        <span className="text-[11px] font-black uppercase text-slate-900 block leading-tight">
-                          Paciente Obrigatório
-                        </span>
-                        <span className="text-[10px] text-slate-500 leading-none">
-                          Vincule um munícipe para gerar a senha.
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 w-full sm:w-auto shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setBuscaPacienteTermo('');
-                          setPacientesEncontrados([]);
-                          setModalLocalizarAberto(true);
-                        }}
-                        className="flex-1 sm:flex-none px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-xs flex items-center justify-center gap-1 cursor-pointer"
-                      >
-                        <Search className="w-3 h-3" />
-                        Localizar Paciente
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setModalNovoPacienteAberto(true)}
-                        className="px-2.5 py-1.5 bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100/60 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer"
-                      >
-                        <PlusCircle className="w-3 h-3 text-emerald-600" />
-                        Novo
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-2 sm:p-2.5 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200/90 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black shadow-xs shrink-0">
-                        <UserCheck className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-black uppercase text-slate-900 truncate">
-                            {pacienteSelecionado.name}
-                          </span>
-                          {pacienteSelecionado.nickname && (
-                            <span className="text-[8px] text-emerald-700 font-bold px-1 rounded bg-emerald-100 shrink-0">
-                              "{pacienteSelecionado.nickname}"
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-1.5 text-[9px] text-slate-600 font-medium">
-                          <span>CPF: {mascararCpf(pacienteSelecionado.cpf)}</span>
-                          <span>•</span>
-                          <span>SUS: {mascararSus(pacienteSelecionado.sus_number)}</span>
-                          {calcularIdadeAnos(pacienteSelecionado.birth_date) !== null && (
-                            <>
-                              <span>•</span>
-                              <strong className="text-emerald-800 font-black">
-                                {calcularIdadeAnos(pacienteSelecionado.birth_date)} anos
-                              </strong>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPacienteSelecionado(null);
-                        setBuscaPacienteTermo('');
-                        setPacientesEncontrados([]);
-                        setModalLocalizarAberto(true);
-                      }}
-                      className="px-2 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-[9px] font-black text-slate-700 uppercase tracking-wider shrink-0 cursor-pointer self-end sm:self-center"
-                    >
-                      Trocar
-                    </button>
-                  </div>
-                )}
-
-                {/* Seleção de Prioridade Legal */}
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNovaPrioridade('NORMAL');
-                      setNovaCategoria('Geral');
-                    }}
-                    className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
-                      novaPrioridade === 'NORMAL'
-                        ? 'border-sky-500 bg-sky-50/80 ring-2 ring-sky-500/20'
-                        : 'border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-[10px] font-black text-slate-900 uppercase">Normal</span>
-                      <span className="text-[9px] px-1 py-0.2 rounded font-mono font-bold bg-sky-100 text-sky-800">N000</span>
-                    </div>
-                    <p className="text-[9px] text-slate-500 leading-tight">Fila geral.</p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNovaPrioridade('PRIORITARIO');
-                      setNovaCategoria('Idoso (60 a 79 anos)');
-                    }}
-                    className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
-                      novaPrioridade === 'PRIORITARIO'
-                        ? 'border-emerald-500 bg-emerald-50/80 ring-2 ring-emerald-500/20'
-                        : 'border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-[10px] font-black text-slate-900 uppercase">Prioritário</span>
-                      <span className="text-[9px] px-1 py-0.2 rounded font-mono font-bold bg-emerald-100 text-emerald-800">P000</span>
-                    </div>
-                    <p className="text-[9px] text-slate-500 leading-tight">Idoso 60-79, PCD.</p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNovaPrioridade('ESPECIAL');
-                      setNovaCategoria('Idoso 80+ (Prioridade Especial)');
-                    }}
-                    className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
-                      novaPrioridade === 'ESPECIAL'
-                        ? 'border-amber-500 bg-amber-50/80 ring-2 ring-amber-500/20'
-                        : 'border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-[10px] font-black text-slate-900 uppercase">Especial</span>
-                      <span className="text-[9px] px-1 py-0.2 rounded font-mono font-bold bg-amber-100 text-amber-800">E000</span>
-                    </div>
-                    <p className="text-[9px] text-slate-500 leading-tight">Idoso 80+.</p>
-                  </button>
-                </div>
-
-                {/* Subcategoria legal caso prioritário ou especial */}
-                {novaPrioridade !== 'NORMAL' && (
-                  <div>
-                    <select
-                      value={novaCategoria}
-                      onChange={(e) => setNovaCategoria(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:border-emerald-500 rounded-xl px-2.5 py-1 text-[10px] font-bold text-slate-800"
-                    >
-                      {novaPrioridade === 'ESPECIAL' ? (
-                        <>
-                          <option value="Idoso 80+ (Prioridade Especial)">Idoso 80+ anos (Lei 13.466/17)</option>
-                          <option value="PCD com Acompanhante Necessário">PCD com Necessidade Especial Grave</option>
-                          <option value="Outra Prioridade Especial">Outra Prioridade Especial</option>
-                        </>
-                      ) : (
-                        <>
-                          <option value="Idoso (60 a 79 anos)">Idoso (60 a 79 anos)</option>
-                          <option value="Pessoa com Deficiência (PCD)">Pessoa com Deficiência (PCD)</option>
-                          <option value="Pessoa com TEA (Autismo)">Pessoa com Transtorno do Espectro Autista (TEA)</option>
-                          <option value="Gestante">Gestante</option>
-                          <option value="Lactante">Lactante</option>
-                          <option value="Criança de Colo">Pessoa com Criança de Colo</option>
-                          <option value="Outra Prioridade Legal">Outra Prioridade Assegurada</option>
-                        </>
-                      )}
-                    </select>
-                  </div>
-                )}
-
-                <div className="pt-0.5">
-                  <button
-                    type="submit"
-                    disabled={isGerando || !pacienteSelecionado}
-                    className="w-full py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl font-black text-xs uppercase tracking-wider shadow-sm active:scale-95 transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
-                  >
-                    <PlusCircle className="w-3.5 h-3.5" />
-                    {isGerando
-                      ? 'Registrando Senha...'
-                      : pacienteSelecionado
-                      ? `Gerar Senha para ${pacienteSelecionado.name.split(' ')[0]} e Inserir na Fila`
-                      : 'Localize ou Cadastre um Paciente para Emitir'}
-                  </button>
-                </div>
-              </form>
+        {feedbackError && (
+          <div className="bg-rose-50 border border-rose-200 text-rose-800 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center justify-between gap-2 shadow-xs shrink-0 animate-in fade-in duration-200">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{feedbackError}</span>
             </div>
-          </section>
-
-          {/* CARD DE CHAMADA DO PRÓXIMO + RESUMO RÁPIDO (COL 5) */}
-          <section className="lg:col-span-5 bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-2xl p-3 sm:p-3.5 shadow-xl flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between pb-2 border-b border-white/10 mb-2">
-                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                  <Bell className="w-3 h-3" />
-                  Chamada Automática
-                </span>
-                <span className="text-[9px] px-2 py-0.5 rounded-full bg-white/10 text-slate-300 font-bold">
-                  {contadores.aguardando} na espera
-                </span>
-              </div>
-
-              <div className="text-center py-2">
-                <div className="inline-block px-2.5 py-0.5 rounded-lg bg-white/10 text-emerald-300 font-extrabold text-[10px] uppercase tracking-wider mb-2">
-                  {config?.regra_alternancia === '1_P_1_N' ? '1 Prioritário : 1 Normal' :
-                   config?.regra_alternancia === '3_P_1_N' ? '3 Prioritários : 1 Normal' :
-                   '2 Prioritários : 1 Normal'}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleChamarProximo}
-                  disabled={contadores.aguardando === 0}
-                  className="w-full py-2.5 sm:py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-black text-sm uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/25 active:scale-95 transition-all disabled:opacity-40 disabled:scale-100 cursor-pointer flex items-center justify-center gap-1.5"
-                >
-                  <Bell className="w-4 h-4 animate-bounce" />
-                  Chamar Próximo Cidadão
-                </button>
-              </div>
-            </div>
-
-            {/* Painel de Contadores Rápidos */}
-            <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-white/10 text-center">
-              <div className="p-1.5 rounded-lg bg-white/5">
-                <div className="text-base font-black text-emerald-400 font-mono leading-tight">{contadores.aguardando}</div>
-                <div className="text-[8px] font-bold text-slate-400 uppercase">Espera</div>
-              </div>
-              <div className="p-1.5 rounded-lg bg-white/5">
-                <div className="text-base font-black text-sky-400 font-mono leading-tight">{contadores.chamando}</div>
-                <div className="text-[8px] font-bold text-slate-400 uppercase">Chamando</div>
-              </div>
-              <div className="p-1.5 rounded-lg bg-white/5">
-                <div className="text-base font-black text-amber-400 font-mono leading-tight">{contadores.emAtendimento}</div>
-                <div className="text-[8px] font-bold text-slate-400 uppercase">Em Atend.</div>
-              </div>
-              <div className="p-1.5 rounded-lg bg-white/5">
-                <div className="text-base font-black text-purple-400 font-mono leading-tight">{contadores.concluidos}</div>
-                <div className="text-[8px] font-bold text-slate-400 uppercase">Concluídos</div>
-              </div>
-            </div>
-          </section>
-        </div>
-
-        {/* FILA DE ATENDIMENTO DA UNIDADE (EXPANSÃO TOTAL E SCROLL INTERNO) */}
-        <section className="bg-white rounded-2xl border border-slate-200/80 p-2.5 sm:p-3 shadow-xs flex flex-col gap-2 flex-1 min-h-0 overflow-hidden">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shrink-0">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 tracking-tight">
-                  Fila de Atendimento do Dia
-                </h3>
-                <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-                  {senhasFiltradas.length} {senhasFiltradas.length === 1 ? 'registro' : 'registros'}
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-500">
-                Acompanhamento em tempo real das senhas emitidas, tempos de espera e ações de chamada.
-              </p>
-            </div>
-
-            {/* Filtros e Busca */}
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <div className="relative flex-1 sm:w-56">
-                <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Buscar senha ou cidadão..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-7 pr-2.5 py-1 text-xs font-bold text-slate-900 focus:bg-white focus:border-emerald-500"
-                />
-              </div>
-
-              <select
-                value={filtroStatus}
-                onChange={(e) => setFiltroStatus(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-700"
-              >
-                <option value="TODOS">Todos os Status</option>
-                <option value="AGUARDANDO">Aguardando</option>
-                <option value="CHAMANDO">Chamando</option>
-                <option value="EM_ATENDIMENTO">Em Atendimento</option>
-                <option value="CONCLUIDO">Concluído</option>
-                <option value="NAO_COMPARECEU">Não Compareceu</option>
-                <option value="CANCELADO">Cancelado</option>
-              </select>
-            </div>
+            <button
+              type="button"
+              onClick={() => setFeedbackError(null)}
+              className="text-rose-500 hover:text-rose-800 text-[11px] font-black cursor-pointer"
+            >
+              Fechar
+            </button>
           </div>
+        )}
 
-          {/* TABELA DE SENHAS COM SCROLL VERTICAL DEDICADO */}
-          <div className="overflow-x-auto overflow-y-auto border border-slate-200/70 rounded-xl flex-1 min-h-0 custom-scrollbar">
-            <table className="w-full text-left border-collapse">
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-slate-100/90 backdrop-blur-xs border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-600">
-                  <th className="py-2 px-3">Senha</th>
-                  <th className="py-2 px-3">Cidadão</th>
-                  <th className="py-2 px-3">Prioridade</th>
-                  <th className="py-2 px-3">Emissão</th>
-                  <th className="py-2 px-3">Espera</th>
-                  <th className="py-2 px-3">Status</th>
-                  <th className="py-2 px-3 text-right">Ações Operacionais</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-xs">
-                {senhasFiltradas.length > 0 ? (
-                  senhasFiltradas.map((item) => {
-                    const horaEmissao = new Date(item.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                    // Tempo de espera calculado em minutos
-                    const esperaMinutos = Math.max(0, Math.floor((Date.now() - new Date(item.created_at).getTime()) / 60000));
-
-                    return (
-                      <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                        {/* Número */}
-                        <td className="py-1.5 sm:py-2 px-3">
-                          <span className="font-mono font-black text-xs text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md">
-                            {item.numero}
-                          </span>
-                        </td>
-
-                        {/* Nome */}
-                        <td className="py-1.5 sm:py-2 px-3 font-bold text-slate-800">
-                          {item.cidadao_nome}
-                        </td>
-
-                        {/* Prioridade */}
-                        <td className="py-1.5 sm:py-2 px-3">
-                          <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase ${
-                            item.prioridade_tipo === 'ESPECIAL' ? 'bg-amber-100 text-amber-900 border border-amber-300' :
-                            item.prioridade_tipo === 'PRIORITARIO' ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' :
-                            'bg-slate-100 text-slate-700'
-                          }`}>
-                            {item.prioridade_categoria || item.prioridade_tipo}
-                          </span>
-                        </td>
-
-                        {/* Horário */}
-                        <td className="py-1.5 sm:py-2 px-3 font-mono text-slate-600 font-semibold text-[11px]">
-                          {horaEmissao}
-                        </td>
-
-                        {/* Tempo de espera */}
-                        <td className="py-1.5 sm:py-2 px-3 font-semibold text-xs">
-                          {item.wait_time_first_call_seconds ? (
-                            <span className="text-slate-600">
-                              {formatarDuracaoSegundos(item.wait_time_first_call_seconds)}
-                            </span>
-                          ) : item.status === 'AGUARDANDO' ? (
-                            <span className={`font-bold ${esperaMinutos > 30 ? 'text-rose-600' : 'text-slate-700'}`}>
-                              {esperaMinutos} min
-                            </span>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </td>
-
-                        {/* Status */}
-                        <td className="py-1.5 sm:py-2 px-3">
-                          <span className={`inline-block px-2 py-0.5 rounded-lg text-[10px] font-black uppercase ${
-                            item.status === 'CHAMANDO' ? 'bg-sky-100 text-sky-800 animate-pulse' :
-                            item.status === 'EM_ATENDIMENTO' ? 'bg-amber-100 text-amber-900' :
-                            item.status === 'CONCLUIDO' ? 'bg-emerald-100 text-emerald-900' :
-                            item.status === 'NAO_COMPARECEU' ? 'bg-slate-200 text-slate-700' :
-                            item.status === 'CANCELADO' ? 'bg-rose-100 text-rose-800' :
-                            'bg-slate-100 text-slate-800'
-                          }`}>
-                            {item.status.replace('_', ' ')}
-                          </span>
-                        </td>
-
-                        {/* Ações */}
-                        <td className="py-1.5 sm:py-2 px-3 text-right">
-                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                            {/* Rechamar */}
-                            {(item.status === 'CHAMANDO' || item.status === 'EM_ATENDIMENTO') && (
-                              <button
-                                type="button"
-                                onClick={() => handleRechamar(item.id)}
-                                className="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1"
-                                title="Rechamar na TV"
-                              >
-                                <RotateCcw className="w-3 h-3" />
-                                Rechamar ({item.call_count})
-                              </button>
-                            )}
-
-                            {/* Iniciar Atendimento */}
-                            {item.status === 'CHAMANDO' && (
-                              <button
-                                type="button"
-                                onClick={() => handleIniciar(item.id)}
-                                className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1"
-                                title="Iniciar Atendimento Efetivo"
-                              >
-                                <Play className="w-3 h-3" />
-                                Iniciar
-                              </button>
-                            )}
-
-                            {/* Concluir */}
-                            {(item.status === 'CHAMANDO' || item.status === 'EM_ATENDIMENTO') && (
-                              <button
-                                type="button"
-                                onClick={() => handleConcluir(item.id)}
-                                className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1"
-                                title="Concluir Atendimento"
-                              >
-                                <CheckCircle2 className="w-3 h-3" />
-                                Concluir
-                              </button>
-                            )}
-
-                            {/* Não compareceu */}
-                            {item.status === 'CHAMANDO' && (
-                              <button
-                                type="button"
-                                onClick={() => handleNaoCompareceu(item.id)}
-                                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
-                                title="Registrar que o cidadão não compareceu"
-                              >
-                                Ausente
-                              </button>
-                            )}
-
-                            {/* Cancelar com justificativa */}
-                            {item.status === 'AGUARDANDO' && (
-                              <button
-                                type="button"
-                                onClick={() => setModalCancelarId(item.id)}
-                                className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
-                                title="Cancelar Senha"
-                              >
-                                Cancelar
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={7} className="py-8 text-center text-xs text-slate-400 font-semibold">
-                      Nenhuma senha encontrada com os filtros selecionados.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+        {/* LAYOUT PRINCIPAL EM DUAS ÁREAS */}
+        {isLoading ? (
+          <div className="flex-1 flex items-center justify-center py-12 text-xs font-bold text-slate-400">
+            Carregando painel operacional da unidade...
           </div>
-        </section>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch flex-1 min-h-0">
+            {/* ÁREA ESQUERDA: IDENTIFICAÇÃO E EMISSÃO DE SENHA */}
+            <section className="lg:col-span-7 flex flex-col min-h-0">
+              <AutoSenhaEmissaoCard
+                unidadeTipo={unidade.tipo}
+                pacienteSelecionado={pacienteSelecionado}
+                pacienteLocalizadoMeta={pacienteLocalizadoMeta}
+                cidadaoNome={novoNome}
+                classificacao={classificacaoSelecionada}
+                isSubmitting={isGerando}
+                onAbrirLocalizarCpf={() => setModalNovoPacienteAberto(true)}
+                onLimparPaciente={() => {
+                  setPacienteSelecionado(null);
+                  setPacienteLocalizadoMeta(null);
+                  setNovoNome('');
+                }}
+                onClassificacaoChange={setClassificacaoSelecionada}
+                onSubmitAcaoPrincipal={handleAcaoPrincipal}
+              />
+            </section>
+
+            {/* ÁREA DIREITA: CHAMADA AUTOMÁTICA + HISTÓRICO DA FILA + CONFIGURAÇÕES */}
+            <section className="lg:col-span-5 flex flex-col min-h-0">
+              <AutoSenhaChamadaCard
+                regraAlternanciaLabel={regraAlternanciaLabel}
+                isSubmitting={isGerando}
+                contadores={contadores}
+                senhasAtivas={senhasAtivas}
+                ausenteConfirmId={ausenteConfirmId}
+                onChamarProximo={handleChamarProximo}
+                onRechamar={s => handleRechamar(s.id)}
+                onIniciar={s => handleIniciar(s.id)}
+                onConcluir={s => handleConcluir(s.id)}
+                onSolicitarConfirmAusente={setAusenteConfirmId}
+                onConfirmarAusente={s => handleNaoCompareceu(s.id)}
+                onAbrirModalCancelar={s => setModalCancelarId(s.id)}
+                onAbrirHistoricoFila={() => setModalHistoricoFilaAberto(true)}
+                onAbrirConfiguracoes={() => {
+                  setConfirmarZeragemInline(false);
+                  setModalConfigAberto(true);
+                }}
+              />
+            </section>
+          </div>
+        )}
       </main>
 
       {/* MODAL: CANCELAR SENHA COM JUSTIFICATIVA */}
       {modalCancelarId && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[10010] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
             <h3 className="text-base font-black text-slate-900 mb-2">Cancelar Senha</h3>
             <p className="text-xs text-slate-500 mb-4">
@@ -954,21 +515,43 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
         </div>
       )}
 
-      {/* MODAL: SOLICITAR AVALIAÇÃO IMEDIATA (UPA) */}
+      {/* MODAL: SOLICITAR AVALIAÇÃO IMEDIATA (ENCAMINHAMENTO ASSISTENCIAL) */}
       {modalUpaUrgenciaAberto && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-rose-200 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2.5 rounded-2xl bg-rose-600 text-white">
+        <div className="fixed inset-0 z-[10010] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-rose-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 mb-3.5">
+              <div className="p-2.5 rounded-2xl bg-red-600 text-white shrink-0 shadow-sm shadow-red-600/20">
                 <ShieldAlert className="w-5 h-5" />
               </div>
-              <div>
-                <h3 className="text-base font-black text-slate-900">Solicitar Avaliação Imediata (UPA)</h3>
-                <p className="text-xs text-slate-500">Comunicação imediata à equipe de enfermagem / acolhimento clínico.</p>
+              <div className="min-w-0">
+                <h3 className="text-base font-black text-slate-900 leading-tight">
+                  Solicitar Avaliação Imediata
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {unidade.sigla} • Notificação imediata à equipe assistencial
+                </p>
               </div>
             </div>
 
-            <form onSubmit={handleSolicitarUrgenciaUPA} className="space-y-3.5">
+            <form onSubmit={handleSolicitarUrgenciaUPA} className="space-y-3">
+              {pacienteSelecionado && (
+                <div className="p-2.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-black uppercase text-emerald-700 block">
+                      Paciente Selecionado
+                    </span>
+                    <strong className="text-slate-900 uppercase truncate block">
+                      {pacienteSelecionado.name}
+                    </strong>
+                  </div>
+                  {pacienteSelecionado.cpf && (
+                    <span className="text-[11px] font-mono font-bold text-emerald-800 shrink-0">
+                      {formatCpf(pacienteSelecionado.cpf)}
+                    </span>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Nome do Cidadão *</label>
                 <input
@@ -976,28 +559,28 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
                   required
                   value={upaUrgenciaNome}
                   onChange={(e) => setUpaUrgenciaNome(e.target.value)}
-                  placeholder="Nome do paciente presente na recepção"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold"
+                  placeholder="Nome do cidadão presente na recepção"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:bg-white focus:border-red-500 outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Motivo / Queixa Principal Aparente *</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Motivo / Situação Observada *</label>
                 <textarea
                   required
                   rows={3}
                   value={upaUrgenciaQueixa}
                   onChange={(e) => setUpaUrgenciaQueixa(e.target.value)}
-                  placeholder="Ex: Dor torácica intensa, falta de ar severa, desmaio na recepção..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold"
+                  placeholder="Descreva brevemente o motivo que exige avaliação imediata..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:bg-white focus:border-red-500 outline-none"
                 />
               </div>
 
-              <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200/80 text-[11px] text-rose-800 font-medium">
-                <strong>Importante:</strong> Esta comunicação digital não substitui o encaminhamento presencial imediato do cidadão à sala de triagem / enfermagem da UPA.
+              <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200/80 text-[11px] text-rose-800 font-medium leading-relaxed">
+                <strong>Encaminhamento assistencial:</strong> Este registro aciona imediatamente a equipe presencial e não gera senha comum na fila nem classificação clínica de risco.
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="flex items-center justify-end gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => setModalUpaUrgenciaAberto(false)}
@@ -1007,9 +590,10 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 text-white text-xs font-black uppercase tracking-wider shadow-md shadow-rose-600/30 cursor-pointer"
+                  disabled={isGerando}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white text-xs font-black uppercase tracking-wider shadow-md shadow-rose-600/25 cursor-pointer disabled:opacity-60"
                 >
-                  Registrar e Notificar Equipe
+                  {isGerando ? 'Enviando...' : 'Confirmar Avaliação Imediata'}
                 </button>
               </div>
             </form>
@@ -1019,7 +603,7 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
 
       {/* MODAL: CONFIGURAÇÃO DE PRIORIDADES E ALTERNÂNCIA */}
       {modalConfigAberto && config && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[10010] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
             <h3 className="text-base font-black text-slate-900 mb-2">Configurar Prioridades — {unidade.nome}</h3>
             <p className="text-xs text-slate-500 mb-4">
@@ -1105,22 +689,43 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
                       Zera todas as senhas, chamadas e contadores para início limpo.
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (window.confirm('Atenção: Deseja realmente zerar todos os registros de senhas do AutoSenha para iniciar em produção?')) {
-                        await zerarTodosDadosAutoSenha();
-                        await carregarDados();
-                        setModalConfigAberto(false);
-                        setFeedbackSuccess('Todos os registros foram zerados com sucesso para produção!');
-                        setTimeout(() => setFeedbackSuccess(null), 5000);
-                      }
-                    }}
-                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-xs cursor-pointer shrink-0"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    Zerar Agora
-                  </button>
+                  {!confirmarZeragemInline ? (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmarZeragemInline(true)}
+                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-xs cursor-pointer shrink-0"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Reiniciar Fila Hoje
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmarZeragemInline(false)}
+                        className="px-2.5 py-1.5 rounded-lg bg-white border border-rose-200 text-rose-700 text-[10px] font-bold cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await zerarTodosDadosAutoSenha(unidadeId);
+                            await carregarDados();
+                            setConfirmarZeragemInline(false);
+                            setModalConfigAberto(false);
+                            mostrarSucesso(`Fila do dia da unidade ${unidade.sigla} reiniciada com sucesso!`, 5000);
+                          } catch (err: any) {
+                            mostrarErro(err?.message || 'Erro ao reiniciar a fila da unidade.');
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-rose-700 hover:bg-rose-800 text-white rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer"
+                      >
+                        Confirmar
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1150,168 +755,20 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
         </div>
       )}
 
-      {/* MODAL LOCALIZAR PACIENTE */}
-      {modalLocalizarAberto && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-5 sm:p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
-            {/* Cabeçalho */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
-                  <Search className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">
-                    Localizar Paciente
-                  </h3>
-                  <p className="text-[11px] text-slate-500">
-                    Pesquise por CPF, Cartão SUS ou Nome Completo.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setModalLocalizarAberto(false)}
-                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition-colors"
-              >
-                <XCircle className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Input de Busca */}
-            <div className="space-y-3 mb-4">
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  autoFocus
-                  value={buscaPacienteTermo}
-                  onChange={(e) => handleBuscarPacientes(e.target.value)}
-                  placeholder="Digite CPF (11 dígitos), Cartão SUS ou Nome..."
-                  className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 rounded-2xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-900 placeholder:text-slate-400 transition-all"
-                />
-              </div>
-
-              <div className="flex items-center justify-between text-[11px] text-slate-500 px-1">
-                <span>Correspondência exata para CPF/SUS e sequencial por nome.</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setModalLocalizarAberto(false);
-                    setModalNovoPacienteAberto(true);
-                  }}
-                  className="text-emerald-700 hover:text-emerald-900 font-black uppercase tracking-wider flex items-center gap-1 cursor-pointer"
-                >
-                  <PlusCircle className="w-3.5 h-3.5" />
-                  + Cadastrar Novo Paciente
-                </button>
-              </div>
-            </div>
-
-            {/* Lista de Resultados */}
-            <div className="flex-1 overflow-y-auto no-scrollbar space-y-2 min-h-[220px]">
-              {buscaPacienteLoading && (
-                <div className="py-12 text-center text-xs text-slate-400 font-bold">
-                  Buscando na base oficial de pacientes...
-                </div>
-              )}
-
-              {!buscaPacienteLoading && pacientesEncontrados.length > 0 && (
-                pacientesEncontrados.map((p) => {
-                  const idade = calcularIdadeAnos(p.birth_date);
-                  return (
-                    <div
-                      key={p.id}
-                      className="p-3 rounded-2xl border border-slate-200/90 hover:border-emerald-500/80 hover:bg-emerald-50/30 transition-all flex items-center justify-between gap-3"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <strong className="text-xs font-black text-slate-900 uppercase truncate">
-                            {p.name}
-                          </strong>
-                          {p.nickname && (
-                            <span className="text-[9px] text-slate-500 font-bold px-1.5 py-0.2 rounded bg-slate-100 truncate">
-                              "{p.nickname}"
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-500 mt-1">
-                          <span>CPF: {mascararCpf(p.cpf)}</span>
-                          <span>•</span>
-                          <span>SUS: {mascararSus(p.sus_number)}</span>
-                          {idade !== null && (
-                            <>
-                              <span>•</span>
-                              <span className="font-bold text-slate-700">{idade} anos</span>
-                              {idade >= 80 && (
-                                <span className="text-[9px] bg-amber-100 text-amber-800 font-black px-1.5 py-0.2 rounded">
-                                  80+ Especial
-                                </span>
-                              )}
-                              {idade >= 60 && idade < 80 && (
-                                <span className="text-[9px] bg-emerald-100 text-emerald-800 font-black px-1.5 py-0.2 rounded">
-                                  60+ Prioritário
-                                </span>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleSelecionarPaciente(p)}
-                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shrink-0 shadow-sm cursor-pointer"
-                      >
-                        Selecionar
-                      </button>
-                    </div>
-                  );
-                })
-              )}
-
-              {!buscaPacienteLoading && buscaPacienteTermo.trim() && pacientesEncontrados.length === 0 && (
-                <div className="py-10 text-center space-y-2">
-                  <p className="text-xs font-bold text-slate-600">
-                    Nenhum paciente localizado com o termo informado.
-                  </p>
-                  <p className="text-[11px] text-slate-400">
-                    Cadastre o cidadão no Cadastro Único sem sair da tela.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setModalLocalizarAberto(false);
-                      setModalNovoPacienteAberto(true);
-                    }}
-                    className="mt-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-emerald-700 cursor-pointer shadow-sm inline-flex items-center gap-1.5"
-                  >
-                    <PlusCircle className="w-4 h-4" />
-                    + Cadastrar Novo Paciente Agora
-                  </button>
-                </div>
-              )}
-
-              {!buscaPacienteLoading && !buscaPacienteTermo.trim() && (
-                <div className="py-12 text-center text-xs text-slate-400 font-medium">
-                  Digite para localizar pelo CPF, Cartão SUS ou início do nome.
-                </div>
-              )}
-            </div>
-
-            {/* Rodapé */}
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-end">
-              <button
-                type="button"
-                onClick={() => setModalLocalizarAberto(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* MODAL: HISTÓRICO DA FILA E FILA ATUAL */}
+      <HistoricoFilaModal
+        isOpen={modalHistoricoFilaAberto}
+        unidadeId={unidadeId}
+        unidadeNome={unidade.nome}
+        unidadeSigla={unidade.sigla}
+        senhasDia={senhas}
+        config={config}
+        onClose={() => setModalHistoricoFilaAberto(false)}
+        onCancelarSenha={(s) => setModalCancelarId(s.id)}
+        onRechamar={(s) => handleRechamar(s.id)}
+        onIniciar={(s) => handleIniciar(s.id)}
+        onConcluir={(s) => handleConcluir(s.id)}
+      />
 
       {/* MODAL DE LOCALIZAÇÃO POR CPF E CADASTRO INTEGRADO DE PACIENTE */}
       {modalNovoPacienteAberto && (
@@ -1319,22 +776,10 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
           isOpen={modalNovoPacienteAberto}
           onClose={() => setModalNovoPacienteAberto(false)}
           onSuccess={(pacienteVinculado, meta) => {
-            setPacienteSelecionado(pacienteVinculado);
+            handleSelecionarPaciente(pacienteVinculado, { isNew: Boolean(meta?.isNew) });
             setModalNovoPacienteAberto(false);
-            setModalLocalizarAberto(false);
-            setBuscaPacienteTermo('');
-            setPacientesEncontrados([]);
-            const idade = calcularIdadeAnos(pacienteVinculado.birth_date);
-            if (idade !== null && idade >= 80) {
-              setNovaPrioridade('ESPECIAL');
-              setNovaCategoria('Idoso 80+ (Prioridade Especial)');
-            } else if (idade !== null && idade >= 60) {
-              setNovaPrioridade('PRIORITARIO');
-              setNovaCategoria('Idoso (60 a 79 anos)');
-            }
             const acaoLabel = meta?.isNew ? 'cadastrado e selecionado' : 'localizado e selecionado';
-            setFeedbackSuccess(`Paciente ${pacienteVinculado.name} ${acaoLabel} com sucesso! Prossiga com a emissão da senha.`);
-            setTimeout(() => setFeedbackSuccess(null), 5000);
+            mostrarSucesso(`Paciente ${pacienteVinculado.name} ${acaoLabel} com sucesso! Prossiga com o atendimento.`, 5000);
           }}
         />
       )}
