@@ -1,7 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Clock, Maximize2, Minimize2, Volume2, VolumeX, Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
-import { AutoSenhaUnidadeId, AutoSenhaItem, AutoSenhaConfiguracao } from '../../types';
-import { AUTOSENHA_UNIDADES, getSenhas, getConfiguracao, formatarNomeParaTV, getDataOperacionalHoje } from '../../services/autoSenhaService';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  ArrowLeft,
+  Clock,
+  Maximize2,
+  Minimize2,
+  Volume2,
+  VolumeX,
+  Sparkles,
+  Radio,
+  ShieldCheck
+} from 'lucide-react';
+import {
+  AutoSenhaUnidadeId,
+  AutoSenhaTVItem,
+  AutoSenhaTVConfig
+} from '../../types';
+import {
+  AUTOSENHA_UNIDADES,
+  getPainelSenhaTVPublico,
+  sanitizarSenhaParaTV,
+  montarTextoChamadaVozTV,
+  getDataOperacionalHoje
+} from '../../services/autoSenhaService';
 import { supabase } from '../../services/supabaseClient';
 
 interface SenhaTVScreenProps {
@@ -9,19 +29,35 @@ interface SenhaTVScreenProps {
   onBack?: () => void;
 }
 
+const gerarChaveChamada = (item: AutoSenhaTVItem | null): string => {
+  if (!item) return '';
+  return `${item.id}:${item.call_count || 0}:${item.last_called_at || item.first_called_at || ''}`;
+};
+
 export const SenhaTVScreen: React.FC<SenhaTVScreenProps> = ({ unidadeId, onBack }) => {
   const unidade = AUTOSENHA_UNIDADES.find(u => u.id === unidadeId)!;
-  const [config, setConfig] = useState<AutoSenhaConfiguracao | null>(null);
-  const [senhas, setSenhas] = useState<AutoSenhaItem[]>([]);
-  const [senhaAtual, setSenhaAtual] = useState<AutoSenhaItem | null>(null);
-  const [chamadasRecentes, setChamadasRecentes] = useState<AutoSenhaItem[]>([]);
-  const [proximasSenhas, setProximasSenhas] = useState<AutoSenhaItem[]>([]);
+  const [config, setConfig] = useState<AutoSenhaTVConfig | null>(null);
+  const [senhaAtual, setSenhaAtual] = useState<AutoSenhaTVItem | null>(null);
+  const [chamadasRecentes, setChamadasRecentes] = useState<AutoSenhaTVItem[]>([]);
+  const [proximasSenhas, setProximasSenhas] = useState<AutoSenhaTVItem[]>([]);
+  const [totalAguardando, setTotalAguardando] = useState<number>(0);
   const [horaAtual, setHoraAtual] = useState('');
   const [dataAtual, setDataAtual] = useState('');
   const [somAtivo, setSomAtivo] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [animandoChamada, setAnimandoChamada] = useState(false);
   const [conectadoRealtime, setConectadoRealtime] = useState(true);
+  const [erroCarga, setErroCarga] = useState<string | null>(null);
+
+  const somAtivoRef = useRef(false);
+  const inicializadoRef = useRef(false);
+  const ultimaChamadaAnunciadaRef = useRef<string>('');
+  const animacaoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const vozTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    somAtivoRef.current = somAtivo;
+  }, [somAtivo]);
 
   // Relógio em tempo real
   useEffect(() => {
@@ -39,22 +75,20 @@ export const SenhaTVScreen: React.FC<SenhaTVScreenProps> = ({ unidadeId, onBack 
     return () => clearInterval(interval);
   }, []);
 
-  // Tocar bip sonoro suave
-  const tocarAvisoSonoro = () => {
-    if (!somAtivo) return;
+  // Tocar bip sonoro suave via Web Audio API
+  const tocarBipSuave = useCallback(() => {
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
 
-      // Tom duplo agradável de aeroporto / chamada pública
       const playTone = (freq: number, start: number, duration: number) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = 'sine';
         osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
         gain.gain.setValueAtTime(0, ctx.currentTime + start);
-        gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + start + 0.05);
+        gain.gain.linearRampToValueAtTime(0.28, ctx.currentTime + start + 0.04);
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
         osc.connect(gain);
         gain.connect(ctx.destination);
@@ -62,51 +96,91 @@ export const SenhaTVScreen: React.FC<SenhaTVScreenProps> = ({ unidadeId, onBack 
         osc.stop(ctx.currentTime + start + duration);
       };
 
-      playTone(587.33, 0, 0.4); // D5
-      playTone(880, 0.25, 0.6); // A5
-    } catch (e) {
-      console.warn('[SenhaTV] Erro de áudio:', e);
+      playTone(587.33, 0, 0.35); // D5
+      playTone(880, 0.22, 0.5);   // A5
+    } catch {
+      console.warn('[SenhaTV] Falha ao reproduzir alerta sonoro');
     }
-  };
+  }, []);
 
-  // Carregar dados da unidade
-  const carregarDados = async () => {
-    const dataHoje = getDataOperacionalHoje();
-    const [cfg, listaSenhas] = await Promise.all([
-      getConfiguracao(unidadeId),
-      getSenhas(unidadeId, dataHoje)
-    ]);
+  // Chamada por voz (LGPD: anuncia exclusivamente número da senha e guichê de destino)
+  const falarTextoSeguro = useCallback((texto: string) => {
+    try {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+      const synth = window.speechSynthesis;
+      synth.cancel();
 
-    setConfig(cfg);
-    setSenhas(listaSenhas);
+      const utterance = new SpeechSynthesisUtterance(texto);
+      utterance.lang = 'pt-BR';
+      utterance.rate = 0.96;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
 
-    // Identificar a chamada mais recente
-    const chamadas = listaSenhas
-      .filter(s => s.first_called_at || s.last_called_at)
-      .sort((a, b) => new Date(b.last_called_at || b.first_called_at!).getTime() - new Date(a.last_called_at || a.first_called_at!).getTime());
+      const vozes = synth.getVoices ? synth.getVoices() : [];
+      const vozPtBr =
+        vozes.find(v => v.lang?.toLowerCase() === 'pt-br') ||
+        vozes.find(v => v.lang?.toLowerCase().startsWith('pt'));
+      if (vozPtBr) {
+        utterance.voice = vozPtBr;
+      }
 
-    if (chamadas.length > 0) {
-      setSenhaAtual(chamadas[0]);
-      setChamadasRecentes(chamadas.slice(1, 6));
-    } else {
-      setSenhaAtual(null);
-      setChamadasRecentes([]);
+      synth.speak(utterance);
+    } catch {
+      console.warn('[SenhaTV] Síntese de voz indisponível neste dispositivo');
     }
+  }, []);
 
-    // Próximas senhas aguardando
-    const aguardando = listaSenhas
-      .filter(s => s.status === 'AGUARDANDO')
-      .sort((a, b) => {
-        // Especiais primeiro, depois por ordem de chegada
-        if (a.prioridade_tipo === 'ESPECIAL' && b.prioridade_tipo !== 'ESPECIAL') return -1;
-        if (b.prioridade_tipo === 'ESPECIAL' && a.prioridade_tipo !== 'ESPECIAL') return 1;
-        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      });
+  const dispararNotificacaoChamada = useCallback(
+    (item: AutoSenhaTVItem) => {
+      const chave = gerarChaveChamada(item);
+      if (!chave || ultimaChamadaAnunciadaRef.current === chave) return;
+      ultimaChamadaAnunciadaRef.current = chave;
 
-    setProximasSenhas(aguardando.slice(0, 5));
-  };
+      setAnimandoChamada(true);
+      if (animacaoTimerRef.current) clearTimeout(animacaoTimerRef.current);
+      animacaoTimerRef.current = setTimeout(() => setAnimandoChamada(false), 3000);
+
+      if (!somAtivoRef.current) return;
+
+      tocarBipSuave();
+      const fraseVoz = montarTextoChamadaVozTV(item.numero, item.guiche);
+      if (vozTimerRef.current) clearTimeout(vozTimerRef.current);
+      vozTimerRef.current = setTimeout(() => {
+        falarTextoSeguro(fraseVoz);
+      }, 550);
+    },
+    [tocarBipSuave, falarTextoSeguro]
+  );
+
+  // Carregar snapshot anonimizado da unidade (sem dados pessoais)
+  const carregarDados = useCallback(async () => {
+    try {
+      const dataHoje = getDataOperacionalHoje();
+      const snapshot = await getPainelSenhaTVPublico(unidadeId, dataHoje);
+      setConfig(snapshot.config);
+      setChamadasRecentes(snapshot.chamadasRecentes);
+      setProximasSenhas(snapshot.proximasSenhas);
+      setTotalAguardando(snapshot.totalAguardando);
+      setSenhaAtual(snapshot.senhaAtual);
+      setErroCarga(null);
+
+      if (snapshot.senhaAtual) {
+        const novaChave = gerarChaveChamada(snapshot.senhaAtual);
+        if (!inicializadoRef.current) {
+          ultimaChamadaAnunciadaRef.current = novaChave;
+        } else if (novaChave !== ultimaChamadaAnunciadaRef.current) {
+          dispararNotificacaoChamada(snapshot.senhaAtual);
+        }
+      }
+      inicializadoRef.current = true;
+    } catch {
+      setErroCarga('Não foi possível atualizar o painel público desta unidade.');
+    }
+  }, [unidadeId, dispararNotificacaoChamada]);
 
   useEffect(() => {
+    inicializadoRef.current = false;
+    ultimaChamadaAnunciadaRef.current = '';
     carregarDados();
 
     // Sincronização Realtime via canal dedicado por unidade
@@ -116,15 +190,19 @@ export const SenhaTVScreen: React.FC<SenhaTVScreenProps> = ({ unidadeId, onBack 
     channel
       .on('broadcast', { event: 'senha_chamada' }, (payload) => {
         if (payload?.payload?.senha) {
-          const novaSenhaChamada = payload.payload.senha as AutoSenhaItem;
-          setSenhaAtual(novaSenhaChamada);
-          setAnimandoChamada(true);
-          tocarAvisoSonoro();
-          setTimeout(() => setAnimandoChamada(false), 2000);
+          const chamadaSanitizada = sanitizarSenhaParaTV({
+            ...payload.payload.senha,
+            guiche: payload.payload.guiche || payload.payload.senha?.guiche
+          });
+          setSenhaAtual(chamadaSanitizada);
+          dispararNotificacaoChamada(chamadaSanitizada);
           carregarDados();
         }
       })
       .on('broadcast', { event: 'senha_emitida' }, () => {
+        carregarDados();
+      })
+      .on('broadcast', { event: 'bloco_atualizado' }, () => {
         carregarDados();
       })
       .on('broadcast', { event: 'atendimento_iniciado' }, () => {
@@ -133,18 +211,36 @@ export const SenhaTVScreen: React.FC<SenhaTVScreenProps> = ({ unidadeId, onBack 
       .on('broadcast', { event: 'atendimento_concluido' }, () => {
         carregarDados();
       })
+      .on('broadcast', { event: 'senha_cancelada' }, () => {
+        carregarDados();
+      })
+      .on('broadcast', { event: 'nao_compareceu' }, () => {
+        carregarDados();
+      })
+      .on('broadcast', { event: 'config_alterada' }, () => {
+        carregarDados();
+      })
+      .on('broadcast', { event: 'dados_zerados' }, () => {
+        ultimaChamadaAnunciadaRef.current = '';
+        carregarDados();
+      })
       .subscribe((status) => {
         setConectadoRealtime(status === 'SUBSCRIBED');
       });
 
-    // Polling de segurança a cada 8s para garantir integridade caso realtime desconecte
+    // Polling de segurança a cada 8s caso realtime desconecte
     const pollInterval = setInterval(carregarDados, 8000);
 
     return () => {
       supabase.removeChannel(channel);
       clearInterval(pollInterval);
+      if (animacaoTimerRef.current) clearTimeout(animacaoTimerRef.current);
+      if (vozTimerRef.current) clearTimeout(vozTimerRef.current);
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
     };
-  }, [unidadeId, somAtivo]);
+  }, [unidadeId, carregarDados, dispararNotificacaoChamada]);
 
   // Alternar tela cheia
   const toggleFullscreen = () => {
@@ -155,53 +251,50 @@ export const SenhaTVScreen: React.FC<SenhaTVScreenProps> = ({ unidadeId, onBack 
     }
   };
 
-  const getPrioridadeBadge = (tipo: string) => {
-    switch (tipo) {
-      case 'ESPECIAL':
-        return {
-          bg: 'bg-amber-500/20 text-amber-300 border-amber-400/40',
-          label: 'PRIORIDADE ESPECIAL (LEI 13.466/17)'
-        };
-      case 'PRIORITARIO':
-        return {
-          bg: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40',
-          label: 'ATENDIMENTO PRIORITÁRIO'
-        };
-      default:
-        return {
-          bg: 'bg-sky-500/20 text-sky-300 border-sky-400/40',
-          label: 'CONVENCIONAL / NORMAL'
-        };
+  // Alternar som e destravar áudio + síntese de voz no navegador
+  const handleToggleSom = () => {
+    const proximoEstado = !somAtivo;
+    setSomAtivo(proximoEstado);
+    somAtivoRef.current = proximoEstado;
+
+    if (proximoEstado) {
+      tocarBipSuave();
+      setTimeout(() => {
+        falarTextoSeguro('Som e chamada por voz ativados.');
+      }, 450);
+    } else if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white flex flex-col justify-between overflow-hidden select-none font-sans">
+    <div className="fixed inset-0 z-[9999] bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white flex flex-col justify-between overflow-y-auto lg:overflow-hidden select-none font-sans">
       {/* CABEÇALHO DA TV */}
-      <header className="px-6 py-4 bg-slate-900/80 backdrop-blur-md border-b border-white/10 flex items-center justify-between shadow-2xl">
-        <div className="flex items-center gap-4">
+      <header className="px-5 sm:px-7 py-4 bg-slate-900/85 backdrop-blur-md border-b border-white/10 flex items-center justify-between gap-4 shadow-2xl shrink-0">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
           {onBack && (
             <button
+              type="button"
               onClick={onBack}
-              className="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white transition-all active:scale-95 cursor-pointer"
+              className="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white transition-all active:scale-95 cursor-pointer shrink-0"
               title="Voltar ao Controle"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
           )}
 
-          <div className="flex items-center gap-3">
-            <div className="w-3.5 h-3.5 rounded-full bg-emerald-500 animate-pulse shadow-lg shadow-emerald-500/50" />
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs uppercase tracking-widest text-emerald-400 font-extrabold">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-3.5 h-3.5 rounded-full bg-emerald-500 animate-pulse shadow-lg shadow-emerald-500/50 shrink-0" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] sm:text-xs uppercase tracking-widest text-emerald-400 font-extrabold">
                   {unidade.tipo === 'UPA' ? 'SENHAS DA RECEPÇÃO' : 'PAINEL DE CHAMADAS'}
                 </span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-slate-300 font-bold">
                   {unidade.sigla}
                 </span>
               </div>
-              <h1 className="text-xl md:text-2xl font-black tracking-tight text-white">
+              <h1 className="text-lg sm:text-xl md:text-2xl font-black tracking-tight text-white truncate">
                 {unidade.nome}
               </h1>
             </div>
@@ -209,34 +302,33 @@ export const SenhaTVScreen: React.FC<SenhaTVScreenProps> = ({ unidadeId, onBack 
         </div>
 
         {/* Relógio e Ações Rápidas da TV */}
-        <div className="flex items-center gap-5">
+        <div className="flex items-center gap-3 sm:gap-5 shrink-0">
           <div className="text-right">
-            <div className="text-2xl md:text-3xl font-black font-mono tracking-tight text-emerald-400 drop-shadow-[0_0_12px_rgba(52,211,153,0.4)]">
+            <div className="text-xl sm:text-2xl md:text-3xl font-black font-mono tracking-tight text-emerald-400 drop-shadow-[0_0_12px_rgba(52,211,153,0.4)]">
               {horaAtual}
             </div>
-            <div className="text-xs font-semibold text-slate-400 capitalize">
+            <div className="hidden sm:block text-xs font-semibold text-slate-400 capitalize">
               {dataAtual}
             </div>
           </div>
 
-          <div className="flex items-center gap-2 border-l border-white/10 pl-4">
+          <div className="flex items-center gap-2 border-l border-white/10 pl-3 sm:pl-4">
             <button
-              onClick={() => {
-                setSomAtivo(!somAtivo);
-                if (!somAtivo) tocarAvisoSonoro();
-              }}
-              className={`p-2.5 rounded-2xl transition-all cursor-pointer font-bold text-xs flex items-center gap-1.5 ${
+              type="button"
+              onClick={handleToggleSom}
+              className={`px-3 py-2.5 rounded-2xl transition-all cursor-pointer font-bold text-xs flex items-center gap-1.5 ${
                 somAtivo
                   ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/30'
-                  : 'bg-white/10 hover:bg-white/20 text-slate-300'
+                  : 'bg-white/10 hover:bg-white/20 text-slate-200'
               }`}
-              title={somAtivo ? 'Som de chamada ATIVO' : 'Clique para ativar som de chamada'}
+              title={somAtivo ? 'Som e chamada por voz ATIVOS' : 'Clique para ativar som e voz de chamada'}
             >
               {somAtivo ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-              <span className="hidden sm:inline">{somAtivo ? 'Som Ativo' : 'Ativar Som'}</span>
+              <span className="hidden sm:inline">{somAtivo ? 'Som e Voz Ativos' : 'Ativar Som'}</span>
             </button>
 
             <button
+              type="button"
               onClick={toggleFullscreen}
               className="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer"
               title="Alternar Tela Cheia"
@@ -248,144 +340,150 @@ export const SenhaTVScreen: React.FC<SenhaTVScreenProps> = ({ unidadeId, onBack 
       </header>
 
       {/* ÁREA PRINCIPAL DA TELEVISÃO */}
-      <main className="flex-1 p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch overflow-hidden">
-        {/* BLOCO DE DESTAQUE: SENHA CHAMADA (COL 8) */}
-        <section className="lg:col-span-8 flex flex-col justify-center items-center rounded-3xl bg-gradient-to-b from-white/10 via-white/5 to-white/0 border border-white/15 p-8 md:p-12 text-center shadow-2xl relative overflow-hidden backdrop-blur-xl">
+      <main className="flex-1 p-4 sm:p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-5 md:gap-6 items-stretch min-h-0">
+        {/* BLOCO DE DESTAQUE PRINCIPAL: EXCLUSIVAMENTE SENHA E GUICHÊ (COL 8) */}
+        <section className="lg:col-span-8 flex flex-col justify-center items-center rounded-3xl bg-gradient-to-b from-white/10 via-white/5 to-white/[0.02] border border-white/15 px-6 py-8 md:px-12 md:py-10 text-center shadow-2xl relative overflow-hidden backdrop-blur-xl">
           {/* Efeito Glow / Pulso na Chamada */}
-          <div className={`absolute inset-0 bg-gradient-to-r from-emerald-500/20 via-sky-500/20 to-purple-500/20 transition-opacity duration-1000 ${
-            animandoChamada ? 'opacity-100 scale-105' : 'opacity-20'
-          }`} />
+          <div
+            className={`absolute inset-0 bg-gradient-to-r from-emerald-500/25 via-sky-500/20 to-indigo-500/25 transition-all duration-700 ${
+              animandoChamada ? 'opacity-100 scale-105' : 'opacity-20 scale-100'
+            }`}
+          />
 
-          {senhaAtual ? (
-            <div className={`relative z-10 w-full flex flex-col items-center transition-transform duration-500 ${
-              animandoChamada ? 'scale-105' : 'scale-100'
-            }`}>
-              {/* Badge de Prioridade */}
-              <div className="mb-4">
-                <span className={`px-4 py-1.5 rounded-full text-xs md:text-sm font-black uppercase tracking-widest border shadow-lg ${
-                  getPrioridadeBadge(senhaAtual.prioridade_tipo).bg
-                }`}>
-                  {getPrioridadeBadge(senhaAtual.prioridade_tipo).label}
+          {erroCarga && !senhaAtual ? (
+            <div className="relative z-10 flex flex-col items-center justify-center text-amber-200 py-12 max-w-md">
+              <Clock className="w-16 h-16 text-amber-300/70 mb-4" />
+              <h2 className="text-xl font-extrabold">Aguardando Conexão Segura</h2>
+              <p className="text-sm text-slate-300 mt-2">{erroCarga}</p>
+            </div>
+          ) : senhaAtual ? (
+            <div
+              className={`relative z-10 w-full flex flex-col items-center justify-center gap-5 md:gap-7 transition-transform duration-500 ${
+                animandoChamada ? 'scale-[1.03]' : 'scale-100'
+              }`}
+            >
+              {/* Indicador visual de chamada sem dados pessoais */}
+              <div className="flex items-center gap-2.5">
+                <span
+                  className={`inline-flex items-center gap-2 px-5 py-1.5 rounded-full text-xs sm:text-sm font-black uppercase tracking-[0.28em] border transition-colors ${
+                    animandoChamada
+                      ? 'bg-emerald-500/25 text-emerald-200 border-emerald-400/60 shadow-lg shadow-emerald-500/25'
+                      : 'bg-white/10 text-slate-300 border-white/15'
+                  }`}
+                >
+                  <Radio className={`w-4 h-4 ${animandoChamada ? 'text-emerald-300 animate-ping' : 'text-emerald-400'}`} />
+                  {animandoChamada ? 'CHAMANDO SENHA' : 'SENHA CHAMADA'}
                 </span>
               </div>
 
-              {/* NÚMERO GIGANTE DA SENHA */}
-              <div className="my-2">
-                <span className="text-7xl sm:text-8xl md:text-9xl lg:text-[11rem] font-black tracking-tighter text-white drop-shadow-[0_10px_35px_rgba(0,0,0,0.8)] font-mono">
+              {/* NÚMERO AMPLIADO E CENTRALIZADO */}
+              <div className="w-full flex flex-col items-center justify-center">
+                <span className="text-xs sm:text-sm font-black uppercase tracking-[0.45em] text-slate-400 mb-1">
+                  SENHA
+                </span>
+                <div className="text-8xl sm:text-9xl md:text-[10.5rem] lg:text-[12.5rem] xl:text-[14rem] font-black tracking-tighter text-white drop-shadow-[0_14px_40px_rgba(0,0,0,0.85)] font-mono leading-none">
                   {senhaAtual.numero}
-                </span>
+                </div>
               </div>
 
-              {/* NOME DO CIDADÃO */}
-              <div className="mt-2 max-w-3xl">
-                <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-slate-100 tracking-tight leading-tight uppercase">
-                  {formatarNomeParaTV(senhaAtual.cidadao_nome, config?.ocultar_sobrenome_tv || false)}
-                </h2>
-                {senhaAtual.prioridade_categoria && (
-                  <p className="text-sm md:text-base text-slate-400 font-semibold mt-1">
-                    {senhaAtual.prioridade_categoria}
-                  </p>
-                )}
-              </div>
-
-              {/* GUICHÊ / LOCAL DE ATENDIMENTO */}
-              <div className="mt-8 px-8 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 font-black text-xl md:text-2xl uppercase tracking-wider shadow-xl shadow-emerald-500/30 flex items-center gap-3">
-                <span>DIRIJA-SE AO:</span>
-                <span className="bg-white/90 px-3 py-1 rounded-xl text-emerald-950 font-black">
-                  {senhaAtual.guiche || 'RECEPÇÃO'}
-                </span>
+              {/* DESTAQUE DO GUICHÊ DE DESTINO */}
+              <div className="w-full max-w-2xl rounded-3xl bg-gradient-to-r from-emerald-500 to-teal-500 p-1.5 shadow-2xl shadow-emerald-500/30">
+                <div className="rounded-[1.25rem] bg-slate-950/15 px-6 py-4 sm:px-8 sm:py-5 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-5">
+                  <span className="text-slate-950 font-black text-base sm:text-xl md:text-2xl uppercase tracking-widest">
+                    DIRIJA-SE AO:
+                  </span>
+                  <span className="bg-white text-emerald-950 px-5 sm:px-7 py-2 sm:py-2.5 rounded-2xl font-black text-2xl sm:text-3xl md:text-4xl uppercase tracking-tight shadow-md">
+                    {senhaAtual.guiche || 'Recepção'}
+                  </span>
+                </div>
               </div>
             </div>
           ) : (
-            <div className="relative z-10 flex flex-col items-center justify-center text-slate-400 py-16">
+            <div className="relative z-10 flex flex-col items-center justify-center text-slate-400 py-14">
               <Clock className="w-20 h-20 text-slate-600 mb-4 animate-pulse" />
-              <h3 className="text-2xl font-bold text-slate-300">Aguardando Próxima Chamada</h3>
-              <p className="text-sm text-slate-500 mt-2 max-w-md">
-                Assim que a recepção chamar um cidadão, a senha surgirá aqui em destaque imediato.
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-200 tracking-tight">
+                Aguardando Próxima Chamada
+              </h2>
+              <p className="text-sm sm:text-base text-slate-400 mt-2 max-w-md">
+                O número da senha e o local de atendimento aparecerão aqui em destaque assim que chamados.
               </p>
             </div>
           )}
         </section>
 
-        {/* COLUNA LATERAL: HISTÓRICO RECENTE E PRÓXIMAS SENHAS (COL 4) */}
-        <section className="lg:col-span-4 flex flex-col gap-6 justify-between">
-          {/* ÚLTIMAS CHAMADAS */}
-          <div className="flex-1 bg-white/5 border border-white/10 rounded-3xl p-5 backdrop-blur-md flex flex-col shadow-xl">
-            <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-3">
+        {/* COLUNA LATERAL: ÚLTIMAS CHAMADAS E PRÓXIMAS SENHAS (COL 4) */}
+        <section className="lg:col-span-4 flex flex-col gap-5 justify-between min-h-0">
+          {/* ÚLTIMAS CHAMADAS — APENAS SENHA E GUICHÊ */}
+          <div className="flex-1 bg-white/5 border border-white/10 rounded-3xl p-5 backdrop-blur-md flex flex-col shadow-xl min-h-0">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-3 shrink-0">
               <h3 className="text-xs font-black uppercase tracking-widest text-emerald-400 flex items-center gap-2">
-                <Sparkles className="w-3.5 h-3.5" />
+                <Sparkles className="w-4 h-4" />
                 Últimas Chamadas
               </h3>
-              <span className="text-[10px] text-slate-400 font-bold">SENHA / GUICHÊ</span>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                SENHA / GUICHÊ
+              </span>
             </div>
 
-            <div className="flex-1 flex flex-col justify-start gap-2.5 overflow-hidden">
+            <div className="flex-1 flex flex-col justify-start gap-3 overflow-y-auto pr-0.5">
               {chamadasRecentes.length > 0 ? (
                 chamadasRecentes.map((item) => (
                   <div
                     key={item.id}
-                    className="p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 flex items-center justify-between transition-all"
+                    className="px-4 py-3.5 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between gap-3 transition-all"
                   >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xl font-black text-white">{item.numero}</span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold uppercase ${
-                          item.prioridade_tipo === 'ESPECIAL' ? 'bg-amber-500/20 text-amber-300' :
-                          item.prioridade_tipo === 'PRIORITARIO' ? 'bg-emerald-500/20 text-emerald-300' :
-                          'bg-sky-500/20 text-sky-300'
-                        }`}>
-                          {item.prioridade_tipo.substring(0, 4)}
-                        </span>
-                      </div>
-                      <p className="text-xs font-bold text-slate-300 truncate max-w-[170px] mt-0.5">
-                        {formatarNomeParaTV(item.cidadao_nome, config?.ocultar_sobrenome_tv || false)}
-                      </p>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 leading-none mb-1">
+                        Senha
+                      </span>
+                      <span className="font-mono text-2xl sm:text-3xl font-black text-white leading-none">
+                        {item.numero}
+                      </span>
                     </div>
 
-                    <div className="text-right">
-                      <span className="text-xs font-bold px-2 py-1 rounded-xl bg-white/10 text-slate-200">
+                    <div className="text-right shrink-0">
+                      <span className="inline-block text-xs sm:text-sm font-black uppercase px-3.5 py-2 rounded-xl bg-emerald-500/15 border border-emerald-400/25 text-emerald-200 tracking-wide">
                         {item.guiche || 'Recepção'}
                       </span>
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="flex-1 flex items-center justify-center text-xs text-slate-500 font-semibold">
-                  Nenhuma chamada anterior hoje
+                <div className="flex-1 flex items-center justify-center text-xs sm:text-sm text-slate-500 font-semibold py-6">
+                  Nenhuma chamada anterior registrada hoje
                 </div>
               )}
             </div>
           </div>
 
-          {/* PRÓXIMAS SENHAS NA FILA */}
-          <div className="bg-white/5 border border-white/10 rounded-3xl p-5 backdrop-blur-md shadow-xl">
+          {/* PRÓXIMAS SENHAS NA FILA — APENAS NÚMEROS DAS SENHAS */}
+          <div className="bg-white/5 border border-white/10 rounded-3xl p-5 backdrop-blur-md shadow-xl shrink-0">
             <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-3">
               <h3 className="text-xs font-black uppercase tracking-widest text-sky-400 flex items-center gap-2">
-                <Clock className="w-3.5 h-3.5" />
-                Próximas Senhas na Fila
+                <Clock className="w-4 h-4" />
+                Próximas Senhas
               </h3>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 font-extrabold">
-                {proximasSenhas.length} aguardando
+              <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 font-extrabold">
+                {totalAguardando} aguardando
               </span>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2.5 flex-wrap">
               {proximasSenhas.length > 0 ? (
-                proximasSenhas.map((item, idx) => (
+                proximasSenhas.map((item) => (
                   <div
                     key={item.id}
-                    className="px-3.5 py-2 rounded-2xl bg-white/5 border border-white/10 flex items-center gap-2"
+                    className="px-4 py-2.5 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center"
                   >
-                    <span className="font-mono text-sm font-extrabold text-white">{item.numero}</span>
-                    {item.prioridade_tipo !== 'NORMAL' && (
-                      <span className={`w-2 h-2 rounded-full ${
-                        item.prioridade_tipo === 'ESPECIAL' ? 'bg-amber-400' : 'bg-emerald-400'
-                      }`} />
-                    )}
+                    <span className="font-mono text-base sm:text-lg font-black text-white tracking-tight">
+                      {item.numero}
+                    </span>
                   </div>
                 ))
               ) : (
-                <span className="text-xs text-slate-500 font-semibold">Fila zerada no momento</span>
+                <span className="text-xs sm:text-sm text-slate-500 font-semibold">
+                  Fila zerada no momento
+                </span>
               )}
             </div>
           </div>
@@ -393,13 +491,16 @@ export const SenhaTVScreen: React.FC<SenhaTVScreenProps> = ({ unidadeId, onBack 
       </main>
 
       {/* RODAPÉ INSTITUCIONAL */}
-      <footer className="px-6 py-3 bg-slate-950/80 border-t border-white/10 flex items-center justify-between text-xs text-slate-400">
-        <div className="flex items-center gap-3">
+      <footer className="px-5 sm:px-7 py-3 bg-slate-950/85 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-400 shrink-0">
+        <div className="flex items-center gap-3 flex-wrap justify-center sm:justify-start">
           <span className="font-extrabold text-slate-200">
             {config?.mensagem_rodape_tv || 'Prefeitura de São José do Goiabal — MG'}
           </span>
-          <span className="text-slate-600">|</span>
-          <span className="text-slate-400">Sistema AutoSenha Oficial</span>
+          <span className="hidden sm:inline text-slate-600">|</span>
+          <span className="inline-flex items-center gap-1 text-[11px] text-emerald-300/90 font-semibold">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            Painel público sem dados pessoais (LGPD)
+          </span>
         </div>
 
         <div className="flex items-center gap-2">

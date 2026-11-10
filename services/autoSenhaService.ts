@@ -22,7 +22,10 @@ import {
   AutoSenhaChamadaHistorico,
   AutoSenhaAuditoria,
   AutoSenhaAvaliacaoUrgente,
-  AutoSenhaCapacidadeMetricas
+  AutoSenhaCapacidadeMetricas,
+  AutoSenhaTVItem,
+  AutoSenhaTVConfig,
+  AutoSenhaTVPainelSnapshot
 } from '../types';
 
 // Chaves locais para cache/fallback de alta resiliência
@@ -108,7 +111,7 @@ const DEFAULT_CONFIGS: Record<AutoSenhaUnidadeId, AutoSenhaConfiguracao> = {
     limite_fila_atencao_qtd: 10,
     limite_fila_critico_qtd: 20,
     som_habilitado: true,
-    ocultar_sobrenome_tv: false,
+    ocultar_sobrenome_tv: true,
     mensagem_rodape_tv: 'Prefeitura de São José do Goiabal — Cuidando da nossa gente'
   },
   psf2: {
@@ -124,7 +127,7 @@ const DEFAULT_CONFIGS: Record<AutoSenhaUnidadeId, AutoSenhaConfiguracao> = {
     limite_fila_atencao_qtd: 10,
     limite_fila_critico_qtd: 20,
     som_habilitado: true,
-    ocultar_sobrenome_tv: false,
+    ocultar_sobrenome_tv: true,
     mensagem_rodape_tv: 'Prefeitura de São José do Goiabal — Cuidando da nossa gente'
   },
   upa: {
@@ -140,7 +143,7 @@ const DEFAULT_CONFIGS: Record<AutoSenhaUnidadeId, AutoSenhaConfiguracao> = {
     limite_fila_atencao_qtd: 15,
     limite_fila_critico_qtd: 30,
     som_habilitado: true,
-    ocultar_sobrenome_tv: false,
+    ocultar_sobrenome_tv: true,
     mensagem_rodape_tv: 'UPA São José do Goiabal — Senhas da Recepção Administrativa'
   }
 };
@@ -181,15 +184,75 @@ export function formatarDuracaoSegundos(segundosTotais: number): string {
 }
 
 /**
- * Normaliza exibição do nome do cidadão para a TV
+ * @deprecated Por adequação obrigatória à LGPD, nomes/iniciais de pacientes não devem
+ * ser exibidos nos painéis públicos SenhaTV. Retorna sempre string vazia.
  */
-export function formatarNomeParaTV(nomeCompleto: string, ocultarSobrenome: boolean): string {
-  if (!nomeCompleto) return '';
-  const partes = nomeCompleto.trim().split(/\s+/);
-  if (!ocultarSobrenome || partes.length <= 1) return nomeCompleto;
-  const primeiro = partes[0];
-  const segundo = partes[1]?.charAt(0) ? `${partes[1].charAt(0)}.` : '';
-  return `${primeiro} ${segundo}`.trim();
+export function formatarNomeParaTV(_nomeCompleto: string, _ocultarSobrenome: boolean): string {
+  return '';
+}
+
+const AUTOSENHA_TV_PUBLIC_COLUMNS =
+  'id, unidade_id, numero, guiche, status, bloco_numero, posicao_bloco, first_called_at, last_called_at, call_count, created_at';
+
+const AUTOSENHA_TV_FALLBACK_ORDER_COLUMNS =
+  'id, unidade_id, numero, guiche, status, prioridade_tipo, bloco_numero, posicao_bloco, first_called_at, last_called_at, call_count, created_at';
+
+/**
+ * Converte qualquer registro de senha para o DTO público estrito da SenhaTV,
+ * descartando nome, iniciais, CPF, Cartão SUS, ID de paciente e dados clínicos/operadores.
+ */
+export function sanitizarSenhaParaTV(item: any): AutoSenhaTVItem {
+  const guicheBruto = typeof item?.guiche === 'string' ? item.guiche.replace(/\s+/g, ' ').trim() : '';
+  const numeroBruto = typeof item?.numero === 'string' ? item.numero.replace(/\s+/g, ' ').trim().toUpperCase() : '';
+  return {
+    id: String(item?.id || ''),
+    unidade_id: (item?.unidade_id || 'psf1') as AutoSenhaUnidadeId,
+    numero: numeroBruto,
+    guiche: guicheBruto || 'Recepção',
+    status: (item?.status || 'AGUARDANDO') as AutoSenhaStatus,
+    bloco_numero: typeof item?.bloco_numero === 'number' ? item.bloco_numero : undefined,
+    posicao_bloco: typeof item?.posicao_bloco === 'number' ? item.posicao_bloco : undefined,
+    first_called_at: item?.first_called_at || undefined,
+    last_called_at: item?.last_called_at || undefined,
+    call_count: typeof item?.call_count === 'number' ? item.call_count : 0,
+    created_at: String(item?.created_at || new Date().toISOString())
+  };
+}
+
+export function sanitizarConfigParaTV(
+  cfg: Partial<AutoSenhaConfiguracao> | null | undefined,
+  unidadeId: AutoSenhaUnidadeId
+): AutoSenhaTVConfig {
+  const padrao = DEFAULT_CONFIGS[unidadeId];
+  return {
+    unidade_id: unidadeId,
+    som_habilitado: cfg?.som_habilitado ?? padrao.som_habilitado,
+    mensagem_rodape_tv: cfg?.mensagem_rodape_tv || padrao.mensagem_rodape_tv
+  };
+}
+
+/**
+ * Gera exclusivamente o anúncio sonoro em conformidade com a LGPD
+ * contendo apenas o número da senha e o guichê/local de atendimento.
+ */
+export function montarTextoChamadaVozTV(numero: string, guiche?: string): string {
+  const numeroLimpo = String(numero || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+  const guicheLimpo = String(guiche || '')
+    .replace(/\s+/g, ' ')
+    .trim() || 'Recepção';
+
+  const guicheLower = guicheLimpo
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  const termosFemininos = /^(recepcao|sala|triagem|farmacia|enfermaria|coordenacao|janela|bancada|mesa|ala|cabine|area)\b/;
+  const preposicao = termosFemininos.test(guicheLower) ? 'à' : 'ao';
+
+  return `Senha ${numeroLimpo}, dirija-se ${preposicao} ${guicheLimpo}.`;
 }
 
 // ----------------------------------------------------------------------
@@ -329,16 +392,60 @@ export async function registrarAuditoria(
 }
 
 // ----------------------------------------------------------------------
-// REALTIME BROADCAST HELPER
+// REALTIME BROADCAST HELPER (LGPD: PAYLOAD PÚBLICO SANITIZADO)
 // ----------------------------------------------------------------------
+export function sanitizarPayloadRealtime(evento: string, dados: any): Record<string, any> {
+  if (!dados || typeof dados !== 'object') return {};
+
+  const safe: Record<string, any> = {};
+
+  if (dados.guiche !== undefined) {
+    safe.guiche = String(dados.guiche || 'Recepção').replace(/\s+/g, ' ').trim();
+  }
+  if (typeof dados.isRechamada === 'boolean') safe.isRechamada = dados.isRechamada;
+  if (typeof dados.fechou === 'boolean') safe.fechou = dados.fechou;
+  if (dados.blocoNumero !== undefined) safe.blocoNumero = dados.blocoNumero;
+
+  if (dados.senha) {
+    safe.senha = sanitizarSenhaParaTV(dados.senha);
+  } else if (dados.id && dados.numero) {
+    safe.senha = sanitizarSenhaParaTV(dados);
+  }
+
+  if (dados.bloco && typeof dados.bloco === 'object') {
+    safe.bloco = {
+      id: dados.bloco.id,
+      unidade_id: dados.bloco.unidade_id,
+      numero_bloco: dados.bloco.numero_bloco,
+      status: dados.bloco.status,
+      total_pacientes: dados.bloco.total_pacientes
+    };
+  }
+
+  if (dados.avaliacao && typeof dados.avaliacao === 'object') {
+    safe.avaliacaoId = dados.avaliacao.id;
+    safe.status = dados.avaliacao.status;
+  }
+
+  if (dados.config && typeof dados.config === 'object') {
+    const uid = (dados.config.unidade_id || 'psf1') as AutoSenhaUnidadeId;
+    safe.config = sanitizarConfigParaTV(dados.config, uid);
+  }
+
+  // Nunca propagar PII em eventos broadcast que alcançam painéis públicos
+  void evento;
+  return safe;
+}
+
 export function notificarRealtimeMudanca(unidadeId: AutoSenhaUnidadeId, evento: string, dados: any) {
   try {
+    const payloadSanitizado = sanitizarPayloadRealtime(evento, dados);
     const channelName = `autosenha-${unidadeId}`;
     const channel = supabase.channel(channelName);
     channel.send({
       type: 'broadcast',
       event: evento,
-      payload: { unidadeId, timestamp: Date.now(), ...dados }
+      payload: { unidadeId, timestamp: Date.now(), ...payloadSanitizado }
     }).catch(() => {});
 
     // Canal geral para o Dashboard consolidado
@@ -348,8 +455,8 @@ export function notificarRealtimeMudanca(unidadeId: AutoSenhaUnidadeId, evento: 
       event: 'atualizacao_geral',
       payload: { unidadeId, evento, timestamp: Date.now() }
     }).catch(() => {});
-  } catch (e) {
-    console.warn('[AutoSenha] Realtime broadcast notice falhou:', e);
+  } catch {
+    console.warn('[AutoSenha] Realtime broadcast notice falhou');
   }
 }
 
@@ -361,6 +468,32 @@ const UNIDADE_PERMISSAO_KEYS: Record<AutoSenhaUnidadeId, { controle: string; tv:
   psf2: { controle: 'sub_autosenha_psf2_controle', tv: 'sub_autosenha_psf2_senhatv' },
   upa: { controle: 'sub_autosenha_upa_controle', tv: 'sub_autosenha_upa_senhatv' }
 };
+
+export function isUsuarioExclusivoTV(unidadeId?: AutoSenhaUnidadeId): boolean {
+  const activeUser = getActivePermissionUser();
+  if (!activeUser) return false;
+  if (isSuperAdminUser(activeUser)) return false;
+
+  const globalSettings = getActiveGlobalModuleSettings();
+  const canDashboard = userCanAccessSubmodule(activeUser, 'parent_autosenha', 'sub_autosenha_dashboard', globalSettings);
+  if (canDashboard) return false;
+
+  if (unidadeId) {
+    const keys = UNIDADE_PERMISSAO_KEYS[unidadeId];
+    if (!keys) return false;
+    const canControle = userCanAccessSubmodule(activeUser, 'parent_autosenha', keys.controle, globalSettings);
+    const canTv = userCanAccessSubmodule(activeUser, 'parent_autosenha', keys.tv, globalSettings);
+    return canTv && !canControle;
+  }
+
+  const anyControle = (['psf1', 'psf2', 'upa'] as AutoSenhaUnidadeId[]).some(uid =>
+    userCanAccessSubmodule(activeUser, 'parent_autosenha', UNIDADE_PERMISSAO_KEYS[uid].controle, globalSettings)
+  );
+  const anyTv = (['psf1', 'psf2', 'upa'] as AutoSenhaUnidadeId[]).some(uid =>
+    userCanAccessSubmodule(activeUser, 'parent_autosenha', UNIDADE_PERMISSAO_KEYS[uid].tv, globalSettings)
+  );
+  return anyTv && !anyControle;
+}
 
 export function assertCanAccessAutoSenhaUnidade(
   unidadeId: AutoSenhaUnidadeId,
@@ -416,6 +549,23 @@ export async function getConfiguracao(unidadeId: AutoSenhaUnidadeId): Promise<Au
     // fallback
   }
   return getLocalConfig(unidadeId);
+}
+
+export async function getConfiguracaoTVPublica(unidadeId: AutoSenhaUnidadeId): Promise<AutoSenhaTVConfig> {
+  try {
+    const { data, error } = await supabase
+      .from('autosenha_configuracoes')
+      .select('unidade_id, som_habilitado, mensagem_rodape_tv')
+      .eq('unidade_id', unidadeId)
+      .maybeSingle();
+
+    if (!error && data) {
+      return sanitizarConfigParaTV(data, unidadeId);
+    }
+  } catch {
+    // fallback abaixo
+  }
+  return sanitizarConfigParaTV(getLocalConfig(unidadeId), unidadeId);
 }
 
 export async function salvarConfiguracao(
@@ -886,6 +1036,45 @@ export async function getSenhas(
   if (unidadeId) {
     assertCanAccessAutoSenhaUnidade(unidadeId, 'tv');
   }
+
+  // Usuários exclusivos de painel TV nunca recebem nem armazenam dados pessoais (LGPD)
+  if (unidadeId && isUsuarioExclusivoTV(unidadeId)) {
+    const dataRef = dataOperacional || getDataOperacionalHoje();
+    try {
+      if (typeof (supabase as any).rpc === 'function') {
+        const { data: rpcRows, error: rpcErr } = await (supabase as any).rpc('get_painel_senhatv_publico', {
+          p_unidade_id: unidadeId,
+          p_data_operacional: dataRef
+        });
+        if (!rpcErr && Array.isArray(rpcRows)) {
+          return rpcRows.map(sanitizarSenhaParaTV) as unknown as AutoSenhaItem[];
+        }
+      }
+    } catch {
+      // fallback restrito abaixo
+    }
+
+    try {
+      let tvQuery = supabase
+        .from('autosenha_senhas')
+        .select(AUTOSENHA_TV_PUBLIC_COLUMNS)
+        .eq('unidade_id', unidadeId);
+      if (dataOperacional) tvQuery = tvQuery.eq('data_operacional', dataOperacional);
+      const { data: tvData, error: tvErr } = await tvQuery.order('created_at', { ascending: false });
+      if (!tvErr && Array.isArray(tvData)) {
+        return tvData.map(sanitizarSenhaParaTV) as unknown as AutoSenhaItem[];
+      }
+    } catch {
+      // fallback local sanitizado abaixo
+    }
+
+    let localTv = getLocalSenhas().filter(s => s.unidade_id === unidadeId);
+    if (dataOperacional) localTv = localTv.filter(s => s.data_operacional === dataOperacional);
+    return localTv
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .map(sanitizarSenhaParaTV) as unknown as AutoSenhaItem[];
+  }
+
   try {
     let query = supabase.from('autosenha_senhas').select('*');
     if (unidadeId) query = query.eq('unidade_id', unidadeId);
@@ -912,6 +1101,104 @@ export async function getSenhas(
   if (unidadeId) result = result.filter(s => s.unidade_id === unidadeId);
   if (dataOperacional) result = result.filter(s => s.data_operacional === dataOperacional);
   return result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
+/**
+ * Carrega o snapshot público anonimizado do painel SenhaTV.
+ * Nunca retorna, solicita ao PostgREST ou salva no navegador dados pessoais de pacientes.
+ */
+export async function getPainelSenhaTVPublico(
+  unidadeId: AutoSenhaUnidadeId,
+  dataOperacional?: string
+): Promise<AutoSenhaTVPainelSnapshot> {
+  assertCanAccessAutoSenhaUnidade(unidadeId, 'tv');
+  const dataRef = dataOperacional || getDataOperacionalHoje();
+  const config = await getConfiguracaoTVPublica(unidadeId);
+
+  const montarSnapshot = (
+    rowsBrutas: any[],
+    source: AutoSenhaTVPainelSnapshot['source'],
+    usarBlocoOrdenacao = false
+  ): AutoSenhaTVPainelSnapshot => {
+    const chamadas = rowsBrutas
+      .filter(s => s.first_called_at || s.last_called_at)
+      .sort(
+        (a, b) =>
+          new Date(b.last_called_at || b.first_called_at).getTime() -
+          new Date(a.last_called_at || a.first_called_at).getTime()
+      )
+      .map(sanitizarSenhaParaTV);
+
+    const senhaAtual = chamadas.length > 0 ? chamadas[0] : null;
+    const chamadasRecentes = chamadas.slice(1, 6);
+
+    let aguardandoOrdenadas: AutoSenhaTVItem[];
+    let totalAguardando = 0;
+
+    if (usarBlocoOrdenacao) {
+      const fila = getFilaAtualOrdenada(rowsBrutas as AutoSenhaItem[]);
+      totalAguardando = fila.length;
+      aguardandoOrdenadas = fila.slice(0, 5).map(item => sanitizarSenhaParaTV(item.senha));
+    } else {
+      const aguardando = rowsBrutas
+        .filter(s => s.status === 'AGUARDANDO')
+        .sort(
+          (a, b) =>
+            (a.bloco_numero ?? 999999) - (b.bloco_numero ?? 999999) ||
+            (a.posicao_bloco ?? 99) - (b.posicao_bloco ?? 99) ||
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+      totalAguardando = aguardando.length;
+      aguardandoOrdenadas = aguardando.slice(0, 5).map(sanitizarSenhaParaTV);
+    }
+
+    return {
+      unidade_id: unidadeId,
+      config,
+      senhaAtual,
+      chamadasRecentes,
+      proximasSenhas: aguardandoOrdenadas,
+      totalAguardando,
+      source
+    };
+  };
+
+  // 1. Preferência: RPC Postgres anonimizada (sem PII no tráfego de rede e respeitando RLS de TV)
+  try {
+    if (typeof (supabase as any).rpc === 'function') {
+      const { data: rpcRows, error: rpcErr } = await (supabase as any).rpc('get_painel_senhatv_publico', {
+        p_unidade_id: unidadeId,
+        p_data_operacional: dataRef
+      });
+      if (!rpcErr && Array.isArray(rpcRows)) {
+        return montarSnapshot(rpcRows, 'rpc', false);
+      }
+    }
+  } catch {
+    // Segue para consulta restrita de colunas
+  }
+
+  // 2. Fallback PostgREST restrito estritamente às colunas sem dados pessoais
+  try {
+    const { data: rowsPublicas, error: pubErr } = await supabase
+      .from('autosenha_senhas')
+      .select(AUTOSENHA_TV_FALLBACK_ORDER_COLUMNS)
+      .eq('unidade_id', unidadeId)
+      .eq('data_operacional', dataRef)
+      .order('created_at', { ascending: true });
+
+    if (!pubErr && Array.isArray(rowsPublicas)) {
+      return montarSnapshot(rowsPublicas, 'select_publico', true);
+    }
+  } catch {
+    // Segue para fallback local sanitizado
+  }
+
+  // 3. Fallback offline (sanitiza 100% antes de retornar ao painel TV)
+  const locais = getLocalSenhas().filter(
+    s => s.unidade_id === unidadeId && s.data_operacional === dataRef
+  );
+  return montarSnapshot(locais, 'fallback_local', true);
 }
 
 export interface FilaAtualOrdenadaItem {

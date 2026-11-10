@@ -1262,5 +1262,39 @@ export interface AutoSenhaCapacidadeMetricas {
   senha_atual?: AutoSenhaItem;
 }
 
+/**
+ * Payload público sanitizado para os painéis SenhaTV (adequação obrigatória à LGPD:
+ * contém exclusivamente identificação operacional da senha e guichê de destino, sem PII).
+ */
+export interface AutoSenhaTVItem {
+  id: string;
+  unidade_id: AutoSenhaUnidadeId;
+  numero: string;
+  guiche: string;
+  status: AutoSenhaStatus;
+  bloco_numero?: number;
+  posicao_bloco?: number;
+  first_called_at?: string;
+  last_called_at?: string;
+  call_count: number;
+  created_at: string;
+}
+
+export interface AutoSenhaTVConfig {
+  unidade_id: AutoSenhaUnidadeId;
+  som_habilitado: boolean;
+  mensagem_rodape_tv?: string;
+}
+
+export interface AutoSenhaTVPainelSnapshot {
+  unidade_id: AutoSenhaUnidadeId;
+  config: AutoSenhaTVConfig;
+  senhaAtual: AutoSenhaTVItem | null;
+  chamadasRecentes: AutoSenhaTVItem[];
+  proximasSenhas: AutoSenhaTVItem[];
+  totalAguardando: number;
+  source: 'rpc' | 'select_publico' | 'fallback_local';
+}
+
 declare const __LATEST_COMMIT__: string;
 

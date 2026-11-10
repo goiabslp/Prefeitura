@@ -782,17 +782,13 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
                 />
               </div>
 
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="chkSobrenome"
-                  checked={config.ocultar_sobrenome_tv}
-                  onChange={(e) => setConfig({ ...config, ocultar_sobrenome_tv: e.target.checked })}
-                  className="rounded text-emerald-600 focus:ring-emerald-500"
-                />
-                <label htmlFor="chkSobrenome" className="text-xs font-bold text-slate-700 cursor-pointer">
-                  Abreviar sobrenome no painel público (Privacidade LGPD)
-                </label>
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900">
+                <p className="font-black uppercase tracking-wide text-[11px] text-emerald-800">
+                  Privacidade LGPD Ativa na Senha TV
+                </p>
+                <p className="text-[11px] text-emerald-700 mt-0.5 leading-relaxed">
+                  Por adequação obrigatória à LGPD, os painéis públicos Senha TV exibem e anunciam exclusivamente o número da senha e o guichê de destino, sem dados nominais ou pessoais.
+                </p>
               </div>
 
               {/* ZONA DE PRODUÇÃO — ZERAR REGISTROS */}
