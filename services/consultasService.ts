@@ -2,6 +2,7 @@ import { supabase } from './supabaseClient';
 import { ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga, ConsultaEspecialista, TipoAtendimentoConsulta, User, ConsultaSolicitacaoCancelamento } from '../types';
 import { handleSupabaseError } from '../utils/errorUtils';
 import { auditLogService } from './auditLogService';
+import { normalizeCpf, formatCpf, isValidCpf } from '../utils/cpfUtils';
 import {
     getActiveGlobalModuleSettings,
     getActivePermissionUser,
@@ -26,6 +27,41 @@ type RegulacaoMutationKind =
     | 'procedimentos'
     | 'pacientes'
     | 'gestor';
+
+const hasAutoSenhaPatientAccess = (
+    user: User,
+    globalSettings?: Record<string, boolean>
+): boolean => {
+    return (
+        userCanAccessSubmodule(user, 'parent_autosenha', 'sub_autosenha_pacientes', globalSettings) ||
+        userCanAccessSubmodule(user, 'parent_autosenha', 'sub_autosenha_psf1_controle', globalSettings) ||
+        userCanAccessSubmodule(user, 'parent_autosenha', 'sub_autosenha_psf2_controle', globalSettings) ||
+        userCanAccessSubmodule(user, 'parent_autosenha', 'sub_autosenha_upa_controle', globalSettings) ||
+        userCanAccessSubmodule(user, 'parent_autosenha', 'sub_autosenha_dashboard', globalSettings)
+    );
+};
+
+const hasIntegratedPatientReadAccess = (
+    user: User,
+    globalSettings?: Record<string, boolean>
+): boolean => {
+    const perms = user.permissions || [];
+    if (
+        hasAutoSenhaPatientAccess(user, globalSettings) ||
+        hasConsultasAcompanharOperationalAccess(user, globalSettings) ||
+        isConsultasAcompanharReadOnly(user, globalSettings) ||
+        userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_pacientes', globalSettings) ||
+        userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_novo_agendamento', globalSettings) ||
+        userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_dados', globalSettings) ||
+        userCanAccessSubmodule(user, 'parent_farmacia', 'sub_farmacia_pacientes', globalSettings) ||
+        userCanAccessSubmodule(user, 'parent_farmacia', 'sub_farmacia_retirar', globalSettings) ||
+        userCanAccessSubmodule(user, 'parent_farmacia', 'sub_farmacia_consultar', globalSettings) ||
+        perms.includes('parent_farmacia')
+    ) {
+        return true;
+    }
+    return false;
+};
 
 /**
  * Valida na camada de serviços se o usuário autenticado possui permissão operacional
@@ -100,14 +136,14 @@ const assertCanMutateRegulacao = (
             userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_pacientes', globalSettings) ||
             userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_novo_agendamento', globalSettings) ||
             canOperationalAcompanhar;
-        const canPacientesCrossModule =
+        const canPacientesFarmacia =
             userCanAccessSubmodule(user, 'parent_farmacia', 'sub_farmacia_pacientes', globalSettings) ||
             userCanAccessSubmodule(user, 'parent_farmacia', 'sub_farmacia_retirar', globalSettings) ||
             perms.includes('parent_farmacia') ||
-            perms.includes('parent_autosenha') ||
-            perms.some(p => typeof p === 'string' && (p.startsWith('sub_farmacia_') || p.startsWith('parent_farmacia_') || p.startsWith('sub_autosenha_')));
+            perms.some(p => typeof p === 'string' && (p.startsWith('sub_farmacia_') || p.startsWith('parent_farmacia_')));
+        const canPacientesAutoSenha = hasAutoSenhaPatientAccess(user, globalSettings);
 
-        if (!canPacientesRegulacao && !canPacientesCrossModule) {
+        if (!canPacientesRegulacao && !canPacientesFarmacia && !canPacientesAutoSenha) {
             throw new Error(`Acesso negado (Modo Somente Leitura): seu usuário não possui permissão para "${actionLabel}".`);
         }
     }
@@ -181,40 +217,211 @@ export const getPacienteById = async (id: string): Promise<ConsultaPaciente | nu
     }
 };
 
-export const getPacienteByCpf = async (cpf: string): Promise<ConsultaPaciente | null> => {
+export type PacienteCpfLookupStatus =
+    | 'found'
+    | 'not_found'
+    | 'invalid_cpf'
+    | 'permission_denied'
+    | 'connection_error'
+    | 'technical_error';
+
+export interface PacienteCpfLookupResult {
+    status: PacienteCpfLookupStatus;
+    paciente?: ConsultaPaciente | null;
+    normalizedCpf: string;
+    error?: string;
+}
+
+export class DuplicatePatientCpfError extends Error {
+    public readonly code = 'DUPLICATE_PATIENT_CPF';
+    public readonly existingPatient?: ConsultaPaciente | null;
+
+    constructor(message: string, existingPatient?: ConsultaPaciente | null) {
+        super(message);
+        this.name = 'DuplicatePatientCpfError';
+        this.existingPatient = existingPatient ?? null;
+    }
+}
+
+const classifyPacienteLookupError = (err: any): { status: 'permission_denied' | 'connection_error' | 'technical_error'; message: string } => {
+    const code = String(err?.code || '').toUpperCase();
+    const statusCode = Number(err?.status || err?.statusCode || 0);
+    const rawMsg = String(err?.message || err?.details || err || '').toLowerCase();
+
+    if (
+        code === '42501' ||
+        code === 'PGRST301' ||
+        statusCode === 401 ||
+        statusCode === 403 ||
+        rawMsg.includes('permission denied') ||
+        rawMsg.includes('row-level security') ||
+        rawMsg.includes('not authorized') ||
+        rawMsg.includes('insufficient_privilege') ||
+        rawMsg.includes('jwt')
+    ) {
+        return {
+            status: 'permission_denied',
+            message: 'Você não possui permissão de acesso (RLS) para consultar pacientes na base integrada.'
+        };
+    }
+
+    const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    if (
+        isOffline ||
+        statusCode === 0 ||
+        statusCode >= 500 ||
+        rawMsg.includes('failed to fetch') ||
+        rawMsg.includes('networkerror') ||
+        rawMsg.includes('network error') ||
+        rawMsg.includes('fetch failed') ||
+        rawMsg.includes('err_network') ||
+        rawMsg.includes('econnrefused') ||
+        rawMsg.includes('timeout') ||
+        rawMsg.includes('timed out')
+    ) {
+        return {
+            status: 'connection_error',
+            message: 'Falha de conexão ao consultar a base integrada de pacientes. Verifique a internet e tente novamente.'
+        };
+    }
+
+    const appErr = handleSupabaseError(err);
+    return {
+        status: 'technical_error',
+        message: appErr.message || 'Erro técnico ao consultar o CPF na base de dados.'
+    };
+};
+
+/**
+ * Consulta somente leitura de paciente por CPF normalizado (sem pontuação),
+ * compatível também com registros legados gravados com pontuação.
+ * Nunca cria ou altera registros durante a consulta e diferencia claramente
+ * "não encontrado" de falta de permissão ou falha de conexão.
+ */
+export const lookupPacienteByCpf = async (
+    cpf: string,
+    options?: { signal?: AbortSignal }
+): Promise<PacienteCpfLookupResult> => {
+    const clean = normalizeCpf(cpf);
+    if (!isValidCpf(clean)) {
+        return {
+            status: 'invalid_cpf',
+            normalizedCpf: clean,
+            error: 'CPF inválido. Informe os 11 dígitos válidos.'
+        };
+    }
+
+    const activeUser = getActivePermissionUser();
+    const globalSettings = getActiveGlobalModuleSettings();
+    if (activeUser && !hasIntegratedPatientReadAccess(activeUser, globalSettings)) {
+        return {
+            status: 'permission_denied',
+            normalizedCpf: clean,
+            error: 'Acesso negado: seu usuário não possui permissão para consultar pacientes na base integrada.'
+        };
+    }
+
+    const formatted = formatCpf(clean);
+
     try {
-        const clean = cpf ? cpf.replace(/\D/g, '').trim() : '';
-        if (!clean) return null;
-
-        const formatted = clean.length === 11
-            ? `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6, 9)}-${clean.slice(9, 11)}`
-            : clean;
-
-        // Busca tanto por CPF limpo quanto por CPF formatado com máscara
-        const { data, error } = await supabase
+        let query: any = supabase
             .from('consultas_pacientes')
             .select(PACIENTE_COLUMNS)
             .or(`cpf.eq.${clean},cpf.eq.${formatted}`)
-            .limit(1)
-            .maybeSingle();
+            .limit(1);
 
-        if (error) throw error;
-        return data;
-    } catch (error) {
-        const appError = handleSupabaseError(error);
-        console.error('[consultasService] getPacienteByCpf Error:', appError.message);
-        return null;
+        if (options?.signal && typeof query.abortSignal === 'function') {
+            query = query.abortSignal(options.signal);
+        }
+
+        const { data, error } = await query;
+
+        if (options?.signal?.aborted) {
+            return {
+                status: 'technical_error',
+                normalizedCpf: clean,
+                error: 'Consulta cancelada.'
+            };
+        }
+
+        if (error) {
+            const classified = classifyPacienteLookupError(error);
+            return {
+                status: classified.status,
+                normalizedCpf: clean,
+                error: classified.message
+            };
+        }
+
+        const rows = Array.isArray(data) ? data : (data ? [data] : []);
+        if (rows.length > 0) {
+            return {
+                status: 'found',
+                paciente: rows[0] as ConsultaPaciente,
+                normalizedCpf: clean
+            };
+        }
+
+        return {
+            status: 'not_found',
+            normalizedCpf: clean
+        };
+    } catch (error: any) {
+        if (options?.signal?.aborted || error?.name === 'AbortError') {
+            return {
+                status: 'technical_error',
+                normalizedCpf: clean,
+                error: 'Consulta cancelada.'
+            };
+        }
+        const classified = classifyPacienteLookupError(error);
+        console.error('[consultasService] lookupPacienteByCpf Error:', classified.message);
+        return {
+            status: classified.status,
+            normalizedCpf: clean,
+            error: classified.message
+        };
     }
 };
 
-export const createPaciente = async (paciente: Omit<ConsultaPaciente, 'id' | 'created_at' | 'updated_at'>): Promise<ConsultaPaciente | null> => {
+export const getPacienteByCpf = async (cpf: string): Promise<ConsultaPaciente | null> => {
+    const res = await lookupPacienteByCpf(cpf);
+    return res.status === 'found' ? (res.paciente || null) : null;
+};
+
+export const createPaciente = async (
+    paciente: Omit<ConsultaPaciente, 'id' | 'created_at' | 'updated_at'>,
+    options?: { strictNoDuplicate?: boolean }
+): Promise<ConsultaPaciente | null> => {
     assertCanMutateRegulacao('Cadastrar Paciente', 'pacientes');
     try {
-        const cleanCpf = paciente.cpf ? paciente.cpf.replace(/\D/g, '').trim() : '';
+        const cleanCpf = normalizeCpf(paciente.cpf);
         const cleanSus = paciente.sus_number && paciente.sus_number.trim().length > 0 ? paciente.sus_number.trim() : null;
 
-        // 1. Verificação prévia: se o paciente já existir no banco por CPF, atualiza e retorna o registro
-        if (cleanCpf.length === 11) {
+        if (options?.strictNoDuplicate) {
+            if (!isValidCpf(cleanCpf)) {
+                throw new Error('CPF inválido. Informe um CPF válido com 11 dígitos.');
+            }
+            if (!paciente.name || !paciente.name.trim()) {
+                throw new Error('O Nome Completo é obrigatório.');
+            }
+            if (!paciente.birth_date) {
+                throw new Error('A Data de Nascimento é obrigatória.');
+            }
+
+            // Verifica duplicidade no banco antes da inserção sem modificar registros existentes
+            const existingCheck = await lookupPacienteByCpf(cleanCpf);
+            if (existingCheck.status === 'found' && existingCheck.paciente) {
+                throw new DuplicatePatientCpfError(
+                    'Já existe um paciente cadastrado com este CPF na base integrada.',
+                    existingCheck.paciente
+                );
+            }
+            if (existingCheck.status !== 'not_found') {
+                throw new Error(existingCheck.error || 'Não foi possível validar o CPF no banco de dados.');
+            }
+        } else if (cleanCpf.length === 11) {
+            // 1. Verificação prévia retrocompatível: se o paciente já existir no banco por CPF, atualiza e retorna o registro
             const existing = await getPacienteByCpf(cleanCpf);
             if (existing) {
                 console.log('[consultasService] Paciente com este CPF já existe no banco. Atualizando e retornando existente...', existing.id);
@@ -224,7 +431,7 @@ export const createPaciente = async (paciente: Omit<ConsultaPaciente, 'id' | 'cr
                     birth_date: paciente.birth_date || existing.birth_date,
                     phone: paciente.phone !== undefined ? (paciente.phone?.trim() || null) : existing.phone,
                     neighborhood: paciente.neighborhood !== undefined ? (paciente.neighborhood?.trim() || null) : existing.neighborhood,
-                    street: paciente.street !== undefined ? (paciente.street?.trim() || null) : existing.street,
+                    street: paciente.street?.trim() !== undefined ? (paciente.street?.trim() || null) : existing.street,
                     city: paciente.city !== undefined ? (paciente.city?.trim() || null) : existing.city,
                     sus_number: cleanSus || existing.sus_number,
                     agente_saude: paciente.agente_saude !== undefined ? (paciente.agente_saude?.trim() || null) : existing.agente_saude
@@ -283,12 +490,18 @@ export const createPaciente = async (paciente: Omit<ConsultaPaciente, 'id' | 'cr
             error = lastError;
         }
 
-        // Se deu erro de duplicidade (23505), busca o paciente existente por CPF e retorna com sucesso
-        if (error && error.code === '23505' && cleanCpf.length === 11) {
+        // Se deu erro de duplicidade (23505):
+        if (error && (error.code === '23505' || String(error.message || '').toLowerCase().includes('duplicate')) && cleanCpf.length === 11) {
+            const existingLookup = await lookupPacienteByCpf(cleanCpf);
+            if (options?.strictNoDuplicate) {
+                throw new DuplicatePatientCpfError(
+                    'Já existe um paciente cadastrado com este CPF no banco de dados.',
+                    existingLookup.status === 'found' ? existingLookup.paciente : null
+                );
+            }
             console.warn('[consultasService] Conflito de duplicidade 23505 capturado. Buscando paciente existente por CPF...');
-            const existing = await getPacienteByCpf(cleanCpf);
-            if (existing) {
-                return existing;
+            if (existingLookup.status === 'found' && existingLookup.paciente) {
+                return existingLookup.paciente;
             }
         }
 
@@ -299,11 +512,14 @@ export const createPaciente = async (paciente: Omit<ConsultaPaciente, 'id' | 'cr
         }
         return data;
     } catch (error: any) {
+        if (error instanceof DuplicatePatientCpfError) {
+            throw error;
+        }
         const appError = handleSupabaseError(error);
         console.error('[consultasService] createPaciente Error:', appError.message);
-        // Custom message for unique CPF constraint
-        if (error.code === '23505') {
-            throw new Error('CPF já cadastrado no sistema.');
+        // Mensagem amigável para violação única em CPF
+        if (error?.code === '23505') {
+            throw new DuplicatePatientCpfError('CPF já cadastrado no sistema.');
         }
         throw appError;
     }

@@ -1313,16 +1313,18 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
         </div>
       )}
 
-      {/* MODAL DE CADASTRO DE NOVO PACIENTE (INTEGRADO À CENTRAL ÚNICA) */}
+      {/* MODAL DE LOCALIZAÇÃO POR CPF E CADASTRO INTEGRADO DE PACIENTE */}
       {modalNovoPacienteAberto && (
         <PacienteFormModal
           isOpen={modalNovoPacienteAberto}
           onClose={() => setModalNovoPacienteAberto(false)}
-          onSuccess={(novoPaciente) => {
-            setPacienteSelecionado(novoPaciente);
+          onSuccess={(pacienteVinculado, meta) => {
+            setPacienteSelecionado(pacienteVinculado);
             setModalNovoPacienteAberto(false);
             setModalLocalizarAberto(false);
-            const idade = calcularIdadeAnos(novoPaciente.birth_date);
+            setBuscaPacienteTermo('');
+            setPacientesEncontrados([]);
+            const idade = calcularIdadeAnos(pacienteVinculado.birth_date);
             if (idade !== null && idade >= 80) {
               setNovaPrioridade('ESPECIAL');
               setNovaCategoria('Idoso 80+ (Prioridade Especial)');
@@ -1330,7 +1332,8 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
               setNovaPrioridade('PRIORITARIO');
               setNovaCategoria('Idoso (60 a 79 anos)');
             }
-            setFeedbackSuccess(`Paciente ${novoPaciente.name} cadastrado com sucesso! Prossiga com a emissão da senha.`);
+            const acaoLabel = meta?.isNew ? 'cadastrado e selecionado' : 'localizado e selecionado';
+            setFeedbackSuccess(`Paciente ${pacienteVinculado.name} ${acaoLabel} com sucesso! Prossiga com a emissão da senha.`);
             setTimeout(() => setFeedbackSuccess(null), 5000);
           }}
         />
