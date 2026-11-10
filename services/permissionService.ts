@@ -265,6 +265,13 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
         routes: ['/Regulacao/Acompanhar', '/Regulacao/VagasReservadas', '/Consultas/Acompanhar', '/Consultas/VagasReservadas']
       },
       {
+        key: 'sub_consultas_acompanhar_leitura',
+        legacyKeys: ['sub_regulacao_acompanhar_leitura', 'parent_consultas_acompanhar_leitura'],
+        label: 'Acompanhar Solicitações — Somente Leitura',
+        description: 'Permite consultar, pesquisar, filtrar e imprimir comprovante individual em Acompanhar Solicitações, sem permissão de edição',
+        routes: ['/Regulacao/Acompanhar', '/Consultas/Acompanhar']
+      },
+      {
         key: 'sub_consultas_definir_agenda',
         legacyKeys: ['parent_consultas_definir_agenda', 'sub_regulacao_definir_agenda'],
         label: 'Definir Agenda',
@@ -859,13 +866,14 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
 export interface RoutePermissionBinding {
   parentKey: string;
   subKey?: string;
+  alternativeSubKeys?: string[];
   moduleLabel: string;
   itemLabel: string;
 }
 
 const ROUTE_BINDINGS_MAP: Map<string, RoutePermissionBinding> = new Map();
 
-// Constrói o mapa indexado de rotas
+// Constrói o mapa indexado de rotas (preservando múltiplos submódulos que compartilham a mesma rota)
 (function buildRouteBindingsMap() {
   MODULE_ACCESS_TREE.forEach(parent => {
     parent.routes.forEach(r => {
@@ -879,12 +887,22 @@ const ROUTE_BINDINGS_MAP: Map<string, RoutePermissionBinding> = new Map();
     if (parent.submodules) {
       parent.submodules.forEach(sub => {
         sub.routes.forEach(r => {
-          ROUTE_BINDINGS_MAP.set(r.toLowerCase(), {
-            parentKey: parent.key,
-            subKey: sub.key,
-            moduleLabel: parent.label,
-            itemLabel: sub.label
-          });
+          const normalizedRoute = r.toLowerCase();
+          const existing = ROUTE_BINDINGS_MAP.get(normalizedRoute);
+          if (existing && existing.parentKey === parent.key && existing.subKey && existing.subKey !== sub.key) {
+            const alts = existing.alternativeSubKeys ? [...existing.alternativeSubKeys] : [];
+            if (!alts.includes(sub.key)) {
+              alts.push(sub.key);
+            }
+            existing.alternativeSubKeys = alts;
+          } else {
+            ROUTE_BINDINGS_MAP.set(normalizedRoute, {
+              parentKey: parent.key,
+              subKey: sub.key,
+              moduleLabel: parent.label,
+              itemLabel: sub.label
+            });
+          }
         });
       });
     }
@@ -1393,12 +1411,17 @@ export function canUserAccessRoute(
     };
   }
 
-  // 5. Se a rota possui submódulo específico, valida o Submódulo no Global: SE ESTIVER DESATIVADO NO GLOBAL, NENHUM USUÁRIO ACESSA!
+  // 5. Se a rota possui submódulo específico (ou submódulos alternativos equivalentes como Somente Leitura),
+  //    valida no escopo Global.
   if (binding.subKey) {
-    const subDef = parentDef.submodules?.find(s => s.key === binding.subKey);
-    const itemTitle = subDef?.label || binding.itemLabel;
+    const candidateSubKeys = [binding.subKey, ...(binding.alternativeSubKeys || [])];
+    const anyGloballyActive = candidateSubKeys.some(sk =>
+      isSubmoduleActiveGlobally(binding.parentKey, sk, globalSettings)
+    );
 
-    if (!isSubmoduleActiveGlobally(binding.parentKey, binding.subKey, globalSettings)) {
+    if (!anyGloballyActive) {
+      const subDef = parentDef.submodules?.find(s => s.key === binding.subKey);
+      const itemTitle = subDef?.label || binding.itemLabel;
       const reason = `A funcionalidade "${itemTitle}" do módulo "${binding.moduleLabel}" está temporariamente desativada no sistema.`;
       logAccessDenied({
         route: path,
@@ -1457,12 +1480,16 @@ export function canUserAccessRoute(
     };
   }
 
-  // 7. Se a rota possui submódulo específico, valida no Usuário: Válido para TODOS os perfis (inclusive Administradores)
+  // 7. Se a rota possui submódulo específico, valida no Usuário (considerando submódulos alternativos, ex: Somente Leitura)
   if (binding.subKey) {
-    const subDef = parentDef.submodules?.find(s => s.key === binding.subKey);
-    const itemTitle = subDef?.label || binding.itemLabel;
+    const candidateSubKeys = [binding.subKey, ...(binding.alternativeSubKeys || [])];
+    const hasAccessToAnyCandidate = candidateSubKeys.some(sk =>
+      userCanAccessSubmodule(user, binding.parentKey, sk, globalSettings)
+    );
 
-    if (!userCanAccessSubmodule(user, binding.parentKey, binding.subKey, globalSettings)) {
+    if (!hasAccessToAnyCandidate) {
+      const subDef = parentDef.submodules?.find(s => s.key === binding.subKey);
+      const itemTitle = subDef?.label || binding.itemLabel;
       const reason = `Seu usuário não possui permissão para acessar "${itemTitle}" em "${binding.moduleLabel}".`;
       logAccessDenied({
         route: path,
@@ -1494,5 +1521,95 @@ export function canUserAccessRoute(
   }
 
   return { allowed: true };
+}
+
+// Estado da sessão ativa para validação defensiva na camada de serviços
+let activePermissionUser: User | null = null;
+
+export function setActivePermissionUser(user: User | null): void {
+  activePermissionUser = user;
+}
+
+export function getActivePermissionUser(): User | null {
+  return activePermissionUser;
+}
+
+/**
+ * Indica se o usuário possui permissões operacionais (escrita/gestão) na tela Acompanhar da Regulação.
+ * Administradores, Gestores da Regulação, usuários com permissão operacional explícita ('sub_consultas_acompanhar')
+ * ou usuários legados com apenas a chave pai do módulo retornam true.
+ */
+export function hasConsultasAcompanharOperationalAccess(
+  user: User | null | undefined,
+  gestorUserIds: string[] = []
+): boolean {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+
+  const perms = user.permissions || [];
+  if (
+    gestorUserIds.includes(user.id) ||
+    perms.includes('sub_consultas_gestor') ||
+    perms.includes('parent_consultas_gestor') ||
+    perms.includes('sub_regulacao_gestor' as any)
+  ) {
+    return true;
+  }
+
+  // Permissão operacional explícita do submódulo Acompanhar
+  if (
+    userHasPermissionKey(perms, 'sub_consultas_acompanhar', [
+      'parent_consultas_acompanhar',
+      'sub_regulacao_acompanhar'
+    ])
+  ) {
+    return true;
+  }
+
+  // Compatibilidade retrógrada estrita: usuário legado com apenas a chave pai (sem chaves granulares)
+  const regulacaoDef = MODULE_ACCESS_TREE.find(m => m.key === 'parent_consultas');
+  const hasAnyGranularSubPerm = regulacaoDef?.submodules?.some(sub =>
+    userHasPermissionKey(perms, sub.key, sub.legacyKeys)
+  ) ?? false;
+
+  if (!hasAnyGranularSubPerm && userHasPermissionKey(perms, 'parent_consultas', regulacaoDef?.legacyKeys)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Indica se o usuário deve operar /Regulacao/Acompanhar em MODO SOMENTE LEITURA.
+ * Retorna true exclusivamente quando NÃO possui acesso operacional/admin/gestor para Acompanhar,
+ * mas possui a permissão "Acompanhar Solicitações — Somente Leitura".
+ */
+export function isConsultasAcompanharReadOnly(
+  user: User | null | undefined,
+  gestorUserIds: string[] = []
+): boolean {
+  if (!user) return false;
+  if (hasConsultasAcompanharOperationalAccess(user, gestorUserIds)) {
+    return false;
+  }
+  const perms = user.permissions || [];
+  return userHasPermissionKey(perms, 'sub_consultas_acompanhar_leitura', [
+    'sub_regulacao_acompanhar_leitura',
+    'parent_consultas_acompanhar_leitura'
+  ]);
+}
+
+/**
+ * Indica se o usuário pode acessar /Regulacao/Acompanhar em modo operacional OU somente leitura.
+ */
+export function canUserAccessRegulacaoAcompanhar(
+  user: User | null | undefined,
+  globalSettings?: Record<string, boolean>
+): boolean {
+  if (!user) return false;
+  return (
+    userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_acompanhar', globalSettings) ||
+    userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_acompanhar_leitura', globalSettings)
+  );
 }
 

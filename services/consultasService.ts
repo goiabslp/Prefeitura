@@ -2,6 +2,119 @@ import { supabase } from './supabaseClient';
 import { ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga, ConsultaEspecialista, TipoAtendimentoConsulta, User, ConsultaSolicitacaoCancelamento } from '../types';
 import { handleSupabaseError } from '../utils/errorUtils';
 import { auditLogService } from './auditLogService';
+import {
+    getActivePermissionUser,
+    hasConsultasAcompanharOperationalAccess,
+    isConsultasAcompanharReadOnly,
+    userCanAccessSubmodule
+} from './permissionService';
+
+const getCachedConsultasGestores = (): string[] => {
+    try {
+        const local = typeof localStorage !== 'undefined' ? localStorage.getItem('consultas_gestores_user_ids') : null;
+        return local ? JSON.parse(local) : [];
+    } catch {
+        return [];
+    }
+};
+
+type RegulacaoMutationKind =
+    | 'acompanhar'
+    | 'novo_agendamento'
+    | 'vagas'
+    | 'procedimentos'
+    | 'pacientes'
+    | 'gestor';
+
+/**
+ * Valida na camada de serviços se o usuário autenticado possui permissão operacional
+ * para gravar ou alterar registros da Regulação. Bloqueia perfis "Somente Leitura"
+ * e tentativas diretas fora da interface antes de qualquer chamada de escrita ao banco.
+ */
+const assertCanMutateRegulacao = (
+    actionLabel: string,
+    kind: RegulacaoMutationKind = 'acompanhar',
+    explicitUser?: Partial<User> | null
+): void => {
+    const user = (explicitUser || getActivePermissionUser()) as User | null;
+    if (!user) return; // Contexto sem sessão de usuário associada (ex.: rotinas isoladas)
+
+    if (user.role === 'admin') return;
+
+    const gestorIds = getCachedConsultasGestores();
+    const perms = user.permissions || [];
+    const isGestor =
+        gestorIds.includes(user.id) ||
+        perms.includes('sub_consultas_gestor') ||
+        perms.includes('parent_consultas_gestor') ||
+        perms.includes('sub_regulacao_gestor' as any);
+
+    if (kind === 'gestor') {
+        if (!isGestor) {
+            throw new Error(`Acesso negado: apenas Administradores ou Gestores autorizados podem executar "${actionLabel}".`);
+        }
+        return;
+    }
+
+    const isReadOnlyAcompanhar = isConsultasAcompanharReadOnly(user, gestorIds);
+
+    if (kind === 'acompanhar') {
+        if (isReadOnlyAcompanhar || !hasConsultasAcompanharOperationalAccess(user, gestorIds)) {
+            throw new Error(`Acesso negado (Modo Somente Leitura): seu usuário não possui permissão operacional para "${actionLabel}".`);
+        }
+        return;
+    }
+
+    if (kind === 'novo_agendamento') {
+        const canNovo = userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_novo_agendamento');
+        const canRetorno = hasConsultasAcompanharOperationalAccess(user, gestorIds);
+        if (!canNovo && !canRetorno) {
+            throw new Error(`Acesso negado (Modo Somente Leitura): seu usuário não possui permissão para "${actionLabel}".`);
+        }
+        return;
+    }
+
+    if (kind === 'vagas') {
+        if (isGestor) return;
+        const canVagas = userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_liberar_vagas');
+        const canAcompanharOp = hasConsultasAcompanharOperationalAccess(user, gestorIds);
+        if (!canVagas && !canAcompanharOp) {
+            throw new Error(`Acesso negado: seu usuário não possui permissão para "${actionLabel}".`);
+        }
+        return;
+    }
+
+    if (kind === 'procedimentos') {
+        if (isGestor) return;
+        const canProc = userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_procedimentos');
+        if (!canProc) {
+            throw new Error(`Acesso negado: seu usuário não possui permissão para "${actionLabel}".`);
+        }
+        return;
+    }
+
+    if (kind === 'pacientes') {
+        if (isGestor) return;
+        const hasPacientesPermission =
+            userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_pacientes') ||
+            userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_novo_agendamento') ||
+            hasConsultasAcompanharOperationalAccess(user, gestorIds) ||
+            perms.includes('parent_farmacia') ||
+            perms.includes('parent_autosenha') ||
+            perms.some(p => typeof p === 'string' && (p.startsWith('sub_farmacia_') || p.startsWith('parent_farmacia_') || p.startsWith('sub_autosenha_')));
+
+        if (
+            !hasPacientesPermission ||
+            (isReadOnlyAcompanhar &&
+                !userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_pacientes') &&
+                !userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_novo_agendamento') &&
+                !perms.includes('parent_farmacia') &&
+                !perms.includes('parent_autosenha'))
+        ) {
+            throw new Error(`Acesso negado (Modo Somente Leitura): seu usuário não possui permissão para "${actionLabel}".`);
+        }
+    }
+};
 
 // --- PACIENTES ---
 
@@ -98,6 +211,7 @@ export const getPacienteByCpf = async (cpf: string): Promise<ConsultaPaciente | 
 };
 
 export const createPaciente = async (paciente: Omit<ConsultaPaciente, 'id' | 'created_at' | 'updated_at'>): Promise<ConsultaPaciente | null> => {
+    assertCanMutateRegulacao('Cadastrar Paciente', 'pacientes');
     try {
         const cleanCpf = paciente.cpf ? paciente.cpf.replace(/\D/g, '').trim() : '';
         const cleanSus = paciente.sus_number && paciente.sus_number.trim().length > 0 ? paciente.sus_number.trim() : null;
@@ -199,6 +313,7 @@ export const createPaciente = async (paciente: Omit<ConsultaPaciente, 'id' | 'cr
 };
 
 export const updatePaciente = async (id: string, updates: Partial<ConsultaPaciente>): Promise<ConsultaPaciente | null> => {
+    assertCanMutateRegulacao('Atualizar Paciente', 'pacientes');
     try {
         const cleanUpdates: any = { ...updates };
         if (updates.cpf !== undefined) {
@@ -260,6 +375,7 @@ export const updatePaciente = async (id: string, updates: Partial<ConsultaPacien
 };
 
 export const deletePaciente = async (id: string): Promise<boolean> => {
+    assertCanMutateRegulacao('Excluir Paciente', 'pacientes');
     try {
         const { error, count } = await supabase
             .from('consultas_pacientes')
@@ -666,6 +782,7 @@ export const getEspecialistaById = async (id: string): Promise<ConsultaEspeciali
 };
 
 export const createEspecialista = async (especialista: Omit<ConsultaEspecialista, 'id' | 'created_at' | 'updated_at'>): Promise<ConsultaEspecialista | null> => {
+    assertCanMutateRegulacao('Cadastrar Especialista', 'procedimentos');
     try {
         const payload = {
             nome: especialista.nome?.trim().toUpperCase(),
@@ -735,6 +852,7 @@ export const createEspecialista = async (especialista: Omit<ConsultaEspecialista
 };
 
 export const updateEspecialista = async (id: string, updates: Partial<ConsultaEspecialista>): Promise<ConsultaEspecialista | null> => {
+    assertCanMutateRegulacao('Atualizar Especialista', 'procedimentos');
     try {
         const cleanUpdates: any = { ...updates, updated_at: new Date().toISOString() };
         if (cleanUpdates.nome) cleanUpdates.nome = cleanUpdates.nome.trim().toUpperCase();
@@ -803,6 +921,7 @@ export const updateEspecialista = async (id: string, updates: Partial<ConsultaEs
 };
 
 export const deleteEspecialista = async (id: string): Promise<boolean> => {
+    assertCanMutateRegulacao('Excluir Especialista', 'procedimentos');
     try {
         // Validação de integridade referencial: verificar se há procedimentos associados a este especialista
         const procs = await getProcedimentos();
@@ -1133,6 +1252,7 @@ export const getProcedimentos = async (
 };
 
 export const createProcedimento = async (procedimento: Omit<ConsultaProcedimento, 'id' | 'created_at' | 'updated_at'>): Promise<ConsultaProcedimento | null> => {
+    assertCanMutateRegulacao('Cadastrar Procedimento', 'procedimentos');
     try {
         const espIdPayload = procedimento.especialista_id || null;
         const parentIdPayload = procedimento.parent_id || null;
@@ -1185,6 +1305,7 @@ export const createProcedimento = async (procedimento: Omit<ConsultaProcedimento
 };
 
 export const updateProcedimento = async (id: string, updates: Partial<ConsultaProcedimento>): Promise<ConsultaProcedimento | null> => {
+    assertCanMutateRegulacao('Atualizar Procedimento', 'procedimentos');
     try {
         const espIdPayload = updates.especialista_id !== undefined ? updates.especialista_id : getProcEspecialistaMapping(id);
         const parentIdPayload = updates.parent_id !== undefined ? updates.parent_id : getProcParentMapping(id);
@@ -1262,6 +1383,7 @@ export const vincularEspecialistaProcedimento = async (params: {
     especialistaId: string;
     status?: 'Ativo' | 'Inativo';
 }): Promise<ConsultaProcedimento> => {
+    assertCanMutateRegulacao('Vincular Especialista ao Procedimento', 'procedimentos');
     try {
         const procs = await getProcedimentos();
         const parentProc = procs.find(p => p.id === params.parentId);
@@ -1313,6 +1435,7 @@ export const vincularEspecialistaProcedimento = async (params: {
 };
 
 export const deleteProcedimento = async (id: string): Promise<boolean> => {
+    assertCanMutateRegulacao('Excluir Procedimento', 'procedimentos');
     try {
         const procs = await getProcedimentos();
         const proc = procs.find(p => p.id === id);
@@ -1382,6 +1505,7 @@ export interface AgendamentoFilters {
     procedimentoId?: string;
     date?: string;
     status?: string;
+    readOnly?: boolean;
 }
 
 /**
@@ -1540,6 +1664,10 @@ export const orderConsultasQueue = (bookings: ConsultaAgendamento[]): ConsultaAg
  * Migra automaticamente todos os agendamentos com status 'Aguardando Data' para 'Fila de espera'
  */
 export const migrateAguardandoDataToFilaEspera = async (): Promise<void> => {
+    const activeUser = getActivePermissionUser();
+    if (activeUser && (isConsultasAcompanharReadOnly(activeUser, getCachedConsultasGestores()) || !hasConsultasAcompanharOperationalAccess(activeUser, getCachedConsultasGestores()))) {
+        return;
+    }
     try {
         const { error } = await supabase
             .from('consultas_agendamentos')
@@ -1559,6 +1687,10 @@ export const migrateAguardandoDataToFilaEspera = async (): Promise<void> => {
  * Garante que a prioridade seja respeitada no backend para qualquer operação simultânea ou novo usuário.
  */
 export const recalculateAndPersistQueuePositions = async (): Promise<void> => {
+    const activeUser = getActivePermissionUser();
+    if (activeUser && isConsultasAcompanharReadOnly(activeUser, getCachedConsultasGestores())) {
+        return;
+    }
     try {
         // Dispara migração preventiva de Aguardando Data
         migrateAguardandoDataToFilaEspera().catch(() => {});
@@ -1659,8 +1791,18 @@ export const recalculateAndPersistQueuePositions = async (): Promise<void> => {
 
 export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<ConsultaAgendamento[]> => {
     try {
-        // Dispara migração assíncrona de status
-        migrateAguardandoDataToFilaEspera().catch(() => {});
+        const activeUser = getActivePermissionUser();
+        const isUserReadOnly = Boolean(
+            filters?.readOnly ||
+            (activeUser && (
+                isConsultasAcompanharReadOnly(activeUser, getCachedConsultasGestores()) ||
+                !hasConsultasAcompanharOperationalAccess(activeUser, getCachedConsultasGestores())
+            ))
+        );
+        // Dispara migração assíncrona de status somente para perfis com acesso operacional de escrita
+        if (!isUserReadOnly) {
+            migrateAguardandoDataToFilaEspera().catch(() => {});
+        }
         const fullColumns = `
             id, patient_id, procedimento_id, appointment_date, appointment_time, solicitation_date,
             quantity, priority, queue_position, special_sequence, status, created_by, created_at,
@@ -2075,6 +2217,7 @@ export const searchRemoteAgendamentos = async (
 };
 
 export const createAgendamento = async (agendamento: Omit<ConsultaAgendamento, 'id' | 'created_at'>): Promise<ConsultaAgendamento> => {
+    assertCanMutateRegulacao('Criar Solicitação/Agendamento', 'novo_agendamento');
     try {
         // 1. Bloqueio rigoroso de solicitações duplicadas ativas (mesmo paciente + mesmo procedimento)
         //    Válido para todos os status ativos (Solicitado, Aguardando Data, Fila de espera, Agendado, Retorno, Pausada)
@@ -2345,6 +2488,7 @@ export const confirmarComparecimentoAgendamento = async (
     situacao: 'Realizado' | 'Não Realizado',
     currentUser: User
 ): Promise<ConsultaAgendamento> => {
+    assertCanMutateRegulacao('Confirmar Comparecimento de Atendimento', 'acompanhar', currentUser);
     const agoraIso = new Date().toISOString();
     const serverName = currentUser?.name || 'Servidor Municipal';
 
@@ -2503,6 +2647,7 @@ export const pausarAgendamento = async (
     motivo: string,
     currentUser: User
 ): Promise<ConsultaAgendamento> => {
+    assertCanMutateRegulacao('Pausar Solicitação', 'acompanhar', currentUser);
     // 1. Validação estrita de autorização
     const isAuthorized = 
         currentUser.role === 'admin' ||
@@ -2613,6 +2758,7 @@ export const retomarAgendamento = async (
     id: string,
     currentUser: User
 ): Promise<ConsultaAgendamento> => {
+    assertCanMutateRegulacao('Retomar Solicitação', 'acompanhar', currentUser);
     // 1. Validação estrita de autorização
     const isAuthorized = 
         currentUser.role === 'admin' ||
@@ -2887,6 +3033,7 @@ export const confirmarDataAgendamento = async (
     time?: string,
     vagaInfo?: Partial<ConsultaVaga>
 ): Promise<ConsultaAgendamento | null> => {
+    assertCanMutateRegulacao('Definir Data do Agendamento', 'acompanhar');
     try {
         // 1. Buscar o agendamento atual com fallback seguro de colunas e memória
         let targetBooking: any = null;
@@ -3079,6 +3226,7 @@ export const updateAgendamento = async (
     id: string, 
     updates: Partial<ConsultaAgendamento>
 ): Promise<ConsultaAgendamento | null> => {
+    assertCanMutateRegulacao('Alterar Agendamento', 'acompanhar');
     try {
         const { paciente, procedimento, responsavel, ...cleanUpdates } = updates as any;
 
@@ -3325,6 +3473,7 @@ export const updateAgendamento = async (
 };
 
 export const deleteAgendamento = async (id: string): Promise<boolean> => {
+    assertCanMutateRegulacao('Excluir Agendamento', 'acompanhar');
     try {
         const { error, count } = await supabase
             .from('consultas_agendamentos')
@@ -3577,6 +3726,7 @@ export const createVagas = async (
         status?: ConsultaVaga['status'];
     }>
 ): Promise<ConsultaVaga[] | null> => {
+    assertCanMutateRegulacao('Liberar Vagas', 'vagas');
     try {
         const payload = vagas.map(v => ({
             procedimento_id: v.procedimento_id,
@@ -3632,6 +3782,7 @@ export const createVagas = async (
 };
 
 export const updateVaga = async (id: string, updates: Partial<ConsultaVaga>): Promise<ConsultaVaga | null> => {
+    assertCanMutateRegulacao('Atualizar Vaga', 'vagas');
     try {
         const { data, error } = await supabase
             .from('consultas_vagas')
@@ -3658,6 +3809,7 @@ export const updateVaga = async (id: string, updates: Partial<ConsultaVaga>): Pr
 };
 
 export const pauseVaga = async (id: string): Promise<boolean> => {
+    assertCanMutateRegulacao('Pausar Vaga', 'vagas');
     try {
         const { error } = await supabase
             .from('consultas_vagas')
@@ -3682,6 +3834,7 @@ export const pauseVaga = async (id: string): Promise<boolean> => {
 };
 
 export const unpauseVaga = async (id: string): Promise<boolean> => {
+    assertCanMutateRegulacao('Retomar Vaga', 'vagas');
     try {
         const { error } = await supabase
             .from('consultas_vagas')
@@ -3706,6 +3859,7 @@ export const unpauseVaga = async (id: string): Promise<boolean> => {
 };
 
 export const deleteVaga = async (id: string): Promise<boolean> => {
+    assertCanMutateRegulacao('Excluir Vaga', 'vagas');
     try {
         const { error } = await supabase
             .from('consultas_vagas')
@@ -3733,6 +3887,7 @@ export const deleteVaga = async (id: string): Promise<boolean> => {
  * Pausa todas as vagas de um procedimento em lote (ou uma lista específica de IDs).
  */
 export const pauseAllVagas = async (procedimentoId: string, vagaIds?: string[]): Promise<boolean> => {
+    assertCanMutateRegulacao('Pausar Todas as Vagas', 'vagas');
     try {
         let query = supabase
             .from('consultas_vagas')
@@ -3766,6 +3921,7 @@ export const pauseAllVagas = async (procedimentoId: string, vagaIds?: string[]):
  * Ativa / Despausa todas as vagas de um procedimento em lote (ou uma lista específica de IDs).
  */
 export const unpauseAllVagas = async (procedimentoId: string, vagaIds?: string[]): Promise<boolean> => {
+    assertCanMutateRegulacao('Retomar Todas as Vagas', 'vagas');
     try {
         let query = supabase
             .from('consultas_vagas')
@@ -3799,6 +3955,7 @@ export const unpauseAllVagas = async (procedimentoId: string, vagaIds?: string[]
  * Exclui todas as vagas de um procedimento em lote (ou uma lista específica de IDs).
  */
 export const deleteAllVagas = async (procedimentoId: string, vagaIds?: string[]): Promise<boolean> => {
+    assertCanMutateRegulacao('Excluir Todas as Vagas', 'vagas');
     try {
         let query = supabase
             .from('consultas_vagas')
@@ -3836,6 +3993,7 @@ export const updateAllVagas = async (
     updates: Partial<ConsultaVaga>, 
     vagaIds?: string[]
 ): Promise<boolean> => {
+    assertCanMutateRegulacao('Atualizar Lote de Vagas', 'vagas');
     try {
         let query = supabase
             .from('consultas_vagas')
@@ -3911,6 +4069,7 @@ export const isUserGestoresOrAdmin = async (user: { id: string; role?: string })
 };
 
 export const addConsultasGestor = async (userId: string, currentUserId?: string): Promise<boolean> => {
+    assertCanMutateRegulacao('Adicionar Gestor da Regulação', 'gestor');
     try {
         const local = await getConsultasGestores();
         if (!local.includes(userId)) {
@@ -3951,6 +4110,7 @@ export const addConsultasGestor = async (userId: string, currentUserId?: string)
 };
 
 export const removeConsultasGestor = async (userId: string): Promise<boolean> => {
+    assertCanMutateRegulacao('Remover Gestor da Regulação', 'gestor');
     try {
         let local = await getConsultasGestores();
         local = local.filter(id => id !== userId);
@@ -3993,6 +4153,7 @@ export const cancelAgendamentoWithReason = async (
     reason: string,
     user: { id: string; name: string }
 ): Promise<ConsultaAgendamento | null> => {
+    assertCanMutateRegulacao('Cancelar Agendamento', 'acompanhar');
     const now = new Date().toISOString();
     try {
         const { data, error } = await supabase
@@ -4028,6 +4189,7 @@ export const cancelAgendamentoWithReason = async (
 };
 
 export const reagendarAgendamento = async (id: string): Promise<ConsultaAgendamento | null> => {
+    assertCanMutateRegulacao('Reagendar Agendamento', 'acompanhar');
     try {
         const { data, error } = await supabase
             .from('consultas_agendamentos')
@@ -4166,6 +4328,7 @@ export const solicitarCancelamentoAgendamento = async (params: {
     bookingSnapshot?: ConsultaAgendamento | null;
 }): Promise<{ success: boolean; solicitacao?: ConsultaSolicitacaoCancelamento; error?: string }> => {
     try {
+        assertCanMutateRegulacao('Solicitar Cancelamento', 'acompanhar');
         const { agendamentoId, justificativa, solicitante, bookingSnapshot } = params;
 
         if (!justificativa || justificativa.trim().length < 5) {
@@ -4270,6 +4433,7 @@ export const aprovarSolicitacaoCancelamento = async (params: {
     aprovador: { id: string; name: string };
 }): Promise<{ success: boolean; error?: string }> => {
     try {
+        assertCanMutateRegulacao('Aprovar Solicitação de Cancelamento', 'acompanhar');
         const { solicitacaoId, aprovador } = params;
         const now = new Date().toISOString();
 
@@ -4422,6 +4586,7 @@ export const rejeitarSolicitacaoCancelamento = async (params: {
     rejeitador: { id: string; name: string };
 }): Promise<{ success: boolean; error?: string }> => {
     try {
+        assertCanMutateRegulacao('Rejeitar Solicitação de Cancelamento', 'acompanhar');
         const { solicitacaoId, justificativaRecusa, rejeitador } = params;
 
         if (!justificativaRecusa || justificativaRecusa.trim().length < 5) {

@@ -1,7 +1,7 @@
 // Módulo de Consultas e Regulação Municipal
 import React, { useState, useEffect } from 'react';
 import { User, AppState } from '../../types';
-import { ArrowLeft, PlusCircle, Activity, History, Database, Users, ShieldCheck, CalendarClock, CalendarCheck, Settings } from 'lucide-react';
+import { ArrowLeft, PlusCircle, Activity, History, Database, Users, ShieldCheck, CalendarClock, CalendarCheck, Settings, Eye } from 'lucide-react';
 import { NovoAgendamentoScreen } from './NovoAgendamentoScreen';
 import { AcompanharScreen } from './AcompanharScreen';
 import { DadosScreen } from './DadosScreen';
@@ -12,7 +12,11 @@ import { ModuleGestorScreen } from '../common/ModuleGestorScreen';
 import { SolicitacoesCancelamentoModal } from './SolicitacoesCancelamentoModal';
 import * as db from '../../services/consultasService';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
-import { userCanAccessSubmodule } from '../../services/permissionService';
+import {
+    userCanAccessSubmodule,
+    canUserAccessRegulacaoAcompanhar,
+    isConsultasAcompanharReadOnly
+} from '../../services/permissionService';
 
 interface ConsultasModuleProps {
     currentView: string;
@@ -66,7 +70,8 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
 
     const canAccessNovoAgendamento = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_novo_agendamento', isMobileViewport ? mobileModuleStatus : moduleStatus);
     const canAccessLiberarVagas = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_liberar_vagas', isMobileViewport ? mobileModuleStatus : moduleStatus);
-    const canAccessAcompanhar = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_acompanhar', isMobileViewport ? mobileModuleStatus : moduleStatus);
+    const canAccessAcompanhar = canUserAccessRegulacaoAcompanhar(currentUser, isMobileViewport ? mobileModuleStatus : moduleStatus);
+    const isAcompanharReadOnly = isConsultasAcompanharReadOnly(currentUser, gestorUserIds);
     const canAccessProcedimentos = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_procedimentos', isMobileViewport ? mobileModuleStatus : moduleStatus);
     const canAccessDados = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_dados', isMobileViewport ? mobileModuleStatus : moduleStatus);
     const canAccessPacientes = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_pacientes', isMobileViewport ? mobileModuleStatus : moduleStatus);
@@ -74,7 +79,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
 
     const showNovoAgendamento = (subView === 'novo-agendamento' || (subView?.startsWith('novo-agendamento') ?? false) || subView === 'vagas-reservadas') && canAccessNovoAgendamento;
     const showLiberarVagas = (subView === 'liberar-vagas') && canAccessLiberarVagas;
-    const showAcompanhar = (subView === 'acompanhar' || subView === 'definir-agenda') && canAccessAcompanhar;
+    const showAcompanhar = (subView === 'acompanhar' || (subView === 'definir-agenda' && !isAcompanharReadOnly)) && canAccessAcompanhar;
     const showProcedimentos = (subView === 'procedimentos' || subView === 'procedimentos-revisar-duplicidades') && canAccessProcedimentos;
     const showDados = (subView === 'dados' || (subView?.startsWith('dados') ?? false)) && canAccessDados;
     const showPacientes = (subView === 'pacientes') && canAccessPacientes;
@@ -192,8 +197,14 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                                     Acompanhar
                                 </h3>
                                 <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-indigo-600 transition-colors uppercase tracking-wider text-center">
-                                    Fila de Espera
+                                    {isAcompanharReadOnly ? 'Consulta e Impressão' : 'Fila de Espera'}
                                 </p>
+                                {isAcompanharReadOnly && (
+                                    <span className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[9px] font-extrabold uppercase tracking-wider">
+                                        <Eye className="w-2.5 h-2.5" />
+                                        Somente Leitura
+                                    </span>
+                                )}
                             </button>
                         )}
 
@@ -326,6 +337,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                             onNavigate={onNavigate}
                             subView={subView}
                             appState={appState}
+                            isReadOnly={isAcompanharReadOnly}
                         />
                     ) : showProcedimentos ? (
                         <ProcedimentosScreen

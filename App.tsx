@@ -139,7 +139,7 @@ import { startGlobalLocationTracking, stopGlobalLocationTracking } from './servi
 import { PoliticaPrivacidadeScreen } from './components/PoliticaPrivacidadeScreen';
 import { PoliticaPrivacidadeAppScreen } from './components/PoliticaPrivacidadeAppScreen';
 import { UnauthorizedAccessModal } from './components/common/UnauthorizedAccessModal';
-import { canUserAccessRoute, cleanPermissionsArray } from './services/permissionService';
+import { canUserAccessRoute, cleanPermissionsArray, setActivePermissionUser } from './services/permissionService';
 import { SystemAIAssistantScreen } from './components/ai/SystemAIAssistantScreen';
 import { EgressMonitorModal } from './components/admin/EgressMonitorModal';
 import { 
@@ -606,8 +606,9 @@ const App: React.FC = () => {
     impersonationSession ? users : null
   ]);
 
-  // Sincroniza o usuário atual com o auditLogService para logs em tempo real instantâneos
+  // Sincroniza o usuário atual com auditLogService e permissionService para guarda em camada de serviço
   useEffect(() => {
+    setActivePermissionUser(currentUser);
     if (currentUser) {
       auditLogService.setCurrentUser({
         id: currentUser.id,
@@ -617,7 +618,7 @@ const App: React.FC = () => {
     } else {
       auditLogService.setCurrentUser(null);
     }
-  }, [currentUser?.id, currentUser?.name, currentUser?.email]);
+  }, [currentUser, currentUser?.id, currentUser?.name, currentUser?.email, currentUser?.role, currentUser?.permissions]);
 
   // Presence do Administrador: mantém o estado ativo publicado para o usuário alvo
   useEffect(() => {

@@ -29,7 +29,10 @@ export const ModuleGestorScreen: React.FC<ModuleGestorScreenProps> = ({
   onBack
 }) => {
   const gestorPermKey: AppPermission = moduleType === 'consultas' ? 'parent_consultas_gestor' : 'parent_farmacia_gestor';
-  const hasModuleGestorPermission = currentUser?.role === 'admin' || (currentUser?.permissions || []).includes(gestorPermKey);
+  const gestorSubKey: AppPermission = moduleType === 'consultas' ? 'sub_consultas_gestor' : 'sub_farmacia_gestor';
+  const hasModuleGestorPermission = currentUser?.role === 'admin'
+    || (currentUser?.permissions || []).includes(gestorPermKey)
+    || (currentUser?.permissions || []).includes(gestorSubKey);
 
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +47,8 @@ export const ModuleGestorScreen: React.FC<ModuleGestorScreenProps> = ({
       return [
         { id: 'parent_consultas', label: 'Visibilidade do Módulo', description: 'Acesso principal ao módulo de Regulação de Consultas', category: 'modulo' },
         { id: 'parent_consultas_novo_agendamento', label: 'Tela: Novo Agendamento', description: 'Permissão para acessar e realizar novos agendamentos', category: 'tela' },
-        { id: 'parent_consultas_acompanhar', label: 'Tela: Acompanhar Agendamentos', description: 'Permissão para visualizar e filtrar agendamentos existentes', category: 'tela' },
+        { id: 'parent_consultas_acompanhar', label: 'Tela: Acompanhar Agendamentos', description: 'Permissão operacional para visualizar, filtrar e gerenciar agendamentos existentes', category: 'tela' },
+        { id: 'sub_consultas_acompanhar_leitura', label: 'Acompanhar Solicitações — Somente Leitura', description: 'Acesso exclusivo a /Regulacao/Acompanhar para consulta, pesquisa, filtros e impressão individual em PDF', category: 'tela' },
         { id: 'parent_consultas_dados', label: 'Tela: Área de Dados & Relatórios', description: 'Permissão para acessar painéis estatísticos e exportação', category: 'tela' },
         { id: 'parent_consultas_pacientes', label: 'Tela: Gestão de Pacientes', description: 'Permissão para visualizar e administrar a base de pacientes', category: 'tela' },
         { id: 'parent_consultas_gestor', label: 'Submódulo: Gestor (Permissões)', description: 'Permissão para gerenciar acessos de outros usuários', category: 'tela' },

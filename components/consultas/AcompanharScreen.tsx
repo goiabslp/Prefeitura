@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { User, ConsultaPaciente, ConsultaAgendamento, ConsultaProcedimento, AppState, ConsultaVaga, ConsultaSolicitacaoCancelamento } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users, UserCheck, Building2, ShieldCheck, FileText, Phone, MapPin, Lock, ArrowRightLeft, PauseCircle, PlayCircle, Pause, Play } from 'lucide-react';
+import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users, UserCheck, Building2, ShieldCheck, FileText, Phone, MapPin, Lock, ArrowRightLeft, PauseCircle, PlayCircle, Pause, Play, Eye } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { formatProcedimentoLabel } from '../../services/consultasService';
+import { isConsultasAcompanharReadOnly } from '../../services/permissionService';
 import { useAgentesSaude } from '../../services/agentesSaudeService';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -440,6 +441,7 @@ interface AgendamentoCardProps {
     blockingPatient?: db.QueueEligibilityInfo['blockingPatient'];
     onOpenBlockedQueueModal?: (booking: ConsultaAgendamento, blockingPatient: NonNullable<db.QueueEligibilityInfo['blockingPatient']>) => void;
     isOperating: boolean;
+    isReadOnly?: boolean;
     canEdit: boolean;
     canComplete: boolean;
     canCancel: boolean;
@@ -475,6 +477,7 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
     blockingPatient,
     onOpenBlockedQueueModal,
     isOperating,
+    isReadOnly = false,
     canEdit,
     canComplete,
     canCancel,
@@ -526,29 +529,29 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
         }
     }, [booking.appointment_date, booking.appointment_time]);
 
-    // Regras de permissões:
+    // Regras de permissões (Em modo somente leitura, nenhuma ação de alteração é liberada):
     // 1. Marcar como "Realizado":
     //    - Administradores e Gestores podem sempre
     //    - Usuários comuns ("não administradores e não gestores"): liberado após a data da consulta ser ultrapassada
-    const canCompleteThis = canComplete || (!isGestorOrAdmin && isAppointmentPassed);
+    const canCompleteThis = !isReadOnly && (canComplete || (!isGestorOrAdmin && isAppointmentPassed));
 
     // 2. Transferir Procedimento:
     //    - Administradores e Gestores podem transferir
     //    - Usuários comuns: ocultado após a data da consulta OU quando o status for "Agendado"
-    const canTransferThis = Boolean(onTransfer && canEdit && (
+    const canTransferThis = Boolean(!isReadOnly && onTransfer && canEdit && (
         isGestorOrAdmin || (!isAppointmentPassed && booking.status !== 'Agendado')
     ));
 
     // 3. Cancelar:
     //    - Administradores e Gestores podem cancelar
     //    - Usuários comuns: ocultado após a data da consulta
-    const canCancelThis = Boolean(canCancel && (
+    const canCancelThis = Boolean(!isReadOnly && canCancel && (
         isGestorOrAdmin || !isAppointmentPassed
     ));
 
     // 4. Excluir:
     //    - Exclusivo para administradores e gestores (NÃO visível para usuários que não sejam administradores ou gestores)
-    const canDeleteThis = Boolean(canDelete && isGestorOrAdmin);
+    const canDeleteThis = Boolean(!isReadOnly && canDelete && isGestorOrAdmin);
 
     const patientName = booking.paciente ? formatPatientName(booking.paciente) : 'Paciente não informado';
     const rawCpf = booking.paciente?.cpf || '';
@@ -880,20 +883,30 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                             <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1 leading-none">
                                                 <span>Status</span>
                                             </span>
-                                            <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    if (blockingPatient && onOpenBlockedQueueModal) {
-                                                        onOpenBlockedQueueModal(booking, blockingPatient);
-                                                    }
-                                                }}
-                                                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-400 font-black rounded-xl text-[10.5px] uppercase tracking-wider transition-all shadow-2xs active:scale-95 cursor-pointer w-fit leading-none mt-0.5"
-                                                title={`Bloqueado: Agende o paciente ${blockingPatient?.name || 'anterior'} da colocação ${blockingPatient?.queuePosition || 1}º primeiro`}
-                                            >
-                                                <Lock className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                                                <span className="whitespace-nowrap">Definir Data</span>
-                                            </button>
+                                            {canEdit && onOpenBlockedQueueModal && !isReadOnly ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (blockingPatient && onOpenBlockedQueueModal) {
+                                                            onOpenBlockedQueueModal(booking, blockingPatient);
+                                                        }
+                                                    }}
+                                                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-400 font-black rounded-xl text-[10.5px] uppercase tracking-wider transition-all shadow-2xs active:scale-95 cursor-pointer w-fit leading-none mt-0.5"
+                                                    title={`Bloqueado: Agende o paciente ${blockingPatient?.name || 'anterior'} da colocação ${blockingPatient?.queuePosition || 1}º primeiro`}
+                                                >
+                                                    <Lock className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                                                    <span className="whitespace-nowrap">Definir Data</span>
+                                                </button>
+                                            ) : (
+                                                <span
+                                                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-950 border border-amber-300 font-black rounded-xl text-[10.5px] uppercase tracking-wider shadow-2xs w-fit leading-none mt-0.5"
+                                                    title={`Aguardando agendamento do paciente anterior na fila (${blockingPatient?.queuePosition || 1}º)`}
+                                                >
+                                                    <Lock className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                                                    <span className="whitespace-nowrap">Definir Data</span>
+                                                </span>
+                                            )}
                                         </div>
                                     )
                                 ) : (
@@ -1313,7 +1326,7 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                             </button>
                                         )}
 
-                                        {booking.status === 'Realizado' && (
+                                        {booking.status === 'Realizado' && canEdit && !isReadOnly && (
                                             <button
                                                 type="button"
                                                 onClick={(e) => { e.stopPropagation(); onOpenRetornoModal(booking); }}
@@ -1483,6 +1496,7 @@ interface AcompanharScreenProps {
     onNavigate?: (view: string) => void;
     subView?: string;
     appState: AppState;
+    isReadOnly?: boolean;
 }
 
 /**
@@ -1783,7 +1797,8 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     onBack,
     onNavigate,
     subView,
-    appState
+    appState,
+    isReadOnly: isReadOnlyProp = false
 }) => {
     // Booking list and state
     const { items: agentesSaudeItems } = useAgentesSaude();
@@ -1958,15 +1973,17 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         fetchGestores();
     }, []);
 
-    // Regra de 2 Níveis: Administradores e Gestores autorizados possuem privilégios executivos exclusivos como Pausar/Retomar, Marcar como Realizado e Editar Solicitações
+    // Regra de Permissões: Modo Somente Leitura bloqueia toda e qualquer ação operacional ou de modificação
     const isAdmin = currentUser.role === 'admin';
     const isGestor = gestorUserIds.includes(currentUser.id) || !!currentUser.permissions?.includes('parent_consultas_gestor') || !!currentUser.permissions?.includes('sub_consultas_gestor');
     const isGestorOrAdmin = isAdmin || isGestor;
-    const canPause = isGestorOrAdmin;
-    const canCancel = true;
-    const canComplete = isGestorOrAdmin;
-    const canEdit = true;
-    const canDelete = isGestorOrAdmin;
+    const isReadOnly = Boolean(isReadOnlyProp || isConsultasAcompanharReadOnly(currentUser, gestorUserIds));
+    const canPause = isGestorOrAdmin && !isReadOnly;
+    const canCancel = !isReadOnly;
+    const canComplete = isGestorOrAdmin && !isReadOnly;
+    const canEdit = !isReadOnly;
+    const canDelete = isGestorOrAdmin && !isReadOnly;
+    const canReport = !isReadOnly;
 
     const formatDateBr = (d: string) => {
         if (!d) return '';
@@ -2053,6 +2070,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     } | null>(null);
 
     const handleOpenDefinirData = (booking: ConsultaAgendamento) => {
+        if (isReadOnly) return;
         setBookingForDefinirData(booking);
         setIsDefinirDataModalOpen(true);
     };
@@ -2061,6 +2079,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         booking: ConsultaAgendamento,
         blockingPatient: NonNullable<db.QueueEligibilityInfo['blockingPatient']>
     ) => {
+        if (isReadOnly) return;
         setBlockedQueueTarget({
             currentBooking: booking,
             blockingPatient
@@ -2083,7 +2102,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         if (!silent) setLoading(true);
         try {
             const [allBookingData, procData, allVagasData] = await Promise.all([
-                db.getAgendamentos(), // Fetch all unfiltered for correct queue calculation
+                db.getAgendamentos({ readOnly: isReadOnly }), // Busca completa sem filtro para cálculo exato da fila (sem gravações no modo somente leitura)
                 db.getProcedimentos(),
                 db.getVagas()
             ]);
@@ -2192,16 +2211,17 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         });
     }, [allBookings]);
 
-    // Abertura automática ao acessar /Regulacao/Acompanhar quando houver pendências
+    // Abertura automática ao acessar /Regulacao/Acompanhar quando houver pendências (apenas para perfis operacionais)
     useEffect(() => {
-        if (!loading && pendenciasConfirmacao.length > 0 && !hasAutoOpenedConfirmacaoModal) {
+        if (!isReadOnly && !loading && pendenciasConfirmacao.length > 0 && !hasAutoOpenedConfirmacaoModal) {
             setIsConfirmacaoModalOpen(true);
             setHasAutoOpenedConfirmacaoModal(true);
         }
-    }, [loading, pendenciasConfirmacao.length, hasAutoOpenedConfirmacaoModal]);
+    }, [isReadOnly, loading, pendenciasConfirmacao.length, hasAutoOpenedConfirmacaoModal]);
 
     // Handler para confirmar individualmente (Realizado ou Faltou)
     const handleConfirmarComparecimento = async (id: string, situacao: 'Realizado' | 'Não Realizado') => {
+        if (isReadOnly) return;
         const updated = await db.confirmarComparecimentoAgendamento(id, situacao, currentUser);
         if (updated) {
             setAllBookings(prev => prev.map(b => b.id === id ? updated : b));
@@ -2267,6 +2287,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     }, [globalSearch]);
 
     const handleStatusUpdate = async (id: string, newStatus: ConsultaAgendamento['status']) => {
+        if (isReadOnly) return;
         setOperatingId(id);
         try {
             const updated = await db.updateAgendamentoStatus(id, newStatus);
@@ -2284,6 +2305,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     };
 
     const handleOpenCancelModal = (booking: ConsultaAgendamento) => {
+        if (isReadOnly) return;
         setCancelTarget(booking);
         setCancelReason('');
         setCancelError('');
@@ -2343,6 +2365,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     };
 
     const handleOpenPauseModal = (booking: ConsultaAgendamento) => {
+        if (isReadOnly) return;
         setPauseTarget(booking);
         setPauseReason('');
         setPauseError('');
@@ -2370,6 +2393,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     };
 
     const handleOpenResumeModal = (booking: ConsultaAgendamento) => {
+        if (isReadOnly) return;
         setResumeTarget(booking);
         setResumeError('');
         setIsResumeModalOpen(true);
@@ -2391,7 +2415,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     };
 
     const handleConfirmRetorno = async () => {
-        if (!retornoBooking || !retornoDate) return;
+        if (isReadOnly || !retornoBooking || !retornoDate) return;
         setOperatingId(retornoBooking.id);
         setIsRetornoModalOpen(false);
         try {
@@ -2419,6 +2443,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     };
 
     const handleReagendar = async (id: string) => {
+        if (isReadOnly) return;
         if (!window.confirm('Deseja realmente reagendar este agendamento? Ele voltará automaticamente para a Fila de Espera.')) {
             return;
         }
@@ -2451,6 +2476,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     };
 
     const handleOpenEditModal = (booking: ConsultaAgendamento) => {
+        if (isReadOnly) return;
         setEditTarget(booking);
         setEditPatientName(booking.paciente?.name || '');
         const rawCpf = booking.paciente?.cpf || '';
@@ -2571,6 +2597,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
 
     // Open and execute procedure transfer
     const handleOpenTransferModal = (booking: ConsultaAgendamento) => {
+        if (isReadOnly) return;
         setTransferTarget(booking);
         setTransferSelectedProcId('');
         setTransferSearchProc('');
@@ -2703,6 +2730,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
 
     // Handle Delete Booking
     const handleDelete = async (id: string) => {
+        if (isReadOnly) return;
         if (!window.confirm('Deseja realmente excluir este agendamento? Esta ação é permanente.')) return;
         
         setOperatingId(id);
@@ -2888,44 +2916,59 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-sky-50 to-blue-50/80 border border-sky-200/80 flex items-center justify-center text-sky-600 shadow-2xs">
                             <Activity className="w-4.5 h-4.5" />
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                             <h3 className="font-black bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 bg-clip-text text-transparent tracking-tight text-base uppercase leading-none">
                                 Acompanhar
                             </h3>
                             <span className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-sky-50 to-blue-50 text-sky-700 font-black text-[11px] uppercase border border-sky-200/80 shadow-2xs">
                                 {filteredAndSortedBookings.length}
                             </span>
+                            {isReadOnly && (
+                                <span
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 font-extrabold text-[10px] uppercase tracking-wider shadow-2xs"
+                                    title="Acesso exclusivo para consulta e impressão individual"
+                                >
+                                    <Eye className="w-3 h-3 text-amber-600" />
+                                    Modo Somente Leitura
+                                </span>
+                            )}
                         </div>
                     </div>
 
-                    {/* Botão de Confirmação de Atendimentos no Mobile */}
-                    <button
-                        type="button"
-                        onClick={() => setIsConfirmacaoModalOpen(true)}
-                        className={`p-2 rounded-2xl border transition-all cursor-pointer flex items-center gap-1.5 ${
-                            pendenciasConfirmacao.length > 0
-                                ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-500/25'
-                                : 'bg-emerald-50 text-emerald-700 border-emerald-200/80 hover:bg-emerald-100'
-                        }`}
-                        title={pendenciasConfirmacao.length > 0 ? `Confirmar Atendimentos (${pendenciasConfirmacao.length} pendentes)` : 'Atendimentos em Dia'}
-                    >
-                        <CheckCircle2 className="w-4.5 h-4.5" />
-                        {pendenciasConfirmacao.length > 0 && (
-                            <span className="text-[10px] font-black px-1.5 py-0.2 bg-white text-amber-700 rounded-full">
-                                {pendenciasConfirmacao.length}
-                            </span>
-                        )}
-                    </button>
+                    {!isReadOnly && (
+                        <>
+                            {/* Botão de Confirmação de Atendimentos no Mobile */}
+                            <button
+                                type="button"
+                                onClick={() => setIsConfirmacaoModalOpen(true)}
+                                className={`p-2 rounded-2xl border transition-all cursor-pointer flex items-center gap-1.5 ${
+                                    pendenciasConfirmacao.length > 0
+                                        ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-500/25'
+                                        : 'bg-emerald-50 text-emerald-700 border-emerald-200/80 hover:bg-emerald-100'
+                                }`}
+                                title={pendenciasConfirmacao.length > 0 ? `Confirmar Atendimentos (${pendenciasConfirmacao.length} pendentes)` : 'Atendimentos em Dia'}
+                            >
+                                <CheckCircle2 className="w-4.5 h-4.5" />
+                                {pendenciasConfirmacao.length > 0 && (
+                                    <span className="text-[10px] font-black px-1.5 py-0.2 bg-white text-amber-700 rounded-full">
+                                        {pendenciasConfirmacao.length}
+                                    </span>
+                                )}
+                            </button>
 
-                    {/* Botão de Relatório Rápido no Mobile */}
-                    <button
-                        type="button"
-                        onClick={() => setIsReportModalOpen(true)}
-                        className="p-2 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded-2xl border border-slate-200/80 transition-all cursor-pointer"
-                        title="Relatórios"
-                    >
-                        <FileDown className="w-4.5 h-4.5" />
-                    </button>
+                            {/* Botão de Relatório Rápido no Mobile */}
+                            {canReport && (
+                                <button
+                                    type="button"
+                                    onClick={() => setIsReportModalOpen(true)}
+                                    className="p-2 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded-2xl border border-slate-200/80 transition-all cursor-pointer"
+                                    title="Relatórios"
+                                >
+                                    <FileDown className="w-4.5 h-4.5" />
+                                </button>
+                            )}
+                        </>
+                    )}
                 </div>
 
                 {/* Barra de Busca Superior quando houver busca ou filtros ativos no Mobile */}
@@ -2978,6 +3021,15 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         <span className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-sky-50 to-blue-50 text-sky-700 font-black text-[11px] uppercase tracking-wider border border-sky-200/80 shadow-2xs shrink-0">
                             {filteredAndSortedBookings.length}
                         </span>
+                        {isReadOnly && (
+                            <span
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 font-extrabold text-[10px] uppercase tracking-wider shadow-2xs shrink-0 whitespace-nowrap"
+                                title="Permissão restrita à consulta e impressão individual de comprovantes"
+                            >
+                                <Eye className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                <span>Modo Somente Leitura</span>
+                            </span>
+                        )}
                     </div>
                 </div>
 
@@ -3046,34 +3098,38 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         minWidth="w-28 sm:w-36 lg:w-40"
                     />
 
-                    {/* Action Button 0: Confirmar Atendimentos */}
-                    <button
-                        onClick={() => setIsConfirmacaoModalOpen(true)}
-                        className={`px-3.5 py-1.5 font-extrabold rounded-2xl active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                            pendenciasConfirmacao.length > 0
-                                ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md shadow-amber-500/25 animate-pulse'
-                                : 'bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/90 text-emerald-700 shadow-2xs'
-                        }`}
-                        title={pendenciasConfirmacao.length > 0 ? `Confirmar Atendimentos (${pendenciasConfirmacao.length} pendentes)` : 'Atendimentos em Dia'}
-                    >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span className="hidden xl:inline">
-                            {pendenciasConfirmacao.length > 0 ? `Confirmar Atendimentos (${pendenciasConfirmacao.length})` : 'Atendimentos em Dia'}
-                        </span>
-                        <span className="xl:hidden">
-                            {pendenciasConfirmacao.length > 0 ? `Confirmar (${pendenciasConfirmacao.length})` : 'Em Dia'}
-                        </span>
-                    </button>
+                    {/* Action Button 0: Confirmar Atendimentos (oculto em Modo Somente Leitura) */}
+                    {!isReadOnly && (
+                        <button
+                            onClick={() => setIsConfirmacaoModalOpen(true)}
+                            className={`px-3.5 py-1.5 font-extrabold rounded-2xl active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                                pendenciasConfirmacao.length > 0
+                                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md shadow-amber-500/25 animate-pulse'
+                                    : 'bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/90 text-emerald-700 shadow-2xs'
+                            }`}
+                            title={pendenciasConfirmacao.length > 0 ? `Confirmar Atendimentos (${pendenciasConfirmacao.length} pendentes)` : 'Atendimentos em Dia'}
+                        >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span className="hidden xl:inline">
+                                {pendenciasConfirmacao.length > 0 ? `Confirmar Atendimentos (${pendenciasConfirmacao.length})` : 'Atendimentos em Dia'}
+                            </span>
+                            <span className="xl:hidden">
+                                {pendenciasConfirmacao.length > 0 ? `Confirmar (${pendenciasConfirmacao.length})` : 'Em Dia'}
+                            </span>
+                        </button>
+                    )}
 
-                    {/* Action Button 1: Relatório */}
-                    <button
-                        onClick={() => setIsReportModalOpen(true)}
-                        className="px-3.5 py-1.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-extrabold rounded-2xl shadow-md shadow-sky-500/20 hover:shadow-sky-500/35 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0"
-                        title="Gerar Relatórios"
-                    >
-                        <FileDown className="w-3.5 h-3.5" />
-                        <span className="hidden xl:inline">Relatório</span>
-                    </button>
+                    {/* Action Button 1: Relatório (bloqueado em Modo Somente Leitura) */}
+                    {canReport && (
+                        <button
+                            onClick={() => setIsReportModalOpen(true)}
+                            className="px-3.5 py-1.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-extrabold rounded-2xl shadow-md shadow-sky-500/20 hover:shadow-sky-500/35 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0"
+                            title="Gerar Relatórios"
+                        >
+                            <FileDown className="w-3.5 h-3.5" />
+                            <span className="hidden xl:inline">Relatório</span>
+                        </button>
+                    )}
 
                     {/* Action Button 2: Fila de Espera */}
                     <button
@@ -3192,18 +3248,19 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                     freeSlotsCount={eligibility?.freeSlotsCount}
                                     isNextInQueue={eligibility ? eligibility.isNextInQueue : true}
                                     blockingPatient={eligibility?.blockingPatient}
-                                    onOpenBlockedQueueModal={handleOpenBlockedQueueModal}
+                                    onOpenBlockedQueueModal={!isReadOnly ? handleOpenBlockedQueueModal : undefined}
                                     isOperating={operatingId === booking.id}
+                                    isReadOnly={isReadOnly}
                                     canEdit={canEdit}
                                     canComplete={canComplete}
                                     canCancel={canCancel}
                                     canDelete={canDelete}
                                     canPause={canPause}
                                     isGestorOrAdmin={isGestorOrAdmin}
-                                    onOpenPauseModal={handleOpenPauseModal}
-                                    onOpenResumeModal={handleOpenResumeModal}
+                                    onOpenPauseModal={!isReadOnly ? handleOpenPauseModal : undefined}
+                                    onOpenResumeModal={!isReadOnly ? handleOpenResumeModal : undefined}
                                     onEdit={handleOpenEditModal}
-                                    onTransfer={handleOpenTransferModal}
+                                    onTransfer={!isReadOnly ? handleOpenTransferModal : undefined}
                                     onAgentInfo={handleOpenAgentInfo}
                                     onDownloadPdf={handleDownloadPdf}
                                     onStatusUpdate={handleStatusUpdate}
@@ -3213,13 +3270,14 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                     onDelete={handleDelete}
                                     onReagendar={handleReagendar}
                                     onOpenRetornoModal={(b) => {
+                                        if (isReadOnly) return;
                                         setRetornoBooking(b);
                                         const tomorrow = new Date();
                                         tomorrow.setDate(tomorrow.getDate() + 1);
                                         setRetornoDate(tomorrow.toISOString().split('T')[0]);
                                         setIsRetornoModalOpen(true);
                                     }}
-                                    onOpenDefinirData={handleOpenDefinirData}
+                                    onOpenDefinirData={!isReadOnly ? handleOpenDefinirData : undefined}
                                     isGenerating={isGenerating}
                                     formatPatientName={formatPatientName}
                                     agentPsf={agentPsfMap[(booking.paciente?.agente_saude || '').toUpperCase().trim()]}
@@ -3304,7 +3362,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 />
             )}
             {/* MODAL: DEFINIR DATA PARA RETORNO */}
-            {isRetornoModalOpen && retornoBooking && (
+            {!isReadOnly && isRetornoModalOpen && retornoBooking && (
                 <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
                     <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden border border-slate-100 flex flex-col transform transition-all">
                         <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
@@ -3392,17 +3450,19 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 </div>
             )}
             {/* MODAL: RELATÓRIOS REFORMULADO COM FILTROS PERSONALIZADOS E EXPORTAÇÃO */}
-            <ConsultasReportModal
-                isOpen={isReportModalOpen}
-                onClose={() => setIsReportModalOpen(false)}
-                initialProcedures={procedures}
-                initialVagas={allVagas}
-                state={appState}
-                currentUser={currentUser}
-            />
+            {!isReadOnly && canReport && (
+                <ConsultasReportModal
+                    isOpen={isReportModalOpen}
+                    onClose={() => setIsReportModalOpen(false)}
+                    initialProcedures={procedures}
+                    initialVagas={allVagas}
+                    state={appState}
+                    currentUser={currentUser}
+                />
+            )}
 
             {/* MODAL DE CANCELAMENTO COM FLUXO SEGURO (GESTOR VS USUÁRIO COMUM) */}
-            {isCancelModalOpen && cancelTarget && typeof document !== 'undefined' && createPortal(
+            {!isReadOnly && isCancelModalOpen && cancelTarget && typeof document !== 'undefined' && createPortal(
                 <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg max-h-[92vh] overflow-hidden border border-slate-100 flex flex-col transform transition-all animate-in zoom-in-95 duration-200">
                         {/* Header */}
@@ -3574,7 +3634,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             )}
 
             {/* MODAL: PAUSAR SOLICITAÇÃO */}
-            {isPauseModalOpen && pauseTarget && typeof document !== 'undefined' && createPortal(
+            {!isReadOnly && isPauseModalOpen && pauseTarget && typeof document !== 'undefined' && createPortal(
                 <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden border border-amber-200 flex flex-col transform transition-all animate-in zoom-in-95 duration-200">
                         {/* Header */}
@@ -3696,7 +3756,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             )}
 
             {/* MODAL: RETOMAR SOLICITAÇÃO */}
-            {isResumeModalOpen && resumeTarget && typeof document !== 'undefined' && createPortal(
+            {!isReadOnly && isResumeModalOpen && resumeTarget && typeof document !== 'undefined' && createPortal(
                 <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden border border-emerald-200 flex flex-col transform transition-all animate-in zoom-in-95 duration-200">
                         {/* Header */}
@@ -3802,7 +3862,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             )}
 
             {/* MODAL DE EDIÇÃO DE CADASTRO DE AGENDAMENTO */}
-            {isEditModalOpen && editTarget && typeof document !== 'undefined' && createPortal(
+            {!isReadOnly && isEditModalOpen && editTarget && typeof document !== 'undefined' && createPortal(
                 <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-100 flex flex-col max-h-[90vh] transform transition-all animate-in zoom-in-95 duration-200">
                         {/* Header */}
@@ -4231,7 +4291,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             )}
 
             {/* MODAL: AVISO DE ORDEM DA FILA (BLOQUEIO DE DEFINIR DATA) */}
-            {blockedQueueTarget && createPortal(
+            {!isReadOnly && blockedQueueTarget && createPortal(
                 <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-amber-200/90 flex flex-col animate-in zoom-in-95 duration-200">
                         {/* Header */}
@@ -4348,20 +4408,22 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             )}
 
             {/* MODAL DEFINIR DATA E HORÁRIO */}
-            <DefinirDataModal
-                isOpen={isDefinirDataModalOpen}
-                booking={bookingForDefinirData}
-                onClose={() => {
-                    setIsDefinirDataModalOpen(false);
-                    setBookingForDefinirData(null);
-                }}
-                onSuccess={() => {
-                    loadData(true);
-                }}
-            />
+            {!isReadOnly && (
+                <DefinirDataModal
+                    isOpen={isDefinirDataModalOpen}
+                    booking={bookingForDefinirData}
+                    onClose={() => {
+                        setIsDefinirDataModalOpen(false);
+                        setBookingForDefinirData(null);
+                    }}
+                    onSuccess={() => {
+                        loadData(true);
+                    }}
+                />
+            )}
 
             {/* MODAL: TRANSFERIR PROCEDIMENTO */}
-            {isTransferModalOpen && transferTarget && createPortal(
+            {!isReadOnly && isTransferModalOpen && transferTarget && createPortal(
                 <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-hidden border border-indigo-100 flex flex-col animate-in zoom-in-95 duration-200">
                         {/* Header */}
@@ -4673,13 +4735,15 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             )}
 
             {/* MODAL OPERACIONAL DE CONFIRMAÇÃO DE ATENDIMENTOS PENDENTES (VENCIDOS) */}
-            <ConfirmacaoAtendimentosModal
-                isOpen={isConfirmacaoModalOpen}
-                onClose={() => setIsConfirmacaoModalOpen(false)}
-                pendencias={pendenciasConfirmacao}
-                currentUser={currentUser}
-                onConfirmar={handleConfirmarComparecimento}
-            />
+            {!isReadOnly && (
+                <ConfirmacaoAtendimentosModal
+                    isOpen={isConfirmacaoModalOpen}
+                    onClose={() => setIsConfirmacaoModalOpen(false)}
+                    pendencias={pendenciasConfirmacao}
+                    currentUser={currentUser}
+                    onConfirmar={handleConfirmarComparecimento}
+                />
+            )}
         </div>
     );
 };
