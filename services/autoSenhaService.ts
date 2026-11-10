@@ -16,6 +16,9 @@ import {
   AutoSenhaUnidade,
   AutoSenhaConfiguracao,
   AutoSenhaItem,
+  AutoSenhaBloco,
+  AutoSenhaBlocoStatus,
+  AutoSenhaFilaBlocoItem,
   AutoSenhaChamadaHistorico,
   AutoSenhaAuditoria,
   AutoSenhaAvaliacaoUrgente,
@@ -25,9 +28,39 @@ import {
 // Chaves locais para cache/fallback de alta resiliência
 const STORAGE_PREFIX = 'sys_autosenha_';
 const STORAGE_SENHAS_KEY = `${STORAGE_PREFIX}senhas`;
+const STORAGE_BLOCOS_KEY = `${STORAGE_PREFIX}blocos`;
 const STORAGE_CONFIG_KEY = `${STORAGE_PREFIX}configs`;
 const STORAGE_AUDIT_KEY = `${STORAGE_PREFIX}audit`;
 const STORAGE_URGENTES_KEY = `${STORAGE_PREFIX}urgentes`;
+
+export const SEQUENCIA_BLOCO_5: AutoSenhaPrioridadeTipo[] = [
+  'ESPECIAL',
+  'PRIORITARIO',
+  'ESPECIAL',
+  'PRIORITARIO',
+  'NORMAL'
+];
+
+// Mutex em memória por unidade para impedir condições de corrida em chamadas/emissões simultâneas
+const unidadeOperationLocks = new Map<string, Promise<void>>();
+async function withUnidadeMutex<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const previous = unidadeOperationLocks.get(key) || Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  const chained = previous.catch(() => {}).then(() => current);
+  unidadeOperationLocks.set(key, chained);
+  await previous.catch(() => {});
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (unidadeOperationLocks.get(key) === chained) {
+      unidadeOperationLocks.delete(key);
+    }
+  }
+}
 
 // Unidades oficiais do município
 export const AUTOSENHA_UNIDADES: AutoSenhaUnidade[] = [
@@ -241,6 +274,25 @@ function saveLocalUrgentes(urgentes: AutoSenhaAvaliacaoUrgente[]) {
   }
 }
 
+function getLocalBlocos(): AutoSenhaBloco[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_BLOCOS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalBlocos(blocos: AutoSenhaBloco[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_BLOCOS_KEY, JSON.stringify(blocos));
+  } catch (e) {
+    console.error('[AutoSenha] Erro ao salvar blocos no localStorage:', e);
+  }
+}
+
 // ----------------------------------------------------------------------
 // AUDITORIA OFICIAL
 // ----------------------------------------------------------------------
@@ -450,6 +502,125 @@ const PRIORIDADES_VALIDAS_SENHA: ReadonlySet<AutoSenhaPrioridadeTipo> = new Set(
   'ESPECIAL'
 ]);
 
+const porOrdemChegadaSenha = (a: AutoSenhaItem, b: AutoSenhaItem): number => {
+  const diffTempo = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+  if (diffTempo !== 0) return diffTempo;
+  return (a.numero_sequencial || 0) - (b.numero_sequencial || 0);
+};
+
+/**
+ * Reorganiza dinamicamente as senhas dentro de um bloco de até 5 pacientes,
+ * respeitando a sequência preferencial: Especial -> Prioritário -> Especial -> Prioritário -> Normal,
+ * ordem de chegada dentro de cada categoria e fechamento automático ao atingir 5 pacientes.
+ * Não altera posições de senhas que já saíram de AGUARDANDO nem blocos já FECHADOS.
+ */
+export function reorganizarItensNoBloco5(
+  itensDoBloco: AutoSenhaItem[],
+  blocoStatusAtual: AutoSenhaBlocoStatus = 'EM_FORMACAO'
+): { itensAtualizados: AutoSenhaItem[]; fechou: boolean } {
+  if (itensDoBloco.length === 0) {
+    return { itensAtualizados: [], fechou: false };
+  }
+
+  // Blocos fechados jamais sofrem reorganização convencional
+  if (blocoStatusAtual === 'FECHADO') {
+    const congelados = [...itensDoBloco]
+      .sort((a, b) => (a.posicao_bloco || 99) - (b.posicao_bloco || 99) || porOrdemChegadaSenha(a, b))
+      .map((s, idx) => ({
+        ...s,
+        bloco_status: 'FECHADO' as AutoSenhaBlocoStatus,
+        posicao_bloco: s.posicao_bloco || idx + 1,
+        posicao_provisoria: false
+      }));
+    return { itensAtualizados: congelados, fechou: true };
+  }
+
+  const fechou = itensDoBloco.length >= 5;
+  const novoStatus: AutoSenhaBlocoStatus = fechou ? 'FECHADO' : 'EM_FORMACAO';
+  const resultMap = new Map<string, AutoSenhaItem>();
+  const posicoesFixas = new Set<number>();
+
+  // Preserva posições de senhas do bloco que já foram chamadas/finalizadas antes do fechamento
+  itensDoBloco.forEach(item => {
+    if (item.status !== 'AGUARDANDO' && item.posicao_bloco) {
+      posicoesFixas.add(item.posicao_bloco);
+      resultMap.set(item.id, {
+        ...item,
+        bloco_status: novoStatus,
+        posicao_provisoria: !fechou
+      });
+    }
+  });
+
+  const aguardando = itensDoBloco
+    .filter(item => item.status === 'AGUARDANDO')
+    .sort(porOrdemChegadaSenha);
+
+  const usadas = new Set<string>();
+  const ordemBuscaPorSlot = (slotPref: AutoSenhaPrioridadeTipo): AutoSenhaPrioridadeTipo[] => {
+    if (slotPref === 'ESPECIAL') return ['ESPECIAL', 'PRIORITARIO', 'NORMAL'];
+    if (slotPref === 'PRIORITARIO') return ['PRIORITARIO', 'ESPECIAL', 'NORMAL'];
+    return ['NORMAL', 'ESPECIAL', 'PRIORITARIO'];
+  };
+
+  for (let slotIdx = 1; slotIdx <= 5; slotIdx++) {
+    if (posicoesFixas.has(slotIdx)) continue;
+    const pref = SEQUENCIA_BLOCO_5[slotIdx - 1];
+    const prioridades = ordemBuscaPorSlot(pref);
+
+    let escolhida: AutoSenhaItem | undefined;
+    for (const pTipo of prioridades) {
+      escolhida = aguardando.find(s => !usadas.has(s.id) && s.prioridade_tipo === pTipo);
+      if (escolhida) break;
+    }
+
+    if (escolhida) {
+      usadas.add(escolhida.id);
+      resultMap.set(escolhida.id, {
+        ...escolhida,
+        posicao_bloco: slotIdx,
+        bloco_status: novoStatus,
+        posicao_provisoria: !fechou
+      });
+    }
+  }
+
+  const itensAtualizados = Array.from(resultMap.values()).sort(
+    (a, b) => (a.posicao_bloco || 99) - (b.posicao_bloco || 99) || porOrdemChegadaSenha(a, b)
+  );
+  return { itensAtualizados, fechou };
+}
+
+export async function getBlocos(
+  unidadeId: AutoSenhaUnidadeId,
+  dataOperacional?: string
+): Promise<AutoSenhaBloco[]> {
+  assertCanAccessAutoSenhaUnidade(unidadeId, 'tv');
+  const dataRef = dataOperacional || getDataOperacionalHoje();
+
+  try {
+    const { data, error } = await supabase
+      .from('autosenha_blocos')
+      .select('*')
+      .eq('unidade_id', unidadeId)
+      .eq('data_operacional', dataRef)
+      .order('numero_bloco', { ascending: true });
+
+    if (!error && Array.isArray(data)) {
+      const lista = data as AutoSenhaBloco[];
+      const outros = getLocalBlocos().filter(b => !(b.unidade_id === unidadeId && b.data_operacional === dataRef));
+      saveLocalBlocos([...lista, ...outros]);
+      return lista;
+    }
+  } catch {
+    // fallback local abaixo
+  }
+
+  return getLocalBlocos()
+    .filter(b => b.unidade_id === unidadeId && b.data_operacional === dataRef)
+    .sort((a, b) => a.numero_bloco - b.numero_bloco);
+}
+
 export async function gerarSenha(payload: GerarSenhaPayload): Promise<AutoSenhaItem> {
   assertCanAccessAutoSenhaUnidade(payload.unidade_id, 'operacional');
 
@@ -467,74 +638,242 @@ export async function gerarSenha(payload: GerarSenhaPayload): Promise<AutoSenhaI
   }
 
   const dataHoje = getDataOperacionalHoje();
-  const agora = new Date().toISOString();
+  const lockKey = `emissao_${payload.unidade_id}_${dataHoje}`;
 
-  // Buscar senhas do dia para obter o próximo número da categoria
-  const todasSenhas = await getSenhas(payload.unidade_id, dataHoje);
+  return withUnidadeMutex(lockKey, async () => {
+    const agora = new Date().toISOString();
 
-  // Filtrar pela prioridade no dia daquela unidade
-  const senhasMesmoTipo = todasSenhas.filter(s => s.prioridade_tipo === prioridadeFinal);
-  const proximoSequencial = senhasMesmoTipo.length + 1;
+    // Tenta executar emissão transacional direta via RPC no Postgres
+    try {
+      if (typeof (supabase as any).rpc === 'function') {
+        const { data: rpcData, error: rpcErr } = await (supabase as any).rpc('emitir_senha_bloco5', {
+          p_unidade_id: payload.unidade_id,
+          p_cidadao_nome: payload.cidadao_nome.trim(),
+          p_prioridade_tipo: prioridadeFinal,
+          p_prioridade_categoria: payload.prioridade_categoria || (prioridadeFinal === 'NORMAL' ? 'Geral' : null),
+          p_guiche: payload.guiche || 'Recepção',
+          p_atendente_id: payload.atendente_id || null,
+          p_atendente_nome: payload.atendente_nome || 'Recepção',
+          p_paciente_id: payload.paciente_id || null,
+          p_paciente_cpf: payload.paciente_cpf || null,
+          p_paciente_cartao_sus: payload.paciente_cartao_sus || null
+        });
 
-  let prefixo = 'N';
-  if (prioridadeFinal === 'PRIORITARIO') prefixo = 'P';
-  else if (prioridadeFinal === 'ESPECIAL') prefixo = 'E';
-
-  const numeroFormatado = `${prefixo}${String(proximoSequencial).padStart(3, '0')}`;
-
-  const novaSenha: AutoSenhaItem = {
-    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `snh-${Date.now()}`,
-    unidade_id: payload.unidade_id,
-    numero: numeroFormatado,
-    numero_sequencial: proximoSequencial,
-    data_operacional: dataHoje,
-    paciente_id: payload.paciente_id,
-    paciente_cpf: payload.paciente_cpf,
-    paciente_cartao_sus: payload.paciente_cartao_sus,
-    cidadao_nome: payload.cidadao_nome.trim(),
-    prioridade_tipo: prioridadeFinal,
-    prioridade_categoria: payload.prioridade_categoria || (prioridadeFinal === 'NORMAL' ? 'Geral' : undefined),
-    status: 'AGUARDANDO',
-    guiche: payload.guiche || 'Recepção',
-    atendente_id: payload.atendente_id,
-    atendente_nome: payload.atendente_nome || 'Atendente',
-    created_at: agora,
-    call_count: 0
-  };
-
-  // Salvar Local
-  const localList = getLocalSenhas();
-  localList.unshift(novaSenha);
-  saveLocalSenhas(localList);
-
-  // Salvar Supabase
-  try {
-    const { data, error } = await supabase
-      .from('autosenha_senhas')
-      .insert([novaSenha])
-      .select()
-      .single();
-
-    if (!error && data) {
-      novaSenha.id = data.id;
+        if (!rpcErr && rpcData) {
+          const emitida = rpcData as AutoSenhaItem;
+          // Atualiza cache local sincronizado do dia/blocos
+          await Promise.allSettled([
+            getSenhas(payload.unidade_id, dataHoje),
+            getBlocos(payload.unidade_id, dataHoje)
+          ]);
+          notificarRealtimeMudanca(payload.unidade_id, 'senha_emitida', { senha: emitida });
+          notificarRealtimeMudanca(payload.unidade_id, 'bloco_atualizado', { blocoNumero: emitida.bloco_numero });
+          return emitida;
+        }
+      }
+    } catch {
+      // Fallback para serviço transacional compatível abaixo
     }
-  } catch (e) {
-    console.warn('[AutoSenha] Supabase insert fallback para local:', e);
-  }
 
-  await registrarAuditoria(
-    payload.unidade_id,
-    'EMISSAO',
-    `Senha ${novaSenha.numero} emitida para ${novaSenha.cidadao_nome} (${novaSenha.prioridade_tipo})`,
-    novaSenha,
-    payload.atendente_nome || 'Atendente',
-    payload.atendente_id,
-    novaSenha.id,
-    novaSenha.numero
-  );
+    // Buscar senhas e blocos do dia para alocação no bloco em formação (< 5)
+    const [todasSenhas, blocosExistentes] = await Promise.all([
+      getSenhas(payload.unidade_id, dataHoje),
+      getBlocos(payload.unidade_id, dataHoje)
+    ]);
 
-  notificarRealtimeMudanca(payload.unidade_id, 'senha_emitida', { senha: novaSenha });
-  return novaSenha;
+    const senhasMesmoTipo = todasSenhas.filter(s => s.prioridade_tipo === prioridadeFinal);
+    const proximoSequencial = senhasMesmoTipo.length + 1;
+
+    let prefixo = 'N';
+    if (prioridadeFinal === 'PRIORITARIO') prefixo = 'P';
+    else if (prioridadeFinal === 'ESPECIAL') prefixo = 'E';
+    const numeroFormatado = `${prefixo}${String(proximoSequencial).padStart(3, '0')}`;
+
+    // Localiza bloco EM_FORMACAO com menos de 5 pacientes
+    const contagemPorBloco = new Map<number, AutoSenhaItem[]>();
+    todasSenhas.forEach(s => {
+      const bNum = s.bloco_numero || 1;
+      const arr = contagemPorBloco.get(bNum) || [];
+      arr.push(s);
+      contagemPorBloco.set(bNum, arr);
+    });
+
+    let blocoAtivo = blocosExistentes
+      .filter(b => b.status === 'EM_FORMACAO' && (contagemPorBloco.get(b.numero_bloco)?.length ?? b.total_pacientes) < 5)
+      .sort((a, b) => a.numero_bloco - b.numero_bloco)[0];
+
+    if (!blocoAtivo) {
+      // Inferir próximo bloco livre considerando blocos existentes e senhas
+      const maxNumBlocos = blocosExistentes.reduce((m, b) => Math.max(m, b.numero_bloco), 0);
+      const maxNumSenhas = todasSenhas.reduce((m, s) => Math.max(m, s.bloco_numero || 0), 0);
+      let candidatoNumero = Math.max(1, maxNumBlocos);
+      const existenteCandidato = blocosExistentes.find(b => b.numero_bloco === candidatoNumero);
+      const itensCandidato = contagemPorBloco.get(candidatoNumero) || [];
+
+      if (existenteCandidato?.status === 'FECHADO' || itensCandidato.length >= 5) {
+        candidatoNumero = Math.max(maxNumBlocos, maxNumSenhas) + 1;
+      } else if (maxNumSenhas > candidatoNumero) {
+        candidatoNumero = (contagemPorBloco.get(maxNumSenhas)?.length || 0) >= 5 ? maxNumSenhas + 1 : maxNumSenhas;
+      }
+
+      blocoAtivo = {
+        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `blk-${Date.now()}-${candidatoNumero}`,
+        unidade_id: payload.unidade_id,
+        data_operacional: dataHoje,
+        numero_bloco: candidatoNumero,
+        status: 'EM_FORMACAO',
+        total_pacientes: (contagemPorBloco.get(candidatoNumero) || []).length,
+        created_at: agora
+      };
+    }
+
+    let novaSenha: AutoSenhaItem = {
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `snh-${Date.now()}-${proximoSequencial}`,
+      unidade_id: payload.unidade_id,
+      numero: numeroFormatado,
+      numero_sequencial: proximoSequencial,
+      data_operacional: dataHoje,
+      paciente_id: payload.paciente_id,
+      paciente_cpf: payload.paciente_cpf,
+      paciente_cartao_sus: payload.paciente_cartao_sus,
+      cidadao_nome: payload.cidadao_nome.trim(),
+      prioridade_tipo: prioridadeFinal,
+      prioridade_categoria: payload.prioridade_categoria || (prioridadeFinal === 'NORMAL' ? 'Geral' : undefined),
+      status: 'AGUARDANDO',
+      bloco_id: blocoAtivo.id,
+      bloco_numero: blocoAtivo.numero_bloco,
+      bloco_status: 'EM_FORMACAO',
+      posicao_bloco: (contagemPorBloco.get(blocoAtivo.numero_bloco)?.length || 0) + 1,
+      posicao_provisoria: true,
+      guiche: payload.guiche || 'Recepção',
+      atendente_id: payload.atendente_id,
+      atendente_nome: payload.atendente_nome || 'Atendente',
+      created_at: agora,
+      call_count: 0
+    };
+
+    const membrosAntes = contagemPorBloco.get(blocoAtivo.numero_bloco) || [];
+    const { itensAtualizados, fechou } = reorganizarItensNoBloco5([...membrosAntes, novaSenha], 'EM_FORMACAO');
+    const novaReorganizada = itensAtualizados.find(i => i.id === novaSenha.id) || novaSenha;
+    novaSenha = novaReorganizada;
+
+    const blocoAtualizado: AutoSenhaBloco = {
+      ...blocoAtivo,
+      total_pacientes: itensAtualizados.length,
+      status: fechou ? 'FECHADO' : 'EM_FORMACAO',
+      closed_at: fechou ? agora : undefined
+    };
+
+    // Ao fechar bloco com 5 pacientes, criar automaticamente o próximo bloco vazio em formação
+    const proximoBlocoAuto: AutoSenhaBloco | null = fechou
+      ? {
+          id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `blk-${Date.now()}-${blocoAtivo.numero_bloco + 1}`,
+          unidade_id: payload.unidade_id,
+          data_operacional: dataHoje,
+          numero_bloco: blocoAtivo.numero_bloco + 1,
+          status: 'EM_FORMACAO',
+          total_pacientes: 0,
+          created_at: agora
+        }
+      : null;
+
+    // Persistir bloco no Supabase (se tabela existir) e localStorage
+    const locaisBlocos = getLocalBlocos();
+    const salvarBlocoLocal = (blk: AutoSenhaBloco) => {
+      const idx = locaisBlocos.findIndex(
+        b => b.unidade_id === blk.unidade_id && b.data_operacional === blk.data_operacional && b.numero_bloco === blk.numero_bloco
+      );
+      if (idx >= 0) locaisBlocos[idx] = blk;
+      else locaisBlocos.push(blk);
+    };
+    salvarBlocoLocal(blocoAtualizado);
+    if (proximoBlocoAuto) salvarBlocoLocal(proximoBlocoAuto);
+    saveLocalBlocos(locaisBlocos);
+
+    try {
+      const { data: blkRow, error: blkErr } = await supabase
+        .from('autosenha_blocos')
+        .upsert(blocoAtualizado, { onConflict: 'unidade_id,data_operacional,numero_bloco' })
+        .select()
+        .single();
+      if (!blkErr && blkRow?.id) {
+        novaSenha.bloco_id = blkRow.id;
+        itensAtualizados.forEach(it => {
+          it.bloco_id = blkRow.id;
+        });
+      }
+      if (proximoBlocoAuto) {
+        await supabase
+          .from('autosenha_blocos')
+          .upsert(proximoBlocoAuto, { onConflict: 'unidade_id,data_operacional,numero_bloco' });
+      }
+    } catch {
+      // Fallback local preservado
+    }
+
+    // Atualizar cache local das senhas do bloco + nova senha
+    const localList = getLocalSenhas().filter(s => !itensAtualizados.some(u => u.id === s.id));
+    localList.unshift(...itensAtualizados);
+    saveLocalSenhas(localList);
+
+    // Inserir nova senha no Supabase e sincronizar posições reorganizadas dos membros do bloco
+    try {
+      const { data, error } = await supabase
+        .from('autosenha_senhas')
+        .insert([novaSenha])
+        .select()
+        .single();
+
+      if (!error && data) {
+        novaSenha.id = data.id;
+      }
+
+      // Atualiza posição consolidada / provisória dos demais membros do mesmo bloco
+      await Promise.allSettled(
+        itensAtualizados
+          .filter(it => it.id !== novaSenha.id)
+          .map(it =>
+            supabase
+              .from('autosenha_senhas')
+              .update({
+                bloco_id: it.bloco_id,
+                bloco_numero: it.bloco_numero,
+                bloco_status: it.bloco_status,
+                posicao_bloco: it.posicao_bloco,
+                posicao_provisoria: it.posicao_provisoria
+              })
+              .eq('id', it.id)
+          )
+      );
+    } catch (e) {
+      console.warn('[AutoSenha] Supabase insert fallback para local:', e);
+    }
+
+    await registrarAuditoria(
+      payload.unidade_id,
+      'EMISSAO',
+      `Senha ${novaSenha.numero} emitida para ${novaSenha.cidadao_nome} (${novaSenha.prioridade_tipo}) — Bloco ${novaSenha.bloco_numero}, Posição ${novaSenha.posicao_bloco}${fechou ? ' [Bloco Fechado]' : ' [Provisória]'}`,
+      { senha: novaSenha, bloco: blocoAtualizado, fechou },
+      payload.atendente_nome || 'Atendente',
+      payload.atendente_id,
+      novaSenha.id,
+      novaSenha.numero
+    );
+
+    if (fechou) {
+      await registrarAuditoria(
+        payload.unidade_id,
+        'BLOCO_FECHADO',
+        `Bloco #${blocoAtualizado.numero_bloco} consolidado e fechado com 5 pacientes; Bloco #${blocoAtualizado.numero_bloco + 1} criado.`,
+        { blocoFechado: blocoAtualizado, proximoBloco: proximoBlocoAuto },
+        'Sistema de Blocos'
+      );
+    }
+
+    notificarRealtimeMudanca(payload.unidade_id, 'senha_emitida', { senha: novaSenha, fechou });
+    notificarRealtimeMudanca(payload.unidade_id, 'bloco_atualizado', { bloco: blocoAtualizado });
+    return novaSenha;
+  });
 }
 
 // ----------------------------------------------------------------------
@@ -578,58 +917,140 @@ export async function getSenhas(
 export interface FilaAtualOrdenadaItem {
   senha: AutoSenhaItem;
   posicao: number;
+  bloco_numero: number;
+  bloco_status: AutoSenhaBlocoStatus;
+  posicao_no_bloco: number;
+  slot_referencia: AutoSenhaPrioridadeTipo;
+  posicao_provisoria: boolean;
+}
+
+export interface BlocoFilaVisualizado {
+  numero_bloco: number;
+  status: AutoSenhaBlocoStatus;
+  total_pacientes: number;
+  closed_at?: string;
+  itens: AutoSenhaFilaBlocoItem[];
 }
 
 /**
- * Ordena os cidadãos aguardando ('AGUARDANDO') na ordem exata em que serão chamados
- * pela unidade (respeitando Especial 80+ e a regra de alternância Prioritário : Normal),
- * sem alterar os contadores persistidos.
+ * Monta todos os blocos de 5 do dia (fechados e em formação), preservando
+ * posições consolidadas dos blocos fechados e reorganizando blocos em formação
+ * pela sequência Especial -> Prioritário -> Especial -> Prioritário -> Normal.
+ */
+export function getBlocosFilaDoDia(
+  senhasDia: AutoSenhaItem[],
+  blocosPersistidos?: AutoSenhaBloco[]
+): BlocoFilaVisualizado[] {
+  const ordenadasCrono = [...senhasDia].sort(porOrdemChegadaSenha);
+  const grupos = new Map<number, AutoSenhaItem[]>();
+
+  // Agrupa por bloco_numero explícito ou particiona em blocos de 5 para registros legados
+  const semBloco: AutoSenhaItem[] = [];
+  ordenadasCrono.forEach(s => {
+    if (s.bloco_numero && s.bloco_numero >= 1) {
+      const arr = grupos.get(s.bloco_numero) || [];
+      arr.push(s);
+      grupos.set(s.bloco_numero, arr);
+    } else {
+      semBloco.push(s);
+    }
+  });
+
+  if (semBloco.length > 0) {
+    let nextBlk = grupos.size > 0 ? Math.max(...Array.from(grupos.keys())) + 1 : 1;
+    for (let i = 0; i < semBloco.length; i += 5) {
+      grupos.set(nextBlk++, semBloco.slice(i, i + 5));
+    }
+  }
+
+  // Inclui blocos vazios recém-criados existentes em blocosPersistidos
+  (blocosPersistidos || []).forEach(b => {
+    if (!grupos.has(b.numero_bloco)) {
+      grupos.set(b.numero_bloco, []);
+    }
+  });
+
+  const numerosOrdenados = Array.from(grupos.keys()).sort((a, b) => a - b);
+  let posGlobal = 1;
+  const resultado: BlocoFilaVisualizado[] = [];
+
+  for (const numBloco of numerosOrdenados) {
+    const membros = grupos.get(numBloco) || [];
+    const blkMeta = blocosPersistidos?.find(b => b.numero_bloco === numBloco);
+    const blocoFechado =
+      blkMeta?.status === 'FECHADO' ||
+      membros.length >= 5 ||
+      membros.some(m => m.bloco_status === 'FECHADO');
+
+    const { itensAtualizados } = reorganizarItensNoBloco5(
+      membros,
+      blocoFechado ? 'FECHADO' : 'EM_FORMACAO'
+    );
+
+    const statusBloco: AutoSenhaBlocoStatus = blocoFechado ? 'FECHADO' : 'EM_FORMACAO';
+    const visualItens: AutoSenhaFilaBlocoItem[] = itensAtualizados.map((s, idx) => {
+      const posNoBloco = s.posicao_bloco || idx + 1;
+      const slotRef = SEQUENCIA_BLOCO_5[Math.min(Math.max(posNoBloco - 1, 0), 4)];
+      const globalAtual = s.status === 'AGUARDANDO' ? posGlobal++ : 0;
+      return {
+        senha: {
+          ...s,
+          bloco_numero: numBloco,
+          bloco_status: statusBloco,
+          posicao_bloco: posNoBloco,
+          posicao_provisoria: !blocoFechado
+        },
+        bloco_numero: numBloco,
+        bloco_status: statusBloco,
+        posicao_no_bloco: posNoBloco,
+        posicao_global: globalAtual,
+        slot_referencia: slotRef,
+        posicao_provisoria: !blocoFechado
+      };
+    });
+
+    resultado.push({
+      numero_bloco: numBloco,
+      status: statusBloco,
+      total_pacientes: visualItens.length,
+      closed_at: blkMeta?.closed_at,
+      itens: visualItens
+    });
+  }
+
+  return resultado;
+}
+
+/**
+ * Retorna os cidadãos aguardando ('AGUARDANDO') na ordem exata em que serão chamados
+ * pela unidade seguindo a Fila Inteligente por Blocos de 5.
  */
 export function getFilaAtualOrdenada(
   senhas: AutoSenhaItem[],
-  config?: AutoSenhaConfiguracao | null
+  _config?: AutoSenhaConfiguracao | null,
+  blocosPersistidos?: AutoSenhaBloco[]
 ): FilaAtualOrdenadaItem[] {
-  const porOrdemChegada = (a: AutoSenhaItem, b: AutoSenhaItem) => {
-    const diffTempo = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-    if (diffTempo !== 0) return diffTempo;
-    return (a.numero_sequencial || 0) - (b.numero_sequencial || 0);
-  };
+  const blocos = getBlocosFilaDoDia(senhas, blocosPersistidos);
+  const ordenadosAguardando: FilaAtualOrdenadaItem[] = [];
+  let posGlobal = 1;
 
-  const aguardando = senhas.filter(s => s.status === 'AGUARDANDO');
-  if (aguardando.length === 0) return [];
-
-  const especiais = aguardando.filter(s => s.prioridade_tipo === 'ESPECIAL').sort(porOrdemChegada);
-  const prioritarios = aguardando.filter(s => s.prioridade_tipo === 'PRIORITARIO').sort(porOrdemChegada);
-  const normais = aguardando.filter(s => s.prioridade_tipo === 'NORMAL').sort(porOrdemChegada);
-
-  const ordenadas: AutoSenhaItem[] = [...especiais];
-
-  if (config?.regra_alternancia === 'APENAS_PRIORIDADE') {
-    ordenadas.push(...prioritarios, ...normais);
-  } else {
-    const propP = config?.proporcao_prioridade || 2;
-    let contP = config?.contador_prioridade_atual || 0;
-    const pQueue = [...prioritarios];
-    const nQueue = [...normais];
-
-    while (pQueue.length > 0 || nQueue.length > 0) {
-      if (pQueue.length > 0 && contP < propP) {
-        ordenadas.push(pQueue.shift()!);
-        contP += 1;
-      } else if (nQueue.length > 0) {
-        ordenadas.push(nQueue.shift()!);
-        contP = 0;
-      } else if (pQueue.length > 0) {
-        ordenadas.push(pQueue.shift()!);
-        contP = 1;
+  for (const bloco of blocos) {
+    for (const item of bloco.itens) {
+      if (item.senha.status === 'AGUARDANDO') {
+        ordenadosAguardando.push({
+          senha: item.senha,
+          posicao: posGlobal++,
+          bloco_numero: item.bloco_numero,
+          bloco_status: item.bloco_status,
+          posicao_no_bloco: item.posicao_no_bloco,
+          slot_referencia: item.slot_referencia,
+          posicao_provisoria: item.posicao_provisoria
+        });
       }
     }
   }
 
-  return ordenadas.map((senha, idx) => ({
-    senha,
-    posicao: idx + 1
-  }));
+  return ordenadosAguardando;
 }
 
 export type HistoricoPeriodoFiltro = 'hoje' | '7_dias' | '30_dias' | 'todos' | 'data_especifica';
@@ -930,7 +1351,7 @@ async function findSenhaParaAcao(
 }
 
 // ----------------------------------------------------------------------
-// ALGORITMO INTELIGENTE E LEGAL DE CHAMADA DO PRÓXIMO
+// CHAMADA TRANSACIONAL POR BLOCOS DE 5 (ANTI-DUPLICIDADE ENTRE GUICHÊS)
 // ----------------------------------------------------------------------
 export async function chamarProximo(
   unidadeId: AutoSenhaUnidadeId,
@@ -940,131 +1361,150 @@ export async function chamarProximo(
 ): Promise<{ senhaChamada: AutoSenhaItem | null; mensagem?: string }> {
   assertCanAccessAutoSenhaUnidade(unidadeId, 'operacional');
   const dataHoje = getDataOperacionalHoje();
-  const senhasHoje = await getSenhas(unidadeId, dataHoje);
 
-  // Apenas senhas com status 'AGUARDANDO' podem ser chamadas
-  const aguardando = senhasHoje.filter(s => s.status === 'AGUARDANDO');
+  return withUnidadeMutex(`chamada_${unidadeId}_${dataHoje}`, async () => {
+    // 1. Tenta chamada atômica direta no PostgreSQL via RPC (SELECT ... FOR UPDATE SKIP LOCKED)
+    try {
+      if (typeof (supabase as any).rpc === 'function') {
+        const { data: rpcChamada, error: rpcErr } = await (supabase as any).rpc('chamar_proxima_senha_autosenha', {
+          p_unidade_id: unidadeId,
+          p_guiche: guiche,
+          p_operador_id: operadorId || null,
+          p_operador_nome: operadorNome
+        });
 
-  if (aguardando.length === 0) {
-    return { senhaChamada: null, mensagem: 'Não há cidadãos aguardando na fila desta unidade.' };
-  }
+        if (!rpcErr) {
+          if (!rpcChamada) {
+            return { senhaChamada: null, mensagem: 'Não há cidadãos aguardando na fila desta unidade.' };
+          }
+          const senhaChamada = rpcChamada as AutoSenhaItem;
+          const locais = getLocalSenhas();
+          const idx = locais.findIndex(s => s.id === senhaChamada.id);
+          if (idx !== -1) locais[idx] = senhaChamada;
+          else locais.unshift(senhaChamada);
+          saveLocalSenhas(locais);
 
-  const config = await getConfiguracao(unidadeId);
-
-  // 1. Prioridade Especial (Idoso 80+, PCD grave etc.) sempre tem prioridade absoluta legal
-  const especiais = aguardando.filter(s => s.prioridade_tipo === 'ESPECIAL');
-  const prioritarios = aguardando.filter(s => s.prioridade_tipo === 'PRIORITARIO');
-  const normais = aguardando.filter(s => s.prioridade_tipo === 'NORMAL');
-
-  let escolhida: AutoSenhaItem | null = null;
-
-  // Lei Federal: maiores de 80 anos têm prioridade especial sobre os demais prioritários
-  if (especiais.length > 0) {
-    // Escolhe o mais antigo dos especiais
-    escolhida = especiais.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];
-  } else {
-    // Aplicar regra de alternância configurável
-    // Ex: '2_P_1_N': 2 prioritários para 1 normal
-    const propP = config.proporcao_prioridade || 2;
-    const contP = config.contador_prioridade_atual || 0;
-
-    // Se há prioritários aguardando e ainda não atingiu o limite de proporção P
-    if (prioritarios.length > 0 && contP < propP) {
-      escolhida = prioritarios.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];
-      config.contador_prioridade_atual = contP + 1;
-      config.contador_normal_atual = 0;
-    } else if (normais.length > 0) {
-      // Chama Normal
-      escolhida = normais.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];
-      config.contador_prioridade_atual = 0;
-      config.contador_normal_atual = (config.contador_normal_atual || 0) + 1;
-    } else if (prioritarios.length > 0) {
-      // Se não há normais, chama prioritário mesmo tendo zerado o contador
-      escolhida = prioritarios.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];
-      config.contador_prioridade_atual = 1;
-      config.contador_normal_atual = 0;
+          notificarRealtimeMudanca(unidadeId, 'senha_chamada', { senha: senhaChamada, guiche });
+          return { senhaChamada };
+        }
+      }
+    } catch {
+      // Fallback transacional com update otimista condicional abaixo
     }
-  }
 
-  if (!escolhida) {
-    escolhida = aguardando.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];
-  }
+    // 2. Fallback seguro por blocos de 5 + trava condicional otimista no status = AGUARDANDO
+    const [senhasHoje, blocosHoje, config] = await Promise.all([
+      getSenhas(unidadeId, dataHoje),
+      getBlocos(unidadeId, dataHoje),
+      getConfiguracao(unidadeId)
+    ]);
 
-  // Atualizar contadores da config
-  await salvarConfiguracao(config, 'Sistema de Filas', operadorId);
+    const filaOrdenada = getFilaAtualOrdenada(senhasHoje, config, blocosHoje);
+    if (filaOrdenada.length === 0) {
+      return { senhaChamada: null, mensagem: 'Não há cidadãos aguardando na fila desta unidade.' };
+    }
 
-  // Registrar chamada da senha
-  const agora = new Date().toISOString();
-  escolhida.status = 'CHAMANDO';
-  escolhida.guiche = guiche;
-  escolhida.atendente_id = operadorId;
-  escolhida.atendente_nome = operadorNome;
-  escolhida.last_called_at = agora;
-  escolhida.call_count = (escolhida.call_count || 0) + 1;
+    let escolhida: AutoSenhaItem | null = null;
+    const agora = new Date().toISOString();
 
-  if (!escolhida.first_called_at) {
-    escolhida.first_called_at = agora;
-    const criacaoMs = new Date(escolhida.created_at).getTime();
-    const chamadaMs = new Date(agora).getTime();
-    escolhida.wait_time_first_call_seconds = Math.max(0, Math.floor((chamadaMs - criacaoMs) / 1000));
-  }
+    for (const itemFila of filaOrdenada) {
+      const candidata = { ...itemFila.senha };
+      const criacaoMs = new Date(candidata.created_at).getTime();
+      const chamadaMs = new Date(agora).getTime();
+      const waitFirst = candidata.wait_time_first_call_seconds ?? Math.max(0, Math.floor((chamadaMs - criacaoMs) / 1000));
+      const nextCallCount = (candidata.call_count || 0) + 1;
+      const firstCalled = candidata.first_called_at || agora;
 
-  // Atualizar localmente
-  const locais = getLocalSenhas();
-  const idx = locais.findIndex(s => s.id === escolhida!.id);
-  if (idx !== -1) locais[idx] = escolhida;
-  else locais.unshift(escolhida);
-  saveLocalSenhas(locais);
+      try {
+        const { data: updatedRows, error: updErr } = await supabase
+          .from('autosenha_senhas')
+          .update({
+            status: 'CHAMANDO',
+            guiche,
+            atendente_id: operadorId,
+            atendente_nome: operadorNome,
+            first_called_at: firstCalled,
+            last_called_at: agora,
+            call_count: nextCallCount,
+            wait_time_first_call_seconds: waitFirst
+          })
+          .eq('id', candidata.id)
+          .eq('status', 'AGUARDANDO')
+          .select();
 
-  // Atualizar no Supabase
-  try {
-    await supabase
-      .from('autosenha_senhas')
-      .update({
-        status: 'CHAMANDO',
-        guiche,
-        atendente_id: operadorId,
-        atendente_nome: operadorNome,
-        first_called_at: escolhida.first_called_at,
-        last_called_at: agora,
-        call_count: escolhida.call_count,
-        wait_time_first_call_seconds: escolhida.wait_time_first_call_seconds
-      })
-      .eq('id', escolhida.id);
-  } catch (e) {
-    console.warn('[AutoSenha] Erro ao atualizar chamada no Supabase:', e);
-  }
+        if (!updErr && Array.isArray(updatedRows)) {
+          if (updatedRows.length === 0) {
+            // Outro guichê chamou esta senha exatamente antes — avança para o próximo da fila
+            continue;
+          }
+          escolhida = updatedRows[0] as AutoSenhaItem;
+          break;
+        }
+      } catch {
+        // Segue para fallback local abaixo
+      }
 
-  // Registrar histórico da chamada
-  const historicoChamada: AutoSenhaChamadaHistorico = {
-    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `chm-${Date.now()}`,
-    senha_id: escolhida.id,
-    unidade_id: unidadeId,
-    numero_chamada: escolhida.call_count,
-    tipo_evento: escolhida.call_count === 1 ? 'CHAMADA_INICIAL' : 'RECHAMADA',
-    guiche,
-    operador_id: operadorId,
-    operador_nome: operadorNome,
-    timestamp_chamada: agora
-  };
+      // Ambiente offline sem Supabase disponível: confirma em memória local que segue AGUARDANDO
+      const locaisAtual = getLocalSenhas();
+      const atualLocal = locaisAtual.find(s => s.id === candidata.id);
+      if (atualLocal && atualLocal.status !== 'AGUARDANDO') {
+        continue;
+      }
 
-  try {
-    await supabase.from('autosenha_chamadas').insert([historicoChamada]);
-  } catch (e) {}
+      candidata.status = 'CHAMANDO';
+      candidata.guiche = guiche;
+      candidata.atendente_id = operadorId;
+      candidata.atendente_nome = operadorNome;
+      candidata.first_called_at = firstCalled;
+      candidata.last_called_at = agora;
+      candidata.call_count = nextCallCount;
+      candidata.wait_time_first_call_seconds = waitFirst;
+      escolhida = candidata;
+      break;
+    }
 
-  await registrarAuditoria(
-    unidadeId,
-    'CHAMADA',
-    `Senha ${escolhida.numero} chamada no ${guiche} por ${operadorNome} (${escolhida.prioridade_tipo})`,
-    { senha: escolhida, guiche },
-    operadorNome,
-    operadorId,
-    escolhida.id,
-    escolhida.numero
-  );
+    if (!escolhida) {
+      return { senhaChamada: null, mensagem: 'Não há cidadãos aguardando na fila desta unidade.' };
+    }
 
-  notificarRealtimeMudanca(unidadeId, 'senha_chamada', { senha: escolhida, guiche });
-  return { senhaChamada: escolhida };
+    // Atualiza cache local
+    const locais = getLocalSenhas();
+    const idx = locais.findIndex(s => s.id === escolhida!.id);
+    if (idx !== -1) locais[idx] = escolhida;
+    else locais.unshift(escolhida);
+    saveLocalSenhas(locais);
+
+    // Registrar histórico da chamada
+    const historicoChamada: AutoSenhaChamadaHistorico = {
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `chm-${Date.now()}`,
+      senha_id: escolhida.id,
+      unidade_id: unidadeId,
+      numero_chamada: escolhida.call_count,
+      tipo_evento: escolhida.call_count === 1 ? 'CHAMADA_INICIAL' : 'RECHAMADA',
+      guiche,
+      operador_id: operadorId,
+      operador_nome: operadorNome,
+      timestamp_chamada: agora
+    };
+
+    try {
+      await supabase.from('autosenha_chamadas').insert([historicoChamada]);
+    } catch {}
+
+    await registrarAuditoria(
+      unidadeId,
+      'CHAMADA',
+      `Senha ${escolhida.numero} chamada no ${guiche} por ${operadorNome} [Bloco ${escolhida.bloco_numero || 1} • Posição ${escolhida.posicao_bloco || '-'}]`,
+      { senha: escolhida, guiche },
+      operadorNome,
+      operadorId,
+      escolhida.id,
+      escolhida.numero
+    );
+
+    notificarRealtimeMudanca(unidadeId, 'senha_chamada', { senha: escolhida, guiche });
+    return { senhaChamada: escolhida };
+  });
 }
 
 // ----------------------------------------------------------------------
@@ -1328,7 +1768,7 @@ export async function cancelarSenha(
 }
 
 // ----------------------------------------------------------------------
-// FLUXO INTEGRADO — SOLICITAR AVALIAÇÃO IMEDIATA (ENCAMINHAMENTO PRESENCIAL)
+// FLUXO INTEGRADO — SOLICITAR AVALIAÇÃO IMEDIATA (FORA DOS BLOCOS DE 5)
 // ----------------------------------------------------------------------
 export async function solicitarAvaliacaoImediataUPA(
   cidadaoNome: string,
@@ -1337,20 +1777,26 @@ export async function solicitarAvaliacaoImediataUPA(
   operadorId?: string,
   senhaId?: string,
   senhaNumero?: string,
-  unidadeId: AutoSenhaUnidadeId = 'upa'
+  unidadeId: AutoSenhaUnidadeId = 'upa',
+  pacienteId?: string,
+  pacienteCpf?: string
 ): Promise<AutoSenhaAvaliacaoUrgente> {
   assertCanAccessAutoSenhaUnidade(unidadeId, 'operacional');
+  const agora = new Date().toISOString();
   const avaliacao: AutoSenhaAvaliacaoUrgente = {
     id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `urg-${Date.now()}`,
     unidade_id: unidadeId,
     senha_id: senhaId,
     senha_numero: senhaNumero,
+    paciente_id: pacienteId,
+    paciente_cpf: pacienteCpf,
     cidadao_nome: cidadaoNome.trim(),
     motivo_queixa: motivoQueixa.trim(),
     status: 'ENCAMINHADO_PRESENCIAL',
     solicitante_id: operadorId,
     solicitante_nome: operadorNome,
-    created_at: new Date().toISOString()
+    created_at: agora,
+    encaminhado_em: agora
   };
 
   const lista = getLocalUrgentes();
@@ -1358,13 +1804,20 @@ export async function solicitarAvaliacaoImediataUPA(
   saveLocalUrgentes(lista);
 
   try {
-    await supabase.from('autosenha_avaliacoes_urgentes').insert([avaliacao]);
+    const { data, error } = await supabase
+      .from('autosenha_avaliacoes_urgentes')
+      .insert([avaliacao])
+      .select()
+      .single();
+    if (!error && data) {
+      avaliacao.id = data.id;
+    }
   } catch (e) {}
 
   await registrarAuditoria(
     unidadeId,
     unidadeId === 'upa' ? 'AVALIACAO_URGENTE_UPA' : `AVALIACAO_URGENTE_${unidadeId.toUpperCase()}`,
-    `ALERTA ASSISTENCIAL ${unidadeId.toUpperCase()}: Solicitação de avaliação presencial imediata para ${cidadaoNome}. Queixa: ${motivoQueixa}`,
+    `ALERTA ASSISTENCIAL ${unidadeId.toUpperCase()}: Solicitação de avaliação imediata fora da fila para ${cidadaoNome}. Motivo: ${motivoQueixa}`,
     avaliacao,
     operadorNome,
     operadorId,
@@ -1374,6 +1827,111 @@ export async function solicitarAvaliacaoImediataUPA(
 
   notificarRealtimeMudanca(unidadeId, 'alerta_urgencia_clinica', { avaliacao });
   return avaliacao;
+}
+
+/**
+ * Lista todas as solicitações de Avaliação Imediata da unidade (preservando ordem cronológica,
+ * sem impor ordenação clínica automática entre casos simultâneos).
+ */
+export async function getAvaliacoesImediatasUnidade(
+  unidadeId: AutoSenhaUnidadeId,
+  incluirAtendidas = true
+): Promise<AutoSenhaAvaliacaoUrgente[]> {
+  assertCanAccessAutoSenhaUnidade(unidadeId, 'operacional');
+
+  try {
+    let query = supabase
+      .from('autosenha_avaliacoes_urgentes')
+      .select('*')
+      .eq('unidade_id', unidadeId);
+
+    if (!incluirAtendidas) {
+      query = query.neq('status', 'ATENDIDO');
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
+    if (!error && Array.isArray(data)) {
+      const lista = data as AutoSenhaAvaliacaoUrgente[];
+      const outros = getLocalUrgentes().filter(u => u.unidade_id !== unidadeId);
+      saveLocalUrgentes([...lista, ...outros]);
+      return lista;
+    }
+  } catch {
+    // fallback local abaixo
+  }
+
+  let locais = getLocalUrgentes().filter(u => u.unidade_id === unidadeId);
+  if (!incluirAtendidas) {
+    locais = locais.filter(u => u.status !== 'ATENDIDO');
+  }
+  return locais.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
+/**
+ * Registra o acolhimento presencial de uma Avaliação Imediata sem interferir na fila convencional de blocos.
+ */
+export async function marcarAcolhimentoAvaliacaoImediata(
+  avaliacaoId: string,
+  responsavelNome: string,
+  expectedUnidadeId?: AutoSenhaUnidadeId,
+  observacoes?: string
+): Promise<AutoSenhaAvaliacaoUrgente | null> {
+  const locais = getLocalUrgentes();
+  let alvo = locais.find(u => u.id === avaliacaoId);
+
+  if (!alvo) {
+    try {
+      const { data, error } = await supabase
+        .from('autosenha_avaliacoes_urgentes')
+        .select('*')
+        .eq('id', avaliacaoId)
+        .maybeSingle();
+      if (!error && data) {
+        alvo = data as AutoSenhaAvaliacaoUrgente;
+        locais.unshift(alvo);
+      }
+    } catch {}
+  }
+
+  if (!alvo) return null;
+  if (expectedUnidadeId && alvo.unidade_id !== expectedUnidadeId) {
+    throw new Error(`Acesso negado: avaliação pertence à unidade ${alvo.unidade_id.toUpperCase()}.`);
+  }
+  assertCanAccessAutoSenhaUnidade(alvo.unidade_id, 'operacional');
+
+  const agora = new Date().toISOString();
+  alvo.status = 'ATENDIDO';
+  alvo.atendido_em = agora;
+  alvo.atendido_por = responsavelNome;
+  alvo.observacoes_desfecho = observacoes?.trim() || 'Acolhimento presencial realizado pela equipe assistencial.';
+  if (!alvo.encaminhado_em) {
+    alvo.encaminhado_em = alvo.created_at;
+  }
+
+  saveLocalUrgentes(locais);
+
+  try {
+    await supabase
+      .from('autosenha_avaliacoes_urgentes')
+      .update({
+        status: 'ATENDIDO',
+        atendido_em: agora,
+        atendido_por: responsavelNome,
+        observacoes_desfecho: alvo.observacoes_desfecho
+      })
+      .eq('id', alvo.id);
+  } catch {}
+
+  await registrarAuditoria(
+    alvo.unidade_id,
+    'AVALIACAO_IMEDIATA_ACOLHIDA',
+    `Acolhimento presencial de Avaliação Imediata registrado para ${alvo.cidadao_nome} por ${responsavelNome}.`,
+    alvo,
+    responsavelNome
+  );
+
+  notificarRealtimeMudanca(alvo.unidade_id, 'avaliacao_acolhida', { avaliacao: alvo });
+  return alvo;
 }
 
 // ----------------------------------------------------------------------
@@ -1594,12 +2152,14 @@ export async function zerarTodosDadosAutoSenha(unidadeId?: AutoSenhaUnidadeId): 
     try {
       if (unidadeId) {
         saveLocalSenhas(getLocalSenhas().filter(s => !(s.unidade_id === unidadeId && s.data_operacional === hoje)));
+        saveLocalBlocos(getLocalBlocos().filter(b => !(b.unidade_id === unidadeId && b.data_operacional === hoje)));
         const cfg = getLocalConfig(unidadeId);
         cfg.contador_prioridade_atual = 0;
         cfg.contador_normal_atual = 0;
         saveLocalConfig(cfg);
       } else {
         localStorage.setItem(STORAGE_SENHAS_KEY, JSON.stringify([]));
+        localStorage.setItem(STORAGE_BLOCOS_KEY, JSON.stringify([]));
         localStorage.setItem(STORAGE_AUDIT_KEY, JSON.stringify([]));
         localStorage.setItem(STORAGE_URGENTES_KEY, JSON.stringify([]));
         for (const u of AUTOSENHA_UNIDADES) {
@@ -1622,6 +2182,11 @@ export async function zerarTodosDadosAutoSenha(unidadeId?: AutoSenhaUnidadeId): 
       await Promise.allSettled([
         supabase
           .from('autosenha_senhas')
+          .delete()
+          .eq('unidade_id', unidadeId)
+          .eq('data_operacional', hoje),
+        supabase
+          .from('autosenha_blocos')
           .delete()
           .eq('unidade_id', unidadeId)
           .eq('data_operacional', hoje),

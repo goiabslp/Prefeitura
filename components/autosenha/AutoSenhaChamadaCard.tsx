@@ -1,9 +1,9 @@
 import React from 'react';
 import {
   Bell, Volume2, ListOrdered, Settings, RotateCcw,
-  Play, CheckCircle2, UserX, XCircle
+  Play, CheckCircle2, UserX, XCircle, ShieldAlert, Clock, Layers
 } from 'lucide-react';
-import { AutoSenhaItem } from '../../types';
+import { AutoSenhaItem, AutoSenhaAvaliacaoUrgente } from '../../types';
 
 export interface AutoSenhaChamadaCardProps {
   regraAlternanciaLabel: string;
@@ -14,9 +14,19 @@ export interface AutoSenhaChamadaCardProps {
     emAtendimento: number;
     concluidos: number;
   };
+  blocoResumo?: {
+    blocoAtivoNumero: number;
+    blocoAtivoQtd: number;
+    blocoAtivoStatus: 'EM_FORMACAO' | 'FECHADO';
+    blocosFechadosQtd: number;
+    proximaSenhaNumero?: string;
+  };
+  avaliacoesImediatasAtivas?: AutoSenhaAvaliacaoUrgente[];
   senhasAtivas: AutoSenhaItem[];
   ausenteConfirmId: string | null;
   onChamarProximo: () => void;
+  onConcluirAcolhimentoImediato?: (avaliacao: AutoSenhaAvaliacaoUrgente) => void;
+  onAbrirHistoricoAvaliacoes?: () => void;
   onRechamar: (senha: AutoSenhaItem) => void;
   onIniciar: (senha: AutoSenhaItem) => void;
   onConcluir: (senha: AutoSenhaItem) => void;
@@ -31,9 +41,13 @@ export const AutoSenhaChamadaCard: React.FC<AutoSenhaChamadaCardProps> = ({
   regraAlternanciaLabel,
   isSubmitting,
   contadores,
+  blocoResumo,
+  avaliacoesImediatasAtivas = [],
   senhasAtivas,
   ausenteConfirmId,
   onChamarProximo,
+  onConcluirAcolhimentoImediato,
+  onAbrirHistoricoAvaliacoes,
   onRechamar,
   onIniciar,
   onConcluir,
@@ -43,8 +57,83 @@ export const AutoSenhaChamadaCard: React.FC<AutoSenhaChamadaCardProps> = ({
   onAbrirHistoricoFila,
   onAbrirConfiguracoes
 }) => {
+  const formatHoraCurta = (iso?: string) => {
+    if (!iso) return '--:--';
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? '--:--' : d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  };
+
   return (
     <div className="flex flex-col gap-3.5 h-full justify-between">
+      {/* ALERTA DE PRIORIDADE MÁXIMA — AVALIAÇÃO IMEDIATA (FORA DOS BLOCOS) */}
+      {avaliacoesImediatasAtivas.length > 0 && (
+        <div className="bg-red-600 text-white rounded-3xl p-4 shadow-lg shadow-red-600/25 border-2 border-red-400 animate-fade-in">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-xl bg-white/20 shrink-0">
+                <ShieldAlert className="w-4.5 h-4.5 text-white animate-pulse" />
+              </div>
+              <div>
+                <span className="text-xs font-black uppercase tracking-wider block leading-tight">
+                  AVALIAÇÃO IMEDIATA ({avaliacoesImediatasAtivas.length})
+                </span>
+                <span className="text-[10px] font-bold text-red-100 block leading-tight">
+                  Prioridade máxima • Encaminhamento assistencial imediato fora da fila
+                </span>
+              </div>
+            </div>
+            {onAbrirHistoricoAvaliacoes && (
+              <button
+                type="button"
+                onClick={onAbrirHistoricoAvaliacoes}
+                className="px-2.5 py-1 rounded-xl bg-white/15 hover:bg-white/25 text-[10px] font-black uppercase tracking-wider cursor-pointer shrink-0 transition-colors"
+              >
+                Ver Registro
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2 max-h-40 overflow-y-auto pr-0.5">
+            {avaliacoesImediatasAtivas.map(av => (
+              <div
+                key={av.id}
+                className="p-2.5 rounded-2xl bg-red-950/40 border border-red-300/30 flex flex-col gap-1.5"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <strong className="text-xs font-black uppercase text-white truncate">
+                    {av.cidadao_nome}
+                  </strong>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-100 shrink-0">
+                    <Clock className="w-3 h-3" /> {formatHoraCurta(av.created_at)}
+                  </span>
+                </div>
+                <p className="text-[11px] text-red-50 font-medium leading-snug break-words">
+                  {av.motivo_queixa}
+                </p>
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/15">
+                  <span className="text-[10px] text-red-100 truncate">
+                    Resp.: <strong>{av.solicitante_nome}</strong>
+                  </span>
+                  {onConcluirAcolhimentoImediato && (
+                    <button
+                      type="button"
+                      onClick={() => onConcluirAcolhimentoImediato(av)}
+                      className="px-2.5 py-1 rounded-xl bg-white text-red-700 hover:bg-red-50 text-[10px] font-black uppercase tracking-wider cursor-pointer shrink-0 shadow-xs"
+                    >
+                      Confirmar Acolhimento
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-[10px] text-red-100 font-medium mt-2 leading-snug">
+            A avaliação da gravidade e a ordem de atendimento clínico competem aos profissionais habilitados.
+          </p>
+        </div>
+      )}
+
       {/* Card Escuro de Chamada Automática */}
       <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 rounded-3xl p-5 sm:p-6 text-white shadow-xl border border-slate-800 flex flex-col gap-4 flex-1 justify-between">
         <div>
@@ -61,11 +150,18 @@ export const AutoSenhaChamadaCard: React.FC<AutoSenhaChamadaCardProps> = ({
             </span>
           </div>
 
-          {/* Pill de Regra de Alternância */}
-          <div className="flex justify-center mb-3.5">
-            <span className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/30 text-[10px] sm:text-[11px] font-black tracking-widest uppercase text-emerald-300">
+          {/* Pill da Fila Inteligente por Blocos de 5 */}
+          <div className="flex flex-wrap items-center justify-center gap-1.5 mb-3.5">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/30 text-[10px] sm:text-[11px] font-black tracking-wider uppercase text-emerald-300">
+              <Layers className="w-3.5 h-3.5" />
               {regraAlternanciaLabel}
             </span>
+            {blocoResumo && (
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-[10px] font-bold text-slate-200">
+                Bloco #{blocoResumo.blocoAtivoNumero} ({blocoResumo.blocoAtivoQtd}/5)
+                {blocoResumo.proximaSenhaNumero ? ` • Próx.: ${blocoResumo.proximaSenhaNumero}` : ''}
+              </span>
+            )}
           </div>
 
           {/* Botão Compacto de Chamar Próximo Cidadão */}

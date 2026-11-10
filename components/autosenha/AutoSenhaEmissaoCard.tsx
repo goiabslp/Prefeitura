@@ -208,7 +208,7 @@ export const AutoSenhaEmissaoCard: React.FC<AutoSenhaEmissaoCardProps> = ({
                   Nenhum Paciente Selecionado
                 </p>
                 <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                  Clique em <strong>Localizar Paciente</strong> para consultar pelo CPF na base integrada municipal ou concluir um novo cadastro.
+                  Clique em <strong>Localizar Paciente</strong> para pesquisar por nome, CPF, Cartão SUS ou apelido na base integrada municipal.
                 </p>
               </div>
             </div>

@@ -1135,6 +1135,19 @@ export interface AutoSenhaConfiguracao {
   updated_at?: string;
 }
 
+export type AutoSenhaBlocoStatus = 'EM_FORMACAO' | 'FECHADO';
+
+export interface AutoSenhaBloco {
+  id: string;
+  unidade_id: AutoSenhaUnidadeId;
+  data_operacional: string; // YYYY-MM-DD
+  numero_bloco: number;
+  status: AutoSenhaBlocoStatus;
+  total_pacientes: number;
+  created_at: string;
+  closed_at?: string;
+}
+
 export interface AutoSenhaItem {
   id: string;
   unidade_id: AutoSenhaUnidadeId;
@@ -1148,6 +1161,11 @@ export interface AutoSenhaItem {
   prioridade_tipo: AutoSenhaPrioridadeTipo;
   prioridade_categoria?: AutoSenhaPrioridadeCategoria | string;
   status: AutoSenhaStatus;
+  bloco_id?: string;
+  bloco_numero?: number;
+  bloco_status?: AutoSenhaBlocoStatus;
+  posicao_bloco?: number;
+  posicao_provisoria?: boolean;
   guiche: string;
   atendente_id?: string;
   atendente_nome?: string;
@@ -1161,6 +1179,16 @@ export interface AutoSenhaItem {
   wait_time_total_seconds?: number;
   service_duration_seconds?: number;
   motivo_encerramento?: string;
+}
+
+export interface AutoSenhaFilaBlocoItem {
+  senha: AutoSenhaItem;
+  bloco_numero: number;
+  bloco_status: AutoSenhaBlocoStatus;
+  posicao_no_bloco: number;
+  posicao_global: number;
+  slot_referencia: AutoSenhaPrioridadeTipo;
+  posicao_provisoria: boolean;
 }
 
 export interface AutoSenhaChamadaHistorico {
@@ -1193,13 +1221,17 @@ export interface AutoSenhaAvaliacaoUrgente {
   unidade_id: AutoSenhaUnidadeId;
   senha_id?: string;
   senha_numero?: string;
+  paciente_id?: string;
+  paciente_cpf?: string;
   cidadao_nome: string;
   motivo_queixa: string;
   status: 'PENDENTE' | 'ENCAMINHADO_PRESENCIAL' | 'ATENDIDO';
   solicitante_id?: string;
   solicitante_nome: string;
   created_at: string;
+  encaminhado_em?: string;
   atendido_em?: string;
+  atendido_por?: string;
   observacoes_desfecho?: string;
 }
 

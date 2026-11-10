@@ -3,36 +3,45 @@ import { createPortal } from 'react-dom';
 import {
   ListOrdered, History, X, Clock, Search, Calendar,
   ArrowUpDown, ChevronLeft, ChevronRight, AlertTriangle,
-  RefreshCw, CheckCircle2, UserX, XCircle, RotateCcw, Play, Users
+  RefreshCw, CheckCircle2, UserX, XCircle, RotateCcw, Play, Users,
+  Lock, Sparkles, ShieldAlert
 } from 'lucide-react';
 import {
   AutoSenhaUnidadeId,
   AutoSenhaItem,
+  AutoSenhaBloco,
   AutoSenhaConfiguracao,
-  AutoSenhaStatus
+  AutoSenhaStatus,
+  AutoSenhaAvaliacaoUrgente
 } from '../../types';
 import {
-  getFilaAtualOrdenada,
+  getBlocosFilaDoDia,
   getHistoricoAtendimentosUnidade,
+  getAvaliacoesImediatasUnidade,
   HistoricoPeriodoFiltro,
   getDataOperacionalHoje
 } from '../../services/autoSenhaService';
 
+export type HistoricoFilaModalTab = 'fila' | 'historico' | 'avaliacoes';
+
 export interface HistoricoFilaModalProps {
   isOpen: boolean;
+  initialTab?: HistoricoFilaModalTab;
   unidadeId: AutoSenhaUnidadeId;
   unidadeNome: string;
   unidadeSigla: string;
   senhasDia: AutoSenhaItem[];
+  blocosDia?: AutoSenhaBloco[];
+  avaliacoesImediatas?: AutoSenhaAvaliacaoUrgente[];
   config: AutoSenhaConfiguracao | null;
   onClose: () => void;
+  onTabChange?: (tab: HistoricoFilaModalTab) => void;
   onCancelarSenha: (senha: AutoSenhaItem) => void;
+  onConcluirAcolhimentoImediato?: (avaliacao: AutoSenhaAvaliacaoUrgente) => void;
   onRechamar?: (senha: AutoSenhaItem) => void;
   onIniciar?: (senha: AutoSenhaItem) => void;
   onConcluir?: (senha: AutoSenhaItem) => void;
 }
-
-type ModalTab = 'fila' | 'historico';
 
 const PRIORIDADE_BADGE: Record<string, string> = {
   ESPECIAL: 'bg-purple-100 text-purple-800 border-purple-200',
@@ -60,8 +69,13 @@ function formatarDataCurta(dataIso?: string): string {
   return `${match[3]}/${match[2]}/${match[1]}`;
 }
 
-function formatarTempoEspera(createdAt: string, agoraMs: number): string {
-  const diffSeg = Math.max(0, Math.floor((agoraMs - new Date(createdAt).getTime()) / 1000));
+function formatarTempoEspera(item: AutoSenhaItem, agoraMs: number): string {
+  if (typeof item.wait_time_first_call_seconds === 'number' && item.status !== 'AGUARDANDO') {
+    const min = Math.floor(item.wait_time_first_call_seconds / 60);
+    const seg = item.wait_time_first_call_seconds % 60;
+    return min > 0 ? `${min} min` : `${seg}s`;
+  }
+  const diffSeg = Math.max(0, Math.floor((agoraMs - new Date(item.created_at).getTime()) / 1000));
   const min = Math.floor(diffSeg / 60);
   const horas = Math.floor(min / 60);
   const restoMin = min % 60;
@@ -72,18 +86,22 @@ function formatarTempoEspera(createdAt: string, agoraMs: number): string {
 
 export const HistoricoFilaModal: React.FC<HistoricoFilaModalProps> = ({
   isOpen,
+  initialTab = 'fila',
   unidadeId,
   unidadeNome,
   unidadeSigla,
   senhasDia,
-  config,
+  blocosDia,
+  avaliacoesImediatas,
   onClose,
+  onTabChange,
   onCancelarSenha,
+  onConcluirAcolhimentoImediato,
   onRechamar,
   onIniciar,
   onConcluir
 }) => {
-  const [activeTab, setActiveTab] = useState<ModalTab>('fila');
+  const [activeTab, setActiveTab] = useState<HistoricoFilaModalTab>(initialTab);
   const [agoraMs, setAgoraMs] = useState<number>(() => Date.now());
 
   // Estados da Aba 2 — Histórico de Atendimentos
@@ -102,7 +120,23 @@ export const HistoricoFilaModal: React.FC<HistoricoFilaModalProps> = ({
   const [isLoadingHistorico, setIsLoadingHistorico] = useState<boolean>(false);
   const [historicoError, setHistoricoError] = useState<string | null>(null);
 
+  // Estados da Aba 3 — Registro Específico de Avaliações Imediatas
+  const [avaliacoesLista, setAvaliacoesLista] = useState<AutoSenhaAvaliacaoUrgente[]>(avaliacoesImediatas || []);
+  const [isLoadingAvaliacoes, setIsLoadingAvaliacoes] = useState<boolean>(false);
+  const [avaliacoesError, setAvaliacoesError] = useState<string | null>(null);
+
   const hojeIso = getDataOperacionalHoje();
+
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
+
+  const trocarAba = (tab: HistoricoFilaModalTab) => {
+    setActiveTab(tab);
+    onTabChange?.(tab);
+  };
 
   // Trava scroll do body enquanto modal estiver aberto e habilita fechamento por ESC
   useEffect(() => {
@@ -121,7 +155,7 @@ export const HistoricoFilaModal: React.FC<HistoricoFilaModalProps> = ({
     };
   }, [isOpen, onClose]);
 
-  // Atualização periódica dos tempos de fila apenas enquanto modal aberto
+  // Atualização periódica dos tempos de espera apenas enquanto modal aberto
   useEffect(() => {
     if (!isOpen) return;
     setAgoraMs(Date.now());
@@ -129,7 +163,7 @@ export const HistoricoFilaModal: React.FC<HistoricoFilaModalProps> = ({
     return () => clearInterval(timer);
   }, [isOpen]);
 
-  // Debounce da busca na aba de histórico para evitar consultas redundantes
+  // Debounce da busca na aba de histórico
   useEffect(() => {
     const t = setTimeout(() => {
       setBuscaDebounced(buscaInput.trim());
@@ -138,19 +172,22 @@ export const HistoricoFilaModal: React.FC<HistoricoFilaModalProps> = ({
     return () => clearTimeout(t);
   }, [buscaInput]);
 
-  // Resetar para aba de fila ao trocar de unidade
   useEffect(() => {
-    setActiveTab('fila');
     setPaginaAtual(1);
   }, [unidadeId]);
 
-  // Fila atual ordenada conforme a regra exata da unidade
-  const filaOrdenada = useMemo(() => {
+  // Blocos de 5 do dia (fechados + bloco em formação)
+  const blocosDoDia = useMemo(() => {
     const somenteUnidade = senhasDia.filter(s => s.unidade_id === unidadeId);
-    return getFilaAtualOrdenada(somenteUnidade, config);
-  }, [senhasDia, unidadeId, config]);
+    const blocosUnidade = (blocosDia || []).filter(b => b.unidade_id === unidadeId);
+    return getBlocosFilaDoDia(somenteUnidade, blocosUnidade);
+  }, [senhasDia, blocosDia, unidadeId]);
 
-  // Consulta isolada por unidade para a Aba 2 (somente quando aberta)
+  const totalAguardando = useMemo(() => {
+    return senhasDia.filter(s => s.unidade_id === unidadeId && s.status === 'AGUARDANDO').length;
+  }, [senhasDia, unidadeId]);
+
+  // Consulta Aba 2 — Histórico de Atendimentos
   const carregarHistorico = useCallback(async () => {
     if (!isOpen || activeTab !== 'historico') return;
     setIsLoadingHistorico(true);
@@ -200,6 +237,29 @@ export const HistoricoFilaModal: React.FC<HistoricoFilaModalProps> = ({
   useEffect(() => {
     carregarHistorico();
   }, [carregarHistorico]);
+
+  // Consulta Aba 3 — Registro Específico de Avaliações Imediatas
+  const carregarAvaliacoes = useCallback(async () => {
+    if (!isOpen) return;
+    setIsLoadingAvaliacoes(true);
+    setAvaliacoesError(null);
+    try {
+      const lista = await getAvaliacoesImediatasUnidade(unidadeId, true);
+      setAvaliacoesLista(lista);
+    } catch (err: any) {
+      setAvaliacoesError(err?.message || 'Erro ao carregar registros de Avaliação Imediata.');
+    } finally {
+      setIsLoadingAvaliacoes(false);
+    }
+  }, [isOpen, unidadeId]);
+
+  useEffect(() => {
+    if (isOpen && activeTab === 'avaliacoes') {
+      carregarAvaliacoes();
+    } else if (avaliacoesImediatas) {
+      setAvaliacoesLista(avaliacoesImediatas);
+    }
+  }, [isOpen, activeTab, avaliacoesImediatas, carregarAvaliacoes]);
 
   if (!isOpen) return null;
 
@@ -262,6 +322,9 @@ export const HistoricoFilaModal: React.FC<HistoricoFilaModalProps> = ({
     statusFiltro !== 'TODOS' ||
     periodoFiltro !== 'todos';
 
+  const blocosFechadosCount = blocosDoDia.filter(b => b.status === 'FECHADO').length;
+  const avaliacoesAbertasCount = avaliacoesLista.filter(a => a.status !== 'ATENDIDO').length;
+
   return createPortal(
     <div
       className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 animate-fade-in"
@@ -272,7 +335,7 @@ export const HistoricoFilaModal: React.FC<HistoricoFilaModalProps> = ({
       aria-modal="true"
       aria-labelledby="historico-fila-modal-title"
     >
-      <div className="bg-white rounded-3xl w-[95vw] md:w-[90vw] lg:w-[80vw] max-w-6xl max-h-[90vh] flex flex-col shadow-2xl border border-slate-200/80 overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-3xl w-[95vw] md:w-[90vw] lg:w-[82vw] max-w-6xl max-h-[90vh] flex flex-col shadow-2xl border border-slate-200/80 overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Cabeçalho com Gradiente Azul -> Roxo */}
         <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 px-5 sm:px-7 py-4 sm:py-5 text-white flex items-center justify-between gap-4 shrink-0">
           <div className="flex items-center gap-3.5 min-w-0">
@@ -289,7 +352,7 @@ export const HistoricoFilaModal: React.FC<HistoricoFilaModalProps> = ({
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-indigo-100 font-medium truncate">
-                Fila atual e atendimentos realizados — {unidadeNome}
+                Blocos de 5 pacientes, atendimentos realizados e Avaliações Imediatas — {unidadeNome}
               </p>
             </div>
           </div>
@@ -304,26 +367,26 @@ export const HistoricoFilaModal: React.FC<HistoricoFilaModalProps> = ({
           </button>
         </div>
 
-        {/* Navegação em 2 Abas */}
-        <div className="px-5 sm:px-7 pt-4 pb-3 bg-slate-50/70 border-b border-slate-200 shrink-0">
-          <div className="grid grid-cols-2 gap-2.5 p-1 bg-slate-200/60 rounded-2xl">
+        {/* Navegação em 3 Abas: Fila em Blocos, Histórico de Atendimentos, Avaliações Imediatas */}
+        <div className="px-5 sm:px-7 pt-3.5 pb-3 bg-slate-50/70 border-b border-slate-200 shrink-0">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-1 bg-slate-200/60 rounded-2xl">
             <button
               type="button"
-              onClick={() => setActiveTab('fila')}
-              className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              onClick={() => trocarAba('fila')}
+              className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
                 activeTab === 'fila'
                   ? 'bg-white text-indigo-700 shadow-sm border border-indigo-200/80'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <Users className="w-4 h-4 shrink-0" />
-              <span>Fila Atual ({filaOrdenada.length})</span>
+              <span>Fila Atual ({totalAguardando})</span>
             </button>
 
             <button
               type="button"
-              onClick={() => setActiveTab('historico')}
-              className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              onClick={() => trocarAba('historico')}
+              className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
                 activeTab === 'historico'
                   ? 'bg-white text-indigo-700 shadow-sm border border-indigo-200/80'
                   : 'text-slate-600 hover:text-slate-900'
@@ -332,137 +395,238 @@ export const HistoricoFilaModal: React.FC<HistoricoFilaModalProps> = ({
               <History className="w-4 h-4 shrink-0" />
               <span>Histórico de Atendimentos</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => trocarAba('avaliacoes')}
+              className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                activeTab === 'avaliacoes'
+                  ? 'bg-white text-red-700 shadow-sm border border-red-200/80'
+                  : 'text-slate-600 hover:text-red-700'
+              }`}
+            >
+              <ShieldAlert className="w-4 h-4 shrink-0 text-red-600" />
+              <span>Avaliações Imediatas</span>
+              {avaliacoesAbertasCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-red-600 text-white text-[10px] font-black">
+                  {avaliacoesAbertasCount}
+                </span>
+              )}
+            </button>
           </div>
         </div>
 
         {/* Corpo Interno com Scroll Controlado */}
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-white">
           {activeTab === 'fila' ? (
-            <div className="flex-1 min-h-0 flex flex-col p-4 sm:p-6 overflow-hidden">
-              <div className="flex items-center justify-between gap-2 mb-3 shrink-0">
-                <div className="flex items-center gap-2">
+            <div className="flex-1 min-h-0 flex flex-col p-4 sm:p-6 overflow-y-auto gap-4">
+              {/* Cabeçalho Informativo dos Blocos de 5 */}
+              <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs sm:text-sm font-black text-slate-800">
-                    Fila Atual — Aguardando Atendimento
+                    Organização por Blocos de 5 (E → P → E → P → N)
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-bold">
+                    {blocosFechadosCount} {blocosFechadosCount === 1 ? 'bloco fechado' : 'blocos fechados'}
                   </span>
                 </div>
                 <span className="px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-black">
-                  {filaOrdenada.length} {filaOrdenada.length === 1 ? 'registro' : 'registros'}
+                  {totalAguardando} aguardando na fila
                 </span>
               </div>
 
-              {filaOrdenada.length === 0 ? (
+              {blocosDoDia.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-center py-12 px-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50">
                   <Users className="w-10 h-10 text-slate-300 mb-2" />
                   <p className="text-sm font-bold text-slate-600">
-                    Nenhum cidadão aguardando atendimento neste momento.
+                    Nenhum bloco formado nesta unidade hoje.
                   </p>
                   <p className="text-xs text-slate-400 mt-1">
-                    Novas senhas emitidas nesta unidade aparecerão aqui em ordem real de chamada.
+                    Novas senhas emitidas formarão blocos dinâmicos consecutivos de 5 pacientes.
                   </p>
                 </div>
               ) : (
-                <>
-                  {/* Tabela Desktop com Scroll Interno */}
-                  <div className="hidden md:block flex-1 min-h-0 overflow-y-auto rounded-2xl border border-slate-200">
-                    <table className="w-full text-left border-collapse">
-                      <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
-                        <tr className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                          <th className="py-3 px-4 w-16">#</th>
-                          <th className="py-3 px-4 w-28">Senha</th>
-                          <th className="py-3 px-4">Paciente</th>
-                          <th className="py-3 px-4 w-36">Prioridade</th>
-                          <th className="py-3 px-4 w-36">Tempo na Fila</th>
-                          <th className="py-3 px-4 w-28 text-right">Ações</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 text-xs">
-                        {filaOrdenada.map(({ senha, posicao }) => (
-                          <tr key={senha.id} className="hover:bg-slate-50/80 transition-colors">
-                            <td className="py-3 px-4 font-black text-slate-500">{posicao}</td>
-                            <td className="py-3 px-4">
-                              <span
-                                className={`inline-block px-2.5 py-1 rounded-xl font-black text-xs border ${
-                                  SENHA_PILL[senha.prioridade_tipo] || SENHA_PILL.NORMAL
-                                }`}
-                              >
-                                {senha.numero}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="font-black text-slate-800 uppercase">{senha.cidadao_nome}</div>
-                              {senha.prioridade_categoria && senha.prioridade_tipo !== 'NORMAL' && (
-                                <div className="text-[10px] font-semibold text-slate-400">
-                                  {senha.prioridade_categoria}
-                                </div>
-                              )}
-                            </td>
-                            <td className="py-3 px-4">{renderPrioridadeBadge(senha.prioridade_tipo)}</td>
-                            <td className="py-3 px-4">
-                              <span className="inline-flex items-center gap-1.5 font-bold text-slate-600">
-                                <Clock className="w-3.5 h-3.5 text-slate-400" />
-                                {formatarTempoEspera(senha.created_at, agoraMs)}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-right">
-                              <button
-                                type="button"
-                                onClick={() => onCancelarSenha(senha)}
-                                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold text-[11px] transition-colors cursor-pointer"
-                              >
-                                Cancelar
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Cards Mobile sem Scroll Horizontal */}
-                  <div className="md:hidden flex-1 min-h-0 overflow-y-auto flex flex-col gap-2.5 pr-0.5">
-                    {filaOrdenada.map(({ senha, posicao }) => (
+                <div className="flex flex-col gap-4">
+                  {blocosDoDia.map(bloco => {
+                    const isFechado = bloco.status === 'FECHADO';
+                    return (
                       <div
-                        key={senha.id}
-                        className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/60 flex flex-col gap-2"
+                        key={bloco.numero_bloco}
+                        className={`rounded-2xl border overflow-hidden ${
+                          isFechado ? 'border-slate-200 bg-white' : 'border-indigo-200 bg-indigo-50/20'
+                        }`}
                       >
-                        <div className="flex items-center justify-between gap-2">
+                        {/* Cabeçalho do Bloco */}
+                        <div
+                          className={`px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 border-b ${
+                            isFechado ? 'bg-slate-100/80 border-slate-200' : 'bg-indigo-50/90 border-indigo-200'
+                          }`}
+                        >
                           <div className="flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 text-[11px] font-black flex items-center justify-center">
-                              {posicao}
+                            {isFechado ? (
+                              <Lock className="w-4 h-4 text-slate-600" />
+                            ) : (
+                              <Sparkles className="w-4 h-4 text-indigo-600" />
+                            )}
+                            <span className="text-xs font-black uppercase tracking-wider text-slate-800">
+                              Bloco #{bloco.numero_bloco}
                             </span>
                             <span
-                              className={`px-2.5 py-0.5 rounded-lg font-black text-xs border ${
-                                SENHA_PILL[senha.prioridade_tipo] || SENHA_PILL.NORMAL
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                                isFechado
+                                  ? 'bg-slate-800 text-white'
+                                  : 'bg-indigo-600 text-white'
                               }`}
                             >
-                              {senha.numero}
+                              {isFechado ? 'Fechado (Consolidado)' : 'Em Formação (Posições Provisórias)'}
                             </span>
                           </div>
-                          {renderPrioridadeBadge(senha.prioridade_tipo)}
-                        </div>
-                        <div className="font-black text-xs text-slate-800 uppercase break-words">
-                          {senha.cidadao_nome}
-                        </div>
-                        <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/80">
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500">
-                            <Clock className="w-3.5 h-3.5 text-slate-400" />
-                            {formatarTempoEspera(senha.created_at, agoraMs)} na fila
+                          <span className="text-[11px] font-black text-slate-600">
+                            {bloco.total_pacientes} / 5 pacientes
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => onCancelarSenha(senha)}
-                            className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-rose-600 font-bold text-[11px] cursor-pointer"
-                          >
-                            Cancelar
-                          </button>
                         </div>
+
+                        {bloco.itens.length === 0 ? (
+                          <div className="py-5 px-4 text-center text-xs text-slate-400 font-semibold">
+                            Bloco aberto aguardando próximas senhas emitidas.
+                          </div>
+                        ) : (
+                          <>
+                            {/* Tabela Desktop */}
+                            <div className="hidden md:block overflow-x-auto">
+                              <table className="w-full text-left border-collapse">
+                                <thead className="bg-slate-50/80 border-b border-slate-200">
+                                  <tr className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                    <th className="py-2.5 px-3.5 w-24">Posição</th>
+                                    <th className="py-2.5 px-3.5 w-24">Senha</th>
+                                    <th className="py-2.5 px-3.5">Paciente</th>
+                                    <th className="py-2.5 px-3.5 w-32">Classificação</th>
+                                    <th className="py-2.5 px-3.5 w-24">Chegada</th>
+                                    <th className="py-2.5 px-3.5 w-28">Espera</th>
+                                    <th className="py-2.5 px-3.5 w-36">Status</th>
+                                    <th className="py-2.5 px-3.5 w-24 text-right">Ações</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 text-xs">
+                                  {bloco.itens.map(entry => {
+                                    const s = entry.senha;
+                                    return (
+                                      <tr key={s.id} className="hover:bg-slate-50/70 transition-colors">
+                                        <td className="py-2.5 px-3.5">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="font-black text-slate-800">{entry.posicao_no_bloco}º</span>
+                                            <span
+                                              className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
+                                                entry.posicao_provisoria
+                                                  ? 'bg-indigo-50 text-indigo-700'
+                                                  : 'bg-slate-100 text-slate-600'
+                                              }`}
+                                            >
+                                              {entry.posicao_provisoria ? 'Provisória' : 'Fixa'}
+                                            </span>
+                                          </div>
+                                        </td>
+                                        <td className="py-2.5 px-3.5">
+                                          <span
+                                            className={`inline-block px-2 py-0.5 rounded-lg font-black text-xs border ${
+                                              SENHA_PILL[s.prioridade_tipo] || SENHA_PILL.NORMAL
+                                            }`}
+                                          >
+                                            {s.numero}
+                                          </span>
+                                        </td>
+                                        <td className="py-2.5 px-3.5 font-black text-slate-800 uppercase">
+                                          {s.cidadao_nome}
+                                        </td>
+                                        <td className="py-2.5 px-3.5">{renderPrioridadeBadge(s.prioridade_tipo)}</td>
+                                        <td className="py-2.5 px-3.5 font-mono font-bold text-slate-600">
+                                          {formatarHora(s.created_at)}
+                                        </td>
+                                        <td className="py-2.5 px-3.5 font-bold text-slate-600">
+                                          <span className="inline-flex items-center gap-1">
+                                            <Clock className="w-3 h-3 text-slate-400" />
+                                            {formatarTempoEspera(s, agoraMs)}
+                                          </span>
+                                        </td>
+                                        <td className="py-2.5 px-3.5">{renderStatusBadge(s.status)}</td>
+                                        <td className="py-2.5 px-3.5 text-right">
+                                          {s.status === 'AGUARDANDO' ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => onCancelarSenha(s)}
+                                              className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold text-[11px] transition-colors cursor-pointer"
+                                            >
+                                              Cancelar
+                                            </button>
+                                          ) : (
+                                            <span className="text-[10px] text-slate-400 font-semibold">—</span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+
+                            {/* Cards Mobile */}
+                            <div className="md:hidden p-3 flex flex-col gap-2">
+                              {bloco.itens.map(entry => {
+                                const s = entry.senha;
+                                return (
+                                  <div
+                                    key={s.id}
+                                    className="p-3 rounded-xl border border-slate-200 bg-white flex flex-col gap-1.5"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-xs font-black text-slate-700">
+                                          {entry.posicao_no_bloco}º ({entry.posicao_provisoria ? 'Provisória' : 'Fixa'})
+                                        </span>
+                                        <span
+                                          className={`px-2 py-0.5 rounded-lg font-black text-xs border ${
+                                            SENHA_PILL[s.prioridade_tipo] || SENHA_PILL.NORMAL
+                                          }`}
+                                        >
+                                          {s.numero}
+                                        </span>
+                                      </div>
+                                      {renderPrioridadeBadge(s.prioridade_tipo)}
+                                    </div>
+                                    <div className="font-black text-xs text-slate-800 uppercase break-words">
+                                      {s.cidadao_nome}
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500 pt-1 border-t border-slate-100">
+                                      <span>
+                                        Chegada: <strong>{formatarHora(s.created_at)}</strong> • Espera:{' '}
+                                        <strong>{formatarTempoEspera(s, agoraMs)}</strong>
+                                      </span>
+                                      {renderStatusBadge(s.status)}
+                                    </div>
+                                    {s.status === 'AGUARDANDO' && (
+                                      <div className="flex justify-end pt-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => onCancelarSenha(s)}
+                                          className="px-2.5 py-1 rounded-lg bg-slate-100 text-rose-600 font-bold text-[11px] cursor-pointer"
+                                        >
+                                          Cancelar
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                </>
+                    );
+                  })}
+                </div>
               )}
             </div>
-          ) : (
+          ) : activeTab === 'historico' ? (
             <div className="flex-1 min-h-0 flex flex-col p-4 sm:p-6 overflow-hidden gap-3">
               {/* Filtros Dinâmicos do Histórico */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2.5 shrink-0">
@@ -546,7 +710,6 @@ export const HistoricoFilaModal: React.FC<HistoricoFilaModalProps> = ({
                 </div>
               </div>
 
-              {/* Corpo de Dados: Carregamento, Erro, Vazio ou Listagem */}
               {isLoadingHistorico ? (
                 <div className="flex-1 flex flex-col items-center justify-center py-12 gap-3 text-slate-500">
                   <RefreshCw className="w-7 h-7 animate-spin text-indigo-600" />
@@ -558,9 +721,7 @@ export const HistoricoFilaModal: React.FC<HistoricoFilaModalProps> = ({
                 <div className="flex-1 flex flex-col items-center justify-center py-10 px-4 text-center rounded-2xl border border-rose-200 bg-rose-50/70 gap-3">
                   <AlertTriangle className="w-9 h-9 text-rose-500" />
                   <div>
-                    <p className="text-sm font-black text-rose-800">
-                      Erro ao consultar o histórico
-                    </p>
+                    <p className="text-sm font-black text-rose-800">Erro ao consultar o histórico</p>
                     <p className="text-xs text-rose-700 mt-1 max-w-md">{historicoError}</p>
                   </div>
                   <button
@@ -605,9 +766,9 @@ export const HistoricoFilaModal: React.FC<HistoricoFilaModalProps> = ({
                     <table className="w-full text-left border-collapse">
                       <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
                         <tr className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                          <th className="py-3 px-4 w-28">Senha</th>
+                          <th className="py-3 px-4 w-28">Senha / Bloco</th>
                           <th className="py-3 px-4">Paciente</th>
-                          <th className="py-3 px-4 w-32">Prioridade</th>
+                          <th className="py-3 px-4 w-32">Classificação</th>
                           <th className="py-3 px-4 w-28">Chamada</th>
                           <th className="py-3 px-4 w-28">Atendimento</th>
                           <th className="py-3 px-4 w-44">Status</th>
@@ -628,11 +789,16 @@ export const HistoricoFilaModal: React.FC<HistoricoFilaModalProps> = ({
                                 >
                                   {item.numero}
                                 </span>
+                                {item.bloco_numero && (
+                                  <div className="text-[10px] font-bold text-slate-400 mt-1">
+                                    Bloco #{item.bloco_numero}{item.posicao_bloco ? ` • ${item.posicao_bloco}º` : ''}
+                                  </div>
+                                )}
                               </td>
                               <td className="py-3 px-4">
                                 <div className="font-black text-slate-800 uppercase">{item.cidadao_nome}</div>
                                 <div className="text-[10px] font-semibold text-slate-400">
-                                  {formatarDataCurta(item.data_operacional)} • Emissão {formatarHora(item.created_at)}
+                                  {formatarDataCurta(item.data_operacional)} • Chegada {formatarHora(item.created_at)}
                                 </div>
                               </td>
                               <td className="py-3 px-4">{renderPrioridadeBadge(item.prioridade_tipo)}</td>
@@ -693,13 +859,20 @@ export const HistoricoFilaModal: React.FC<HistoricoFilaModalProps> = ({
                         className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col gap-2"
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span
-                            className={`px-2.5 py-0.5 rounded-lg font-black text-xs border ${
-                              SENHA_PILL[item.prioridade_tipo] || SENHA_PILL.NORMAL
-                            }`}
-                          >
-                            {item.numero}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-lg font-black text-xs border ${
+                                SENHA_PILL[item.prioridade_tipo] || SENHA_PILL.NORMAL
+                              }`}
+                            >
+                              {item.numero}
+                            </span>
+                            {item.bloco_numero && (
+                              <span className="text-[10px] font-bold text-slate-500">
+                                Bloco #{item.bloco_numero}
+                              </span>
+                            )}
+                          </div>
                           {renderStatusBadge(item.status)}
                         </div>
                         <div className="font-black text-xs text-slate-800 uppercase break-words">
@@ -746,13 +919,158 @@ export const HistoricoFilaModal: React.FC<HistoricoFilaModalProps> = ({
                 </>
               )}
             </div>
+          ) : (
+            <div className="flex-1 min-h-0 flex flex-col p-4 sm:p-6 overflow-hidden gap-3">
+              {/* Banner Informativo de Avaliação Imediata */}
+              <div className="p-3 rounded-2xl bg-red-50 border border-red-200 text-red-900 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                <div className="flex items-start gap-2.5 min-w-0">
+                  <ShieldAlert className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                  <div className="text-xs leading-snug">
+                    <strong className="font-black uppercase block">
+                      Registro de Avaliações Imediatas — Prioridade Máxima Fora dos Blocos
+                    </strong>
+                    <span className="text-red-800">
+                      Solicitações acionadas diretamente para acolhimento imediato pela equipe assistencial, sem ocupar vaga nos blocos de 5.
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={carregarAvaliacoes}
+                  className="px-3 py-1.5 rounded-xl bg-white border border-red-200 text-red-700 hover:bg-red-100 text-[11px] font-black cursor-pointer flex items-center gap-1 shrink-0"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingAvaliacoes ? 'animate-spin' : ''}`} /> Atualizar
+                </button>
+              </div>
+
+              {isLoadingAvaliacoes ? (
+                <div className="flex-1 flex flex-col items-center justify-center py-12 gap-3 text-slate-500">
+                  <RefreshCw className="w-7 h-7 animate-spin text-red-600" />
+                  <p className="text-xs font-bold uppercase tracking-wider">Carregando avaliações imediatas...</p>
+                </div>
+              ) : avaliacoesError ? (
+                <div className="flex-1 flex flex-col items-center justify-center py-10 px-4 text-center rounded-2xl border border-rose-200 bg-rose-50/70 gap-3">
+                  <AlertTriangle className="w-8 h-8 text-rose-500" />
+                  <p className="text-xs font-bold text-rose-800">{avaliacoesError}</p>
+                </div>
+              ) : avaliacoesLista.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center py-12 px-4 text-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 gap-2">
+                  <ShieldAlert className="w-9 h-9 text-slate-300" />
+                  <p className="text-sm font-bold text-slate-600">
+                    Nenhuma solicitação de Avaliação Imediata registrada nesta unidade.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Tabela Desktop Avaliações Imediatas */}
+                  <div className="hidden md:block flex-1 min-h-0 overflow-y-auto rounded-2xl border border-slate-200">
+                    <table className="w-full text-left border-collapse">
+                      <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
+                        <tr className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                          <th className="py-3 px-4">Identificação / Paciente</th>
+                          <th className="py-3 px-4">Motivo / Situação</th>
+                          <th className="py-3 px-4 w-36">Responsável</th>
+                          <th className="py-3 px-4 w-28">Solicitação</th>
+                          <th className="py-3 px-4 w-28">Encaminh.</th>
+                          <th className="py-3 px-4 w-28">Acolhimento</th>
+                          <th className="py-3 px-4 w-40 text-right">Status / Ação</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {avaliacoesLista.map(av => (
+                          <tr key={av.id} className="hover:bg-red-50/30 transition-colors">
+                            <td className="py-3 px-4">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-600 text-white text-[9px] font-black uppercase mb-1">
+                                <AlertTriangle className="w-2.5 h-2.5" /> AVALIAÇÃO IMEDIATA
+                              </span>
+                              <div className="font-black text-slate-900 uppercase">{av.cidadao_nome}</div>
+                              <div className="text-[10px] text-slate-400 font-semibold">
+                                {formatarDataCurta(av.created_at.slice(0, 10))}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-slate-700 font-medium">{av.motivo_queixa}</td>
+                            <td className="py-3 px-4 font-bold text-slate-700">{av.solicitante_nome}</td>
+                            <td className="py-3 px-4 font-mono font-bold text-slate-700">
+                              {formatarHora(av.created_at)}
+                            </td>
+                            <td className="py-3 px-4 font-mono font-bold text-slate-700">
+                              {formatarHora(av.encaminhado_em || av.created_at)}
+                            </td>
+                            <td className="py-3 px-4 font-mono font-bold text-slate-700">
+                              {formatarHora(av.atendido_em)}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              {av.status === 'ATENDIDO' ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-black">
+                                  <CheckCircle2 className="w-3 h-3" /> Acolhido
+                                </span>
+                              ) : (
+                                <div className="flex flex-col items-end gap-1">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-200 text-[10px] font-black">
+                                    Encaminhado Presencial
+                                  </span>
+                                  {onConcluirAcolhimentoImediato && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onConcluirAcolhimentoImediato(av)}
+                                      className="px-2 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase cursor-pointer"
+                                    >
+                                      Confirmar Acolhimento
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Cards Mobile Avaliações Imediatas */}
+                  <div className="md:hidden flex-1 min-h-0 overflow-y-auto flex flex-col gap-2.5">
+                    {avaliacoesLista.map(av => (
+                      <div
+                        key={av.id}
+                        className="p-3.5 rounded-2xl border border-red-200 bg-red-50/40 flex flex-col gap-1.5"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[9px] font-black uppercase">
+                            AVALIAÇÃO IMEDIATA
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-600">
+                            {av.status === 'ATENDIDO' ? 'Acolhido' : 'Encaminhado Presencial'}
+                          </span>
+                        </div>
+                        <div className="font-black text-xs text-slate-900 uppercase">{av.cidadao_nome}</div>
+                        <p className="text-xs text-slate-700">{av.motivo_queixa}</p>
+                        <div className="text-[10px] text-slate-500">
+                          Solic.: <strong>{formatarHora(av.created_at)}</strong> • Enc.:{' '}
+                          <strong>{formatarHora(av.encaminhado_em || av.created_at)}</strong> • Acolh.:{' '}
+                          <strong>{formatarHora(av.atendido_em)}</strong>
+                        </div>
+                        {av.status !== 'ATENDIDO' && onConcluirAcolhimentoImediato && (
+                          <button
+                            type="button"
+                            onClick={() => onConcluirAcolhimentoImediato(av)}
+                            className="mt-1 px-3 py-1.5 rounded-xl bg-red-600 text-white text-[10px] font-black uppercase cursor-pointer self-end"
+                          >
+                            Confirmar Acolhimento
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
 
         {/* Rodapé do Modal */}
         <div className="px-5 sm:px-7 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
           <span className="text-[11px] font-semibold text-slate-400">
-            Dados isolados por unidade ({unidadeSigla}) • Histórico preservado integralmente
+            Blocos de 5 e histórico isolados por unidade ({unidadeSigla}) • Registros preservados integralmente
           </span>
           <button
             type="button"
@@ -767,4 +1085,3 @@ export const HistoricoFilaModal: React.FC<HistoricoFilaModalProps> = ({
     document.body
   );
 };
-

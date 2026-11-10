@@ -2,7 +2,14 @@ import { supabase } from './supabaseClient';
 import { ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga, ConsultaEspecialista, TipoAtendimentoConsulta, User, ConsultaSolicitacaoCancelamento } from '../types';
 import { handleSupabaseError } from '../utils/errorUtils';
 import { auditLogService } from './auditLogService';
-import { normalizeCpf, formatCpf, isValidCpf } from '../utils/cpfUtils';
+import {
+    normalizeCpf,
+    formatCpf,
+    isValidCpf,
+    removeAccents,
+    detectarCriterioPesquisaPaciente,
+    CriterioPesquisaPacienteDetectado
+} from '../utils/cpfUtils';
 import {
     getActiveGlobalModuleSettings,
     getActivePermissionUser,
@@ -387,6 +394,343 @@ export const lookupPacienteByCpf = async (
 export const getPacienteByCpf = async (cpf: string): Promise<ConsultaPaciente | null> => {
     const res = await lookupPacienteByCpf(cpf);
     return res.status === 'found' ? (res.paciente || null) : null;
+};
+
+export type PacienteSmartSearchCriterion = CriterioPesquisaPacienteDetectado;
+
+export type PacienteSmartSearchStatus =
+    | 'results'
+    | 'not_found'
+    | 'too_short'
+    | 'invalid_cpf'
+    | 'permission_denied'
+    | 'connection_error'
+    | 'technical_error'
+    | 'aborted';
+
+export interface PacienteSmartSearchResult {
+    status: PacienteSmartSearchStatus;
+    criterion: PacienteSmartSearchCriterion;
+    normalizedQuery: string;
+    pacientes: ConsultaPaciente[];
+    error?: string;
+}
+
+const sanitizarTermoFiltroPostgrest = (value: string): string =>
+    value.replace(/[,()*%\\]/g, ' ').replace(/\s+/g, ' ').trim();
+
+const construirPadraoToleranteAcentoIlike = (token: string): string => {
+    const semAcento = sanitizarTermoFiltroPostgrest(removeAccents(token));
+    if (!semAcento) return '';
+    // Exige comprimento mínimo e ao menos 1 consoante fixa para manter o filtro seletivo
+    const consoantes = semAcento.replace(/[aeiouy\s0-9]/g, '');
+    if (semAcento.length < 3 || consoantes.length < 1) return semAcento;
+    // Substitui 'c' seguido de a/o/u (quando não inicial) por '_' para casar também 'ç', e vogais por '_'
+    return semAcento
+        .replace(/(?<!^)c(?=[aou])/g, '_')
+        .replace(/[aeiouy]/g, '_');
+};
+
+const pacienteCorrespondePesquisaInteligente = (
+    paciente: ConsultaPaciente,
+    criterion: PacienteSmartSearchCriterion,
+    digits: string,
+    normalizedText: string
+): { matches: boolean; score: number } => {
+    const cpfClean = normalizeCpf(paciente.cpf);
+    const susClean = String(paciente.sus_number || '').replace(/\D/g, '');
+    const nomeNorm = removeAccents(paciente.name);
+    const apelidoNorm = removeAccents(paciente.nickname);
+
+    if (criterion === 'cpf') {
+        if (cpfClean === digits) return { matches: true, score: 1000 };
+        return { matches: false, score: 0 };
+    }
+
+    if (criterion === 'cns') {
+        if (susClean === digits) return { matches: true, score: 1000 };
+        return { matches: false, score: 0 };
+    }
+
+    // Pesquisa textual (nome completo/parcial, apelido ou dígitos parciais >= 3)
+    if (digits.length >= 3 && /^[0-9.\-\s/]+$/.test(normalizedText)) {
+        if (cpfClean === digits || susClean === digits) return { matches: true, score: 950 };
+        if (cpfClean.includes(digits) || susClean.includes(digits)) return { matches: true, score: 700 };
+    }
+
+    if (!normalizedText) return { matches: false, score: 0 };
+
+    if (nomeNorm === normalizedText) return { matches: true, score: 900 };
+    if (apelidoNorm === normalizedText) return { matches: true, score: 880 };
+    if (nomeNorm.startsWith(normalizedText)) return { matches: true, score: 800 };
+    if (apelidoNorm.startsWith(normalizedText)) return { matches: true, score: 760 };
+    if (nomeNorm.includes(normalizedText)) return { matches: true, score: 650 };
+    if (apelidoNorm.includes(normalizedText)) return { matches: true, score: 600 };
+
+    // Todos os tokens da pesquisa devem existir no nome (ou combinação nome + apelido)
+    const tokens = normalizedText.split(' ').filter(t => t.length >= 1);
+    if (tokens.length > 0) {
+        const combinado = `${nomeNorm} ${apelidoNorm}`.trim();
+        const todosNoNome = tokens.every(t => nomeNorm.includes(t));
+        if (todosNoNome) return { matches: true, score: 520 };
+        const todosCombinados = tokens.every(t => combinado.includes(t));
+        if (todosCombinados) return { matches: true, score: 450 };
+    }
+
+    return { matches: false, score: 0 };
+};
+
+/**
+ * Pesquisa inteligente somente leitura na base integrada municipal de pacientes
+ * por Nome completo/parcial, CPF (11 dígitos), Cartão SUS (15 dígitos) ou Apelido,
+ * ignorando acentos e maiúsculas/minúsculas, com suporte a AbortSignal e limite seguro.
+ */
+export const searchPacientesInteligente = async (
+    rawTerm: string,
+    options?: { signal?: AbortSignal; limit?: number }
+): Promise<PacienteSmartSearchResult> => {
+    const { criterion, digits, normalizedText } = detectarCriterioPesquisaPaciente(rawTerm);
+    const safeLimit = Math.min(30, Math.max(1, Number(options?.limit) || 20));
+
+    // Validação de entrada mínima
+    if (criterion === 'cpf') {
+        if (!isValidCpf(digits)) {
+            return {
+                status: 'invalid_cpf',
+                criterion,
+                normalizedQuery: digits,
+                pacientes: [],
+                error: 'CPF inválido. Confira os 11 dígitos informados.'
+            };
+        }
+    } else if (criterion === 'cns') {
+        if (digits.length !== 15) {
+            return {
+                status: 'too_short',
+                criterion,
+                normalizedQuery: digits,
+                pacientes: []
+            };
+        }
+    } else if (normalizedText.length < 3 && digits.length < 3) {
+        return {
+            status: 'too_short',
+            criterion,
+            normalizedQuery: normalizedText,
+            pacientes: []
+        };
+    }
+
+    // Validação rigorosa de permissão e bloqueio de pesquisa anônima em sessão de navegador
+    const activeUser = getActivePermissionUser();
+    const globalSettings = getActiveGlobalModuleSettings();
+    if (typeof document !== 'undefined' && !activeUser) {
+        return {
+            status: 'permission_denied',
+            criterion,
+            normalizedQuery: criterion === 'texto' ? normalizedText : digits,
+            pacientes: [],
+            error: 'Sessão não autenticada. Faça login para pesquisar pacientes na base integrada.'
+        };
+    }
+    if (activeUser && !hasIntegratedPatientReadAccess(activeUser, globalSettings)) {
+        return {
+            status: 'permission_denied',
+            criterion,
+            normalizedQuery: criterion === 'texto' ? normalizedText : digits,
+            pacientes: [],
+            error: 'Acesso negado: seu usuário não possui permissão para consultar pacientes na base integrada.'
+        };
+    }
+
+    if (options?.signal?.aborted) {
+        return {
+            status: 'aborted',
+            criterion,
+            normalizedQuery: criterion === 'texto' ? normalizedText : digits,
+            pacientes: []
+        };
+    }
+
+    const filterAndRank = (rows: ConsultaPaciente[]): ConsultaPaciente[] => {
+        const dedup = new Map<string, { p: ConsultaPaciente; score: number }>();
+        for (const row of rows) {
+            const { matches, score } = pacienteCorrespondePesquisaInteligente(
+                row,
+                criterion,
+                digits,
+                normalizedText
+            );
+            if (matches) {
+                const prev = dedup.get(row.id);
+                if (!prev || score > prev.score) {
+                    dedup.set(row.id, { p: row, score });
+                }
+            }
+        }
+        return Array.from(dedup.values())
+            .sort((a, b) => b.score - a.score || (a.p.name || '').localeCompare(b.p.name || ''))
+            .slice(0, safeLimit)
+            .map(item => item.p);
+    };
+
+    try {
+        // 1. Tenta RPC dedicada acento-insensível no PostgreSQL quando disponível
+        if (typeof (supabase as any).rpc === 'function') {
+            try {
+                let rpcCall: any = (supabase as any).rpc('buscar_pacientes_autosenha', {
+                    p_termo: rawTerm.trim(),
+                    p_limit: safeLimit
+                });
+                if (options?.signal && typeof rpcCall?.abortSignal === 'function') {
+                    rpcCall = rpcCall.abortSignal(options.signal);
+                }
+                const { data: rpcData, error: rpcErr } = await rpcCall;
+
+                if (options?.signal?.aborted) {
+                    return {
+                        status: 'aborted',
+                        criterion,
+                        normalizedQuery: criterion === 'texto' ? normalizedText : digits,
+                        pacientes: []
+                    };
+                }
+
+                if (!rpcErr && Array.isArray(rpcData)) {
+                    const ordenados = filterAndRank(rpcData as ConsultaPaciente[]);
+                    return {
+                        status: ordenados.length > 0 ? 'results' : 'not_found',
+                        criterion,
+                        normalizedQuery: criterion === 'texto' ? normalizedText : digits,
+                        pacientes: ordenados
+                    };
+                }
+
+                if (rpcErr) {
+                    const code = String((rpcErr as any)?.code || '').toUpperCase();
+                    const msg = String((rpcErr as any)?.message || '');
+                    const isMissingFn =
+                        code === '42883' ||
+                        code === 'PGRST202' ||
+                        /does not exist|could not find the function/i.test(msg);
+                    if (!isMissingFn) {
+                        const classified = classifyPacienteLookupError(rpcErr);
+                        return {
+                            status: classified.status,
+                            criterion,
+                            normalizedQuery: criterion === 'texto' ? normalizedText : digits,
+                            pacientes: [],
+                            error: classified.message
+                        };
+                    }
+                }
+            } catch (rpcException: any) {
+                if (options?.signal?.aborted || rpcException?.name === 'AbortError') {
+                    return {
+                        status: 'aborted',
+                        criterion,
+                        normalizedQuery: criterion === 'texto' ? normalizedText : digits,
+                        pacientes: []
+                    };
+                }
+                // Se falhou apenas por falta da função RPC, segue fallback PostgREST abaixo
+            }
+        }
+
+        // 2. Fallback PostgREST direto somente leitura com limite controlado
+        let query: any = supabase
+            .from('consultas_pacientes')
+            .select(PACIENTE_COLUMNS);
+
+        if (criterion === 'cpf') {
+            const formatted = formatCpf(digits);
+            query = query.or(`cpf.eq.${digits},cpf.eq.${formatted}`).limit(safeLimit);
+        } else if (criterion === 'cns') {
+            query = query.or(`sus_number.eq.${digits},sus_number.ilike.%${digits}%`).limit(safeLimit);
+        } else {
+            const sanitizedRaw = sanitizarTermoFiltroPostgrest(rawTerm.trim());
+            const tokens = normalizedText.split(' ').filter(t => t.length >= 2);
+            const firstToken = tokens[0] || normalizedText;
+            const longestToken = tokens.reduce((acc, t) => (t.length > acc.length ? t : acc), firstToken);
+            const patternAcento = construirPadraoToleranteAcentoIlike(longestToken);
+            const orParts = new Set<string>();
+
+            if (sanitizedRaw) {
+                orParts.add(`name.ilike.%${sanitizedRaw}%`);
+                orParts.add(`nickname.ilike.%${sanitizedRaw}%`);
+            }
+            if (longestToken && longestToken.length >= 2) {
+                const tokClean = sanitizarTermoFiltroPostgrest(longestToken);
+                orParts.add(`name.ilike.%${tokClean}%`);
+                orParts.add(`nickname.ilike.%${tokClean}%`);
+            }
+            if (patternAcento && patternAcento.length >= 2) {
+                orParts.add(`name.ilike.%${patternAcento}%`);
+                orParts.add(`nickname.ilike.%${patternAcento}%`);
+            }
+            if (digits.length >= 3) {
+                orParts.add(`cpf.ilike.%${digits}%`);
+                orParts.add(`sus_number.ilike.%${digits}%`);
+            }
+
+            const fetchLimit = Math.max(safeLimit * 3, 60);
+            query = query.or(Array.from(orParts).join(',')).limit(fetchLimit);
+        }
+
+        if (options?.signal && typeof query.abortSignal === 'function') {
+            query = query.abortSignal(options.signal);
+        }
+
+        const { data, error } = await query;
+
+        if (options?.signal?.aborted) {
+            return {
+                status: 'aborted',
+                criterion,
+                normalizedQuery: criterion === 'texto' ? normalizedText : digits,
+                pacientes: []
+            };
+        }
+
+        if (error) {
+            const classified = classifyPacienteLookupError(error);
+            return {
+                status: classified.status,
+                criterion,
+                normalizedQuery: criterion === 'texto' ? normalizedText : digits,
+                pacientes: [],
+                error: classified.message
+            };
+        }
+
+        const rows = Array.isArray(data) ? (data as ConsultaPaciente[]) : [];
+        const filtrados = filterAndRank(rows);
+
+        return {
+            status: filtrados.length > 0 ? 'results' : 'not_found',
+            criterion,
+            normalizedQuery: criterion === 'texto' ? normalizedText : digits,
+            pacientes: filtrados
+        };
+    } catch (error: any) {
+        if (options?.signal?.aborted || error?.name === 'AbortError') {
+            return {
+                status: 'aborted',
+                criterion,
+                normalizedQuery: criterion === 'texto' ? normalizedText : digits,
+                pacientes: []
+            };
+        }
+        const classified = classifyPacienteLookupError(error);
+        console.error('[consultasService] searchPacientesInteligente Error:', classified.message);
+        return {
+            status: classified.status,
+            criterion,
+            normalizedQuery: criterion === 'texto' ? normalizedText : digits,
+            pacientes: [],
+            error: classified.message
+        };
+    }
 };
 
 export const createPaciente = async (

@@ -147,3 +147,121 @@ export const calculateAgeYears = (dateStr?: string | null, referenceDate?: Date)
   return age >= 0 ? age : null;
 };
 
+/**
+ * Remove acentuação, normaliza espaços e converte texto para minúsculas.
+ */
+export const removeAccents = (value?: string | null): string => {
+  if (!value) return '';
+  return String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+};
+
+/**
+ * Remove caracteres não numéricos do Cartão Nacional de Saúde (CNS) e limita a 15 dígitos.
+ */
+export const normalizeCns = (value?: string | null): string => {
+  if (!value) return '';
+  return String(value).replace(/\D/g, '').slice(0, 15);
+};
+
+/**
+ * Valida o dígito verificador oficial do Cartão Nacional de Saúde (CNS - 15 dígitos).
+ */
+export const isValidCns = (value?: string | null): boolean => {
+  const digits = normalizeCns(value);
+  if (digits.length !== 15) return false;
+  if (/^0{15}$/.test(digits)) return false;
+
+  const first = digits[0];
+  if (first === '1' || first === '2') {
+    const pis = digits.slice(0, 11);
+    let sum = 0;
+    for (let i = 0; i < 11; i++) {
+      sum += Number(pis[i]) * (15 - i);
+    }
+    let resto = sum % 11;
+    let dv = 11 - resto;
+    if (dv === 11) dv = 0;
+    let expected = '';
+    if (dv === 10) {
+      const sumAdj = sum + 2;
+      const restoAdj = sumAdj % 11;
+      let dvAdj = 11 - restoAdj;
+      if (dvAdj === 11) dvAdj = 0;
+      expected = `${pis}001${dvAdj}`;
+    } else {
+      expected = `${pis}000${dv}`;
+    }
+    return digits === expected;
+  }
+
+  if (first === '7' || first === '8' || first === '9') {
+    let sum = 0;
+    for (let i = 0; i < 15; i++) {
+      sum += Number(digits[i]) * (15 - i);
+    }
+    return sum % 11 === 0;
+  }
+
+  return false;
+};
+
+/**
+ * Mascara parcialmente o CPF para exibição segura em listagens (***.456.789-**).
+ */
+export const maskCpfPartial = (cpf?: string | null): string => {
+  const digits = normalizeCpf(cpf);
+  if (digits.length === 11) {
+    return `***.${digits.slice(3, 6)}.${digits.slice(6, 9)}-**`;
+  }
+  return cpf ? String(cpf) : 'Não informado';
+};
+
+/**
+ * Mascara parcialmente o Cartão SUS (CNS) para exibição segura (700••••••••0001).
+ */
+export const maskCnsPartial = (cns?: string | null): string => {
+  const digits = normalizeCns(cns);
+  if (digits.length === 15) {
+    return `${digits.slice(0, 3)}••••••••${digits.slice(11)}`;
+  }
+  if (digits.length >= 8) {
+    return `${digits.slice(0, 3)}••••${digits.slice(-4)}`;
+  }
+  return cns ? String(cns) : '';
+};
+
+export type CriterioPesquisaPacienteDetectado = 'cpf' | 'cns' | 'texto';
+
+/**
+ * Identifica automaticamente se o termo digitado corresponde a CPF (11 dígitos),
+ * Cartão SUS/CNS (15 dígitos) ou pesquisa textual por Nome / Apelido.
+ */
+export const detectarCriterioPesquisaPaciente = (
+  rawTerm?: string | null
+): { criterion: CriterioPesquisaPacienteDetectado; digits: string; normalizedText: string } => {
+  const raw = String(rawTerm || '').trim();
+  const digits = raw.replace(/\D/g, '');
+  const hasLetters = /[a-zA-ZÀ-ÿ]/.test(raw);
+  const onlyNumericPunctuation = /^[\d.\-\s/]+$/.test(raw);
+
+  if (!hasLetters && onlyNumericPunctuation) {
+    if (digits.length === 11) {
+      return { criterion: 'cpf', digits, normalizedText: removeAccents(raw) };
+    }
+    if (digits.length === 15) {
+      return { criterion: 'cns', digits, normalizedText: removeAccents(raw) };
+    }
+  }
+
+  return {
+    criterion: 'texto',
+    digits,
+    normalizedText: removeAccents(raw)
+  };
+};
+

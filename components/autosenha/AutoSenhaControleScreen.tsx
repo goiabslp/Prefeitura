@@ -6,6 +6,8 @@ import {
 import {
   AutoSenhaUnidadeId,
   AutoSenhaItem,
+  AutoSenhaBloco,
+  AutoSenhaAvaliacaoUrgente,
   AutoSenhaConfiguracao,
   User,
   ConsultaPaciente
@@ -13,6 +15,11 @@ import {
 import {
   AUTOSENHA_UNIDADES,
   getSenhas,
+  getBlocos,
+  getBlocosFilaDoDia,
+  getFilaAtualOrdenada,
+  getAvaliacoesImediatasUnidade,
+  marcarAcolhimentoAvaliacaoImediata,
   getConfiguracao,
   salvarConfiguracao,
   gerarSenha,
@@ -31,7 +38,7 @@ import {
 import { PacienteFormModal } from '../consultas/pacientes/PacienteFormModal';
 import { AutoSenhaEmissaoCard, AutoSenhaClassificacaoAtendimento } from './AutoSenhaEmissaoCard';
 import { AutoSenhaChamadaCard } from './AutoSenhaChamadaCard';
-import { HistoricoFilaModal } from './HistoricoFilaModal';
+import { HistoricoFilaModal, HistoricoFilaModalTab } from './HistoricoFilaModal';
 import { formatCpf } from '../../utils/cpfUtils';
 import { supabase } from '../../services/supabaseClient';
 
@@ -52,6 +59,8 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
 
   // Estados locais
   const [senhas, setSenhas] = useState<AutoSenhaItem[]>([]);
+  const [blocos, setBlocos] = useState<AutoSenhaBloco[]>([]);
+  const [avaliacoesImediatas, setAvaliacoesImediatas] = useState<AutoSenhaAvaliacaoUrgente[]>([]);
   const [config, setConfig] = useState<AutoSenhaConfiguracao | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [guicheAtual, setGuicheAtual] = useState('Recepção 1');
@@ -71,14 +80,52 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
   const [ausenteConfirmId, setAusenteConfirmId] = useState<string | null>(null);
   const [confirmarZeragemInline, setConfirmarZeragemInline] = useState(false);
 
-  // Modais
-  const [modalHistoricoFilaAberto, setModalHistoricoFilaAberto] = useState(false);
+  // Modais (com restauração de estado via URL após F5)
+  const lerEstadoInicialModal = (): { open: boolean; tab: HistoricoFilaModalTab } => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const aba = sp.get('filaAba');
+      const validTab: HistoricoFilaModalTab =
+        aba === 'historico' || aba === 'avaliacoes' ? aba : 'fila';
+      return { open: sp.get('filaModal') === '1', tab: validTab };
+    } catch {
+      return { open: false, tab: 'fila' };
+    }
+  };
+  const initialModal = lerEstadoInicialModal();
+  const [modalHistoricoFilaAberto, setModalHistoricoFilaAberto] = useState(initialModal.open);
+  const [modalHistoricoTab, setModalHistoricoTab] = useState<HistoricoFilaModalTab>(initialModal.tab);
   const [modalCancelarId, setModalCancelarId] = useState<string | null>(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
   const [modalConfigAberto, setModalConfigAberto] = useState(false);
   const [modalUpaUrgenciaAberto, setModalUpaUrgenciaAberto] = useState(false);
   const [upaUrgenciaNome, setUpaUrgenciaNome] = useState('');
   const [upaUrgenciaQueixa, setUpaUrgenciaQueixa] = useState('');
+
+  const sincronizarUrlModal = (open: boolean, tab: HistoricoFilaModalTab) => {
+    try {
+      const url = new URL(window.location.href);
+      if (open) {
+        url.searchParams.set('filaModal', '1');
+        url.searchParams.set('filaAba', tab);
+      } else {
+        url.searchParams.delete('filaModal');
+        url.searchParams.delete('filaAba');
+      }
+      window.history.replaceState({}, '', url.toString());
+    } catch {}
+  };
+
+  const abrirModalHistorico = (tab: HistoricoFilaModalTab = 'fila') => {
+    setModalHistoricoTab(tab);
+    setModalHistoricoFilaAberto(true);
+    sincronizarUrlModal(true, tab);
+  };
+
+  const fecharModalHistorico = () => {
+    setModalHistoricoFilaAberto(false);
+    sincronizarUrlModal(false, modalHistoricoTab);
+  };
 
   const mostrarErro = (msg: string) => {
     setFeedbackError(msg);
@@ -96,12 +143,16 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
     try {
       await inicializarSeedSeVazio();
       const dataHoje = getDataOperacionalHoje();
-      const [cfg, listaSenhas] = await Promise.all([
+      const [cfg, listaSenhas, listaBlocos, listaUrgentes] = await Promise.all([
         getConfiguracao(unidadeId),
-        getSenhas(unidadeId, dataHoje)
+        getSenhas(unidadeId, dataHoje),
+        getBlocos(unidadeId, dataHoje),
+        getAvaliacoesImediatasUnidade(unidadeId, true).catch(() => [] as AutoSenhaAvaliacaoUrgente[])
       ]);
       setConfig(cfg);
       setSenhas(listaSenhas);
+      setBlocos(listaBlocos);
+      setAvaliacoesImediatas(listaUrgentes);
     } catch (e) {
       console.error('[Controle] Erro ao carregar dados:', e);
     } finally {
@@ -119,6 +170,9 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
     channel
       .on('broadcast', { event: 'senha_emitida' }, () => carregarDados())
       .on('broadcast', { event: 'senha_chamada' }, () => carregarDados())
+      .on('broadcast', { event: 'bloco_atualizado' }, () => carregarDados())
+      .on('broadcast', { event: 'alerta_urgencia_clinica' }, () => carregarDados())
+      .on('broadcast', { event: 'avaliacao_acolhida' }, () => carregarDados())
       .on('broadcast', { event: 'atendimento_iniciado' }, () => carregarDados())
       .on('broadcast', { event: 'atendimento_concluido' }, () => carregarDados())
       .on('broadcast', { event: 'senha_cancelada' }, () => carregarDados())
@@ -292,7 +346,7 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
     }
   };
 
-  // Ação: Solicitar Avaliação Imediata (Encaminhamento Assistencial Presencial sem senha comum)
+  // Ação: Solicitar Avaliação Imediata (Encaminhamento Assistencial Presencial fora dos blocos)
   const handleSolicitarUrgenciaUPA = async (e: React.FormEvent) => {
     e.preventDefault();
     const nomeFinal = (upaUrgenciaNome || pacienteSelecionado?.name || '').trim();
@@ -307,7 +361,9 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
         currentUser?.id,
         undefined,
         undefined,
-        unidadeId
+        unidadeId,
+        pacienteSelecionado?.id,
+        pacienteSelecionado?.cpf
       );
 
       setUpaUrgenciaNome('');
@@ -318,13 +374,48 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
       setClassificacaoSelecionada('NORMAL');
       setClassificacaoAjustadaManualmente(false);
       setModalUpaUrgenciaAberto(false);
-      mostrarSucesso('Solicitação de Avaliação Imediata registrada e enviada à equipe assistencial! Encaminhe o cidadão presencialmente sem depender da fila.', 6000);
+      mostrarSucesso('Solicitação de Avaliação Imediata registrada e enviada à equipe assistencial! Encaminhe o cidadão presencialmente fora da fila de blocos.', 6000);
+      await carregarDados();
     } catch (err: any) {
       mostrarErro(err?.message || 'Erro ao registrar alerta de avaliação imediata.');
     } finally {
       setIsGerando(false);
     }
   };
+
+  const handleConcluirAcolhimentoImediato = async (avaliacao: AutoSenhaAvaliacaoUrgente) => {
+    try {
+      await marcarAcolhimentoAvaliacaoImediata(
+        avaliacao.id,
+        currentUser?.name || `Equipe ${unidade.sigla}`,
+        unidadeId
+      );
+      mostrarSucesso(`Acolhimento presencial de ${avaliacao.cidadao_nome} registrado com sucesso.`);
+      await carregarDados();
+    } catch (err: any) {
+      mostrarErro(err?.message || 'Falha ao confirmar acolhimento da Avaliação Imediata.');
+    }
+  };
+
+  // Avaliações Imediatas ativas no momento (fora dos blocos de 5)
+  const avaliacoesImediatasAtivas = useMemo(() => {
+    return avaliacoesImediatas.filter(a => a.unidade_id === unidadeId && a.status !== 'ATENDIDO');
+  }, [avaliacoesImediatas, unidadeId]);
+
+  // Resumo dos blocos de 5 e próxima senha da fila convencional
+  const blocoResumo = useMemo(() => {
+    const blocosHoje = getBlocosFilaDoDia(senhas.filter(s => s.unidade_id === unidadeId), blocos);
+    const filaOrdenada = getFilaAtualOrdenada(senhas.filter(s => s.unidade_id === unidadeId), config, blocos);
+    const fechados = blocosHoje.filter(b => b.status === 'FECHADO').length;
+    const blocoEmFormacao = blocosHoje.find(b => b.status === 'EM_FORMACAO') || blocosHoje[blocosHoje.length - 1];
+    return {
+      blocoAtivoNumero: blocoEmFormacao?.numero_bloco || 1,
+      blocoAtivoQtd: blocoEmFormacao?.total_pacientes || 0,
+      blocoAtivoStatus: blocoEmFormacao?.status || ('EM_FORMACAO' as const),
+      blocosFechadosQtd: fechados,
+      proximaSenhaNumero: filaOrdenada[0]?.senha.numero
+    };
+  }, [senhas, blocos, unidadeId, config]);
 
   // Senhas ativas em chamada ou atendimento na unidade (para controles inline na direita)
   const senhasAtivas = useMemo(() => {
@@ -333,12 +424,7 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
       .sort((a, b) => new Date(b.last_called_at || b.created_at).getTime() - new Date(a.last_called_at || a.created_at).getTime());
   }, [senhas, unidadeId]);
 
-  const regraAlternanciaLabel = useMemo(() => {
-    if (config?.regra_alternancia === '1_P_1_N') return '1 PRIORITÁRIO : 1 NORMAL';
-    if (config?.regra_alternancia === '3_P_1_N') return '3 PRIORITÁRIOS : 1 NORMAL';
-    if (config?.regra_alternancia === 'APENAS_PRIORIDADE') return 'APENAS PRIORIDADE LEGAL';
-    return '2 PRIORITÁRIOS : 1 NORMAL';
-  }, [config?.regra_alternancia]);
+  const regraAlternanciaLabel = 'BLOCOS DE 5 • E → P → E → P → N';
 
   // Contadores rápidos
   const contadores = useMemo(() => {
@@ -482,16 +568,20 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
                 regraAlternanciaLabel={regraAlternanciaLabel}
                 isSubmitting={isGerando}
                 contadores={contadores}
+                blocoResumo={blocoResumo}
+                avaliacoesImediatasAtivas={avaliacoesImediatasAtivas}
                 senhasAtivas={senhasAtivas}
                 ausenteConfirmId={ausenteConfirmId}
                 onChamarProximo={handleChamarProximo}
+                onConcluirAcolhimentoImediato={handleConcluirAcolhimentoImediato}
+                onAbrirHistoricoAvaliacoes={() => abrirModalHistorico('avaliacoes')}
                 onRechamar={s => handleRechamar(s.id)}
                 onIniciar={s => handleIniciar(s.id)}
                 onConcluir={s => handleConcluir(s.id)}
                 onSolicitarConfirmAusente={setAusenteConfirmId}
                 onConfirmarAusente={s => handleNaoCompareceu(s.id)}
                 onAbrirModalCancelar={s => setModalCancelarId(s.id)}
-                onAbrirHistoricoFila={() => setModalHistoricoFilaAberto(true)}
+                onAbrirHistoricoFila={() => abrirModalHistorico('fila')}
                 onAbrirConfiguracoes={() => {
                   setConfirmarZeragemInline(false);
                   setModalConfigAberto(true);
@@ -782,16 +872,24 @@ export const AutoSenhaControleScreen: React.FC<AutoSenhaControleScreenProps> = (
         </div>
       )}
 
-      {/* MODAL: HISTÓRICO DA FILA E FILA ATUAL */}
+      {/* MODAL: HISTÓRICO DA FILA, BLOCOS DE 5 E AVALIAÇÕES IMEDIATAS */}
       <HistoricoFilaModal
         isOpen={modalHistoricoFilaAberto}
+        initialTab={modalHistoricoTab}
         unidadeId={unidadeId}
         unidadeNome={unidade.nome}
         unidadeSigla={unidade.sigla}
         senhasDia={senhas}
+        blocosDia={blocos}
+        avaliacoesImediatas={avaliacoesImediatas}
         config={config}
-        onClose={() => setModalHistoricoFilaAberto(false)}
+        onClose={fecharModalHistorico}
+        onTabChange={tab => {
+          setModalHistoricoTab(tab);
+          sincronizarUrlModal(true, tab);
+        }}
         onCancelarSenha={(s) => setModalCancelarId(s.id)}
+        onConcluirAcolhimentoImediato={handleConcluirAcolhimentoImediato}
         onRechamar={(s) => handleRechamar(s.id)}
         onIniciar={(s) => handleIniciar(s.id)}
         onConcluir={(s) => handleConcluir(s.id)}
