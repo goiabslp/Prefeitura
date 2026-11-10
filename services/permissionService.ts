@@ -1523,8 +1523,9 @@ export function canUserAccessRoute(
   return { allowed: true };
 }
 
-// Estado da sessão ativa para validação defensiva na camada de serviços
+// Estado da sessão ativa e configurações globais para validação defensiva na camada de serviços
 let activePermissionUser: User | null = null;
+let activeGlobalModuleSettings: Record<string, boolean> | undefined = undefined;
 
 export function setActivePermissionUser(user: User | null): void {
   activePermissionUser = user;
@@ -1534,69 +1535,56 @@ export function getActivePermissionUser(): User | null {
   return activePermissionUser;
 }
 
+export function setActiveGlobalModuleSettings(settings?: Record<string, boolean> | null): void {
+  activeGlobalModuleSettings = settings ? { ...settings } : undefined;
+}
+
+export function getActiveGlobalModuleSettings(): Record<string, boolean> | undefined {
+  return activeGlobalModuleSettings;
+}
+
+function normalizeGlobalSettingsArg(
+  globalSettingsOrLegacyGestors?: Record<string, boolean> | string[]
+): Record<string, boolean> | undefined {
+  if (!globalSettingsOrLegacyGestors || Array.isArray(globalSettingsOrLegacyGestors)) {
+    return activeGlobalModuleSettings;
+  }
+  return globalSettingsOrLegacyGestors;
+}
+
 /**
- * Indica se o usuário possui permissões operacionais (escrita/gestão) na tela Acompanhar da Regulação.
- * Administradores, Gestores da Regulação, usuários com permissão operacional explícita ('sub_consultas_acompanhar')
- * ou usuários legados com apenas a chave pai do módulo retornam true.
+ * Indica se o usuário possui acesso operacional (escrita/gestão) na tela Acompanhar da Regulação.
+ * REGRA ESTRITA: Segue o mesmo modelo de submódulos de todo o sistema — aplica-se inclusive a
+ * Administradores e Gestores, além de respeitar o estado global do submódulo.
+ * - Acompanhar ativado -> true
+ * - Acompanhar desativado (no usuário ou global) + Somente Leitura ativado -> false
+ * - Legado parent-only ('parent_consultas' sem subchaves granulares) -> true se ativo no global
  */
 export function hasConsultasAcompanharOperationalAccess(
   user: User | null | undefined,
-  gestorUserIds: string[] = []
+  globalSettingsOrLegacyGestors?: Record<string, boolean> | string[]
 ): boolean {
   if (!user) return false;
-  if (user.role === 'admin') return true;
-
-  const perms = user.permissions || [];
-  if (
-    gestorUserIds.includes(user.id) ||
-    perms.includes('sub_consultas_gestor') ||
-    perms.includes('parent_consultas_gestor') ||
-    perms.includes('sub_regulacao_gestor' as any)
-  ) {
-    return true;
-  }
-
-  // Permissão operacional explícita do submódulo Acompanhar
-  if (
-    userHasPermissionKey(perms, 'sub_consultas_acompanhar', [
-      'parent_consultas_acompanhar',
-      'sub_regulacao_acompanhar'
-    ])
-  ) {
-    return true;
-  }
-
-  // Compatibilidade retrógrada estrita: usuário legado com apenas a chave pai (sem chaves granulares)
-  const regulacaoDef = MODULE_ACCESS_TREE.find(m => m.key === 'parent_consultas');
-  const hasAnyGranularSubPerm = regulacaoDef?.submodules?.some(sub =>
-    userHasPermissionKey(perms, sub.key, sub.legacyKeys)
-  ) ?? false;
-
-  if (!hasAnyGranularSubPerm && userHasPermissionKey(perms, 'parent_consultas', regulacaoDef?.legacyKeys)) {
-    return true;
-  }
-
-  return false;
+  const globalSettings = normalizeGlobalSettingsArg(globalSettingsOrLegacyGestors);
+  return userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_acompanhar', globalSettings);
 }
 
 /**
  * Indica se o usuário deve operar /Regulacao/Acompanhar em MODO SOMENTE LEITURA.
- * Retorna true exclusivamente quando NÃO possui acesso operacional/admin/gestor para Acompanhar,
- * mas possui a permissão "Acompanhar Solicitações — Somente Leitura".
+ * Retorna true exclusivamente quando NÃO possui acesso operacional em Acompanhar
+ * (por desativação individual ou global), mas possui a permissão
+ * "Acompanhar Solicitações — Somente Leitura" ativa.
  */
 export function isConsultasAcompanharReadOnly(
   user: User | null | undefined,
-  gestorUserIds: string[] = []
+  globalSettingsOrLegacyGestors?: Record<string, boolean> | string[]
 ): boolean {
   if (!user) return false;
-  if (hasConsultasAcompanharOperationalAccess(user, gestorUserIds)) {
+  const globalSettings = normalizeGlobalSettingsArg(globalSettingsOrLegacyGestors);
+  if (hasConsultasAcompanharOperationalAccess(user, globalSettings)) {
     return false;
   }
-  const perms = user.permissions || [];
-  return userHasPermissionKey(perms, 'sub_consultas_acompanhar_leitura', [
-    'sub_regulacao_acompanhar_leitura',
-    'parent_consultas_acompanhar_leitura'
-  ]);
+  return userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_acompanhar_leitura', globalSettings);
 }
 
 /**
@@ -1607,9 +1595,10 @@ export function canUserAccessRegulacaoAcompanhar(
   globalSettings?: Record<string, boolean>
 ): boolean {
   if (!user) return false;
+  const effectiveGlobal = globalSettings ?? activeGlobalModuleSettings;
   return (
-    userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_acompanhar', globalSettings) ||
-    userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_acompanhar_leitura', globalSettings)
+    userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_acompanhar', effectiveGlobal) ||
+    userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_acompanhar_leitura', effectiveGlobal)
   );
 }
 

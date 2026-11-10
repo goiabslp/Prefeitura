@@ -229,6 +229,27 @@ timestamp: ${new Date().toISOString()}`);
         }
     };
 
+    // Sincroniza alterações de permissões e perfil do usuário autenticado em tempo real (sem exigir novo login)
+    useEffect(() => {
+        const uid = session?.user?.id;
+        if (!uid) return;
+
+        const profileSyncChannel = supabase
+            .channel(`auth_profile_sync_${uid}`)
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${uid}` },
+                () => {
+                    fetchProfile(uid, session?.user?.email || '');
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(profileSyncChannel);
+        };
+    }, [session?.user?.id, session?.user?.email]);
+
     return (
         <AuthContext.Provider value={{ user, session, loading, signIn, signOut, refreshUser }}>
             {children}

@@ -3,6 +3,7 @@ import { ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVa
 import { handleSupabaseError } from '../utils/errorUtils';
 import { auditLogService } from './auditLogService';
 import {
+    getActiveGlobalModuleSettings,
     getActivePermissionUser,
     hasConsultasAcompanharOperationalAccess,
     isConsultasAcompanharReadOnly,
@@ -28,65 +29,66 @@ type RegulacaoMutationKind =
 
 /**
  * Valida na camada de serviços se o usuário autenticado possui permissão operacional
- * para gravar ou alterar registros da Regulação. Bloqueia perfis "Somente Leitura"
- * e tentativas diretas fora da interface antes de qualquer chamada de escrita ao banco.
+ * efetiva para gravar ou alterar registros da Regulação.
+ * Respeita estritamente as permissões de submódulo (inclusive para Admins e Gestores)
+ * e o estado global ativo no Controle de Acesso.
  */
 const assertCanMutateRegulacao = (
     actionLabel: string,
     kind: RegulacaoMutationKind = 'acompanhar',
     explicitUser?: Partial<User> | null
 ): void => {
-    const user = (explicitUser || getActivePermissionUser()) as User | null;
+    const activeUser = getActivePermissionUser();
+    // Quando explicitUser foi passado (ex.: snapshot de UI), prioriza explicitUser completo se possuir permissions
+    const user = ((explicitUser && Array.isArray((explicitUser as User).permissions) ? explicitUser : activeUser) || explicitUser) as User | null;
     if (!user) return; // Contexto sem sessão de usuário associada (ex.: rotinas isoladas)
 
-    if (user.role === 'admin') return;
-
+    const globalSettings = getActiveGlobalModuleSettings();
     const gestorIds = getCachedConsultasGestores();
     const perms = user.permissions || [];
-    const isGestor =
+    const isGestorOrAdminRole =
+        user.role === 'admin' ||
         gestorIds.includes(user.id) ||
         perms.includes('sub_consultas_gestor') ||
         perms.includes('parent_consultas_gestor') ||
         perms.includes('sub_regulacao_gestor' as any);
 
     if (kind === 'gestor') {
-        if (!isGestor) {
+        const hasGestorSub = userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_gestor', globalSettings);
+        if (!isGestorOrAdminRole && !hasGestorSub) {
             throw new Error(`Acesso negado: apenas Administradores ou Gestores autorizados podem executar "${actionLabel}".`);
         }
         return;
     }
 
-    const isReadOnlyAcompanhar = isConsultasAcompanharReadOnly(user, gestorIds);
+    const canOperationalAcompanhar = hasConsultasAcompanharOperationalAccess(user, globalSettings);
+    const isReadOnlyAcompanhar = isConsultasAcompanharReadOnly(user, globalSettings);
 
     if (kind === 'acompanhar') {
-        if (isReadOnlyAcompanhar || !hasConsultasAcompanharOperationalAccess(user, gestorIds)) {
+        if (isReadOnlyAcompanhar || !canOperationalAcompanhar) {
             throw new Error(`Acesso negado (Modo Somente Leitura): seu usuário não possui permissão operacional para "${actionLabel}".`);
         }
         return;
     }
 
     if (kind === 'novo_agendamento') {
-        const canNovo = userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_novo_agendamento');
-        const canRetorno = hasConsultasAcompanharOperationalAccess(user, gestorIds);
-        if (!canNovo && !canRetorno) {
+        const canNovo = userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_novo_agendamento', globalSettings);
+        if (!canNovo && !canOperationalAcompanhar) {
             throw new Error(`Acesso negado (Modo Somente Leitura): seu usuário não possui permissão para "${actionLabel}".`);
         }
         return;
     }
 
     if (kind === 'vagas') {
-        if (isGestor) return;
-        const canVagas = userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_liberar_vagas');
-        const canAcompanharOp = hasConsultasAcompanharOperationalAccess(user, gestorIds);
-        if (!canVagas && !canAcompanharOp) {
+        const canVagas = userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_liberar_vagas', globalSettings);
+        if (!canVagas && !canOperationalAcompanhar) {
             throw new Error(`Acesso negado: seu usuário não possui permissão para "${actionLabel}".`);
         }
         return;
     }
 
     if (kind === 'procedimentos') {
-        if (isGestor) return;
-        const canProc = userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_procedimentos');
+        const canProc = userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_procedimentos', globalSettings);
         if (!canProc) {
             throw new Error(`Acesso negado: seu usuário não possui permissão para "${actionLabel}".`);
         }
@@ -94,23 +96,18 @@ const assertCanMutateRegulacao = (
     }
 
     if (kind === 'pacientes') {
-        if (isGestor) return;
-        const hasPacientesPermission =
-            userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_pacientes') ||
-            userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_novo_agendamento') ||
-            hasConsultasAcompanharOperationalAccess(user, gestorIds) ||
+        const canPacientesRegulacao =
+            userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_pacientes', globalSettings) ||
+            userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_novo_agendamento', globalSettings) ||
+            canOperationalAcompanhar;
+        const canPacientesCrossModule =
+            userCanAccessSubmodule(user, 'parent_farmacia', 'sub_farmacia_pacientes', globalSettings) ||
+            userCanAccessSubmodule(user, 'parent_farmacia', 'sub_farmacia_retirar', globalSettings) ||
             perms.includes('parent_farmacia') ||
             perms.includes('parent_autosenha') ||
             perms.some(p => typeof p === 'string' && (p.startsWith('sub_farmacia_') || p.startsWith('parent_farmacia_') || p.startsWith('sub_autosenha_')));
 
-        if (
-            !hasPacientesPermission ||
-            (isReadOnlyAcompanhar &&
-                !userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_pacientes') &&
-                !userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_novo_agendamento') &&
-                !perms.includes('parent_farmacia') &&
-                !perms.includes('parent_autosenha'))
-        ) {
+        if (!canPacientesRegulacao && !canPacientesCrossModule) {
             throw new Error(`Acesso negado (Modo Somente Leitura): seu usuário não possui permissão para "${actionLabel}".`);
         }
     }
@@ -1665,7 +1662,8 @@ export const orderConsultasQueue = (bookings: ConsultaAgendamento[]): ConsultaAg
  */
 export const migrateAguardandoDataToFilaEspera = async (): Promise<void> => {
     const activeUser = getActivePermissionUser();
-    if (activeUser && (isConsultasAcompanharReadOnly(activeUser, getCachedConsultasGestores()) || !hasConsultasAcompanharOperationalAccess(activeUser, getCachedConsultasGestores()))) {
+    const globalSettings = getActiveGlobalModuleSettings();
+    if (activeUser && (isConsultasAcompanharReadOnly(activeUser, globalSettings) || !hasConsultasAcompanharOperationalAccess(activeUser, globalSettings))) {
         return;
     }
     try {
@@ -1688,7 +1686,8 @@ export const migrateAguardandoDataToFilaEspera = async (): Promise<void> => {
  */
 export const recalculateAndPersistQueuePositions = async (): Promise<void> => {
     const activeUser = getActivePermissionUser();
-    if (activeUser && isConsultasAcompanharReadOnly(activeUser, getCachedConsultasGestores())) {
+    const globalSettings = getActiveGlobalModuleSettings();
+    if (activeUser && (isConsultasAcompanharReadOnly(activeUser, globalSettings) || !hasConsultasAcompanharOperationalAccess(activeUser, globalSettings))) {
         return;
     }
     try {
@@ -1792,11 +1791,12 @@ export const recalculateAndPersistQueuePositions = async (): Promise<void> => {
 export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<ConsultaAgendamento[]> => {
     try {
         const activeUser = getActivePermissionUser();
+        const globalSettings = getActiveGlobalModuleSettings();
         const isUserReadOnly = Boolean(
             filters?.readOnly ||
             (activeUser && (
-                isConsultasAcompanharReadOnly(activeUser, getCachedConsultasGestores()) ||
-                !hasConsultasAcompanharOperationalAccess(activeUser, getCachedConsultasGestores())
+                isConsultasAcompanharReadOnly(activeUser, globalSettings) ||
+                !hasConsultasAcompanharOperationalAccess(activeUser, globalSettings)
             ))
         );
         // Dispara migração assíncrona de status somente para perfis com acesso operacional de escrita

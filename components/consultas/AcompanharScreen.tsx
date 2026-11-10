@@ -5,6 +5,7 @@ import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loa
 import * as db from '../../services/consultasService';
 import { formatProcedimentoLabel } from '../../services/consultasService';
 import { isConsultasAcompanharReadOnly } from '../../services/permissionService';
+import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { useAgentesSaude } from '../../services/agentesSaudeService';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -1974,16 +1975,34 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     }, []);
 
     // Regra de Permissões: Modo Somente Leitura bloqueia toda e qualquer ação operacional ou de modificação
+    const { moduleStatus, mobileModuleStatus } = useSystemSettings();
+    const activeGlobalSettings = isMobile ? mobileModuleStatus : moduleStatus;
     const isAdmin = currentUser.role === 'admin';
     const isGestor = gestorUserIds.includes(currentUser.id) || !!currentUser.permissions?.includes('parent_consultas_gestor') || !!currentUser.permissions?.includes('sub_consultas_gestor');
     const isGestorOrAdmin = isAdmin || isGestor;
-    const isReadOnly = Boolean(isReadOnlyProp || isConsultasAcompanharReadOnly(currentUser, gestorUserIds));
+    const isReadOnly = Boolean(isReadOnlyProp || isConsultasAcompanharReadOnly(currentUser, activeGlobalSettings));
     const canPause = isGestorOrAdmin && !isReadOnly;
     const canCancel = !isReadOnly;
     const canComplete = isGestorOrAdmin && !isReadOnly;
     const canEdit = !isReadOnly;
     const canDelete = isGestorOrAdmin && !isReadOnly;
     const canReport = !isReadOnly;
+
+    // Se a permissão for rebaixada para Somente Leitura em tempo real, fecha modais operacionais abertos
+    useEffect(() => {
+        if (isReadOnly) {
+            setIsConfirmacaoModalOpen(false);
+            setIsReportModalOpen(false);
+            setIsCancelModalOpen(false);
+            setIsPauseModalOpen(false);
+            setIsResumeModalOpen(false);
+            setIsEditModalOpen(false);
+            setIsTransferModalOpen(false);
+            setIsRetornoModalOpen(false);
+            setIsDefinirDataModalOpen(false);
+            setBlockedQueueTarget(null);
+        }
+    }, [isReadOnly]);
 
     const formatDateBr = (d: string) => {
         if (!d) return '';

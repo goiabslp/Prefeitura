@@ -154,9 +154,54 @@ BEGIN
 END;
 $$;
 
--- Verifica se o usuário possui acesso OPERACIONAL (ESCRITA) em agendamentos da Regulação.
--- Usuários com apenas 'sub_consultas_acompanhar_leitura' recebem FALSE.
-CREATE OR REPLACE FUNCTION public.can_write_regulacao_agendamentos()
+-- Verifica se o módulo Regulação e o submódulo especificado estão ativos globalmente (global_module_settings)
+CREATE OR REPLACE FUNCTION public.is_regulacao_submodule_globally_enabled(
+    p_sub_key text,
+    p_legacy_keys text[] DEFAULT ARRAY[]::text[]
+)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public, auth, pg_temp
+AS $$
+DECLARE
+    v_has_disabled boolean := false;
+    v_parent_keys text[] := ARRAY['parent_consultas', 'consultas', 'regulacao', 'parent_regulacao'];
+    v_sub_keys text[];
+BEGIN
+    IF auth.role() = 'service_role' THEN
+        RETURN true;
+    END IF;
+
+    IF to_regclass('public.global_module_settings') IS NULL THEN
+        RETURN true;
+    END IF;
+
+    v_sub_keys := ARRAY[p_sub_key] || COALESCE(p_legacy_keys, ARRAY[]::text[]);
+
+    BEGIN
+        SELECT EXISTS (
+            SELECT 1
+              FROM public.global_module_settings gms
+             WHERE gms.module_key = ANY(v_parent_keys || v_sub_keys)
+               AND COALESCE(gms.is_enabled, true) = false
+        ) INTO v_has_disabled;
+    EXCEPTION WHEN OTHERS THEN
+        v_has_disabled := false;
+    END;
+
+    RETURN NOT COALESCE(v_has_disabled, false);
+END;
+$$;
+
+-- Verifica estritamente se o usuário possui acesso OPERACIONAL (ESCRITA) na tela Acompanhar.
+-- REGRA ESTRITA (sem bypass para Admin ou Gestor quando 'Acompanhar' estiver desativado):
+-- 1. Módulo e submódulo 'sub_consultas_acompanhar' precisam estar ativos em global_module_settings.
+-- 2. Usuário precisa possuir 'sub_consultas_acompanhar' (ou legadas) em profiles.permissions,
+--    ou ser usuário legado apenas com chave pai sem nenhuma subchave granular.
+-- Usuários com 'sub_consultas_acompanhar' desativado e 'sub_consultas_acompanhar_leitura' ativado recebem FALSE.
+CREATE OR REPLACE FUNCTION public.can_write_regulacao_acompanhar()
 RETURNS boolean
 LANGUAGE plpgsql
 STABLE
@@ -171,14 +216,22 @@ DECLARE
         'sub_consultas_liberar_vagas', 'parent_consultas_liberar_vagas', 'sub_regulacao_liberar_vagas',
         'sub_consultas_acompanhar', 'parent_consultas_acompanhar', 'sub_regulacao_acompanhar',
         'sub_consultas_acompanhar_leitura', 'sub_regulacao_acompanhar_leitura', 'parent_consultas_acompanhar_leitura',
-        'sub_consultas_procedimentos', 'parent_consultas_procedimentos',
+        'sub_consultas_definir_agenda', 'parent_consultas_definir_agenda', 'sub_regulacao_definir_agenda',
+        'sub_consultas_procedimentos', 'parent_consultas_procedimentos', 'sub_regulacao_procedimentos',
         'sub_consultas_dados', 'parent_consultas_dados', 'sub_regulacao_dados',
         'sub_consultas_pacientes', 'parent_consultas_pacientes', 'sub_regulacao_pacientes',
         'sub_consultas_gestor', 'parent_consultas_gestor', 'sub_regulacao_gestor'
     ];
 BEGIN
-    IF public.is_regulacao_gestor_or_admin() THEN
+    IF auth.role() = 'service_role' THEN
         RETURN true;
+    END IF;
+
+    IF NOT public.is_regulacao_submodule_globally_enabled(
+        'sub_consultas_acompanhar',
+        ARRAY['parent_consultas_acompanhar', 'sub_regulacao_acompanhar']
+    ) THEN
+        RETURN false;
     END IF;
 
     v_uid := auth.uid();
@@ -195,14 +248,11 @@ BEGIN
         RETURN false;
     END IF;
 
-    -- Permissão operacional explícita em Acompanhar ou Novo Agendamento
+    -- Permissão operacional explícita em Acompanhar
     IF v_perms && ARRAY[
         'sub_consultas_acompanhar',
         'parent_consultas_acompanhar',
-        'sub_regulacao_acompanhar',
-        'sub_consultas_novo_agendamento',
-        'parent_consultas_novo_agendamento',
-        'sub_regulacao_novo_agendamento'
+        'sub_regulacao_acompanhar'
     ] THEN
         RETURN true;
     END IF;
@@ -213,6 +263,52 @@ BEGIN
     END IF;
 
     RETURN false;
+END;
+$$;
+
+-- Verifica se o usuário possui acesso para INSERIR agendamentos (via Acompanhar operacional ou Novo Agendamento).
+-- Usuários com apenas 'sub_consultas_acompanhar_leitura' recebem FALSE.
+CREATE OR REPLACE FUNCTION public.can_write_regulacao_agendamentos()
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public, auth, pg_temp
+AS $$
+DECLARE
+    v_uid uuid;
+    v_perms text[];
+BEGIN
+    IF public.can_write_regulacao_acompanhar() THEN
+        RETURN true;
+    END IF;
+
+    IF NOT public.is_regulacao_submodule_globally_enabled(
+        'sub_consultas_novo_agendamento',
+        ARRAY['parent_consultas_novo_agendamento', 'sub_regulacao_novo_agendamento']
+    ) THEN
+        RETURN false;
+    END IF;
+
+    v_uid := auth.uid();
+    IF v_uid IS NULL THEN
+        RETURN false;
+    END IF;
+
+    SELECT COALESCE(p.permissions, ARRAY[]::text[])
+      INTO v_perms
+      FROM public.profiles p
+     WHERE p.id = v_uid;
+
+    IF v_perms IS NULL THEN
+        RETURN false;
+    END IF;
+
+    RETURN COALESCE(v_perms && ARRAY[
+        'sub_consultas_novo_agendamento',
+        'parent_consultas_novo_agendamento',
+        'sub_regulacao_novo_agendamento'
+    ], false);
 END;
 $$;
 
@@ -316,7 +412,8 @@ DECLARE
         'sub_consultas_liberar_vagas', 'parent_consultas_liberar_vagas', 'sub_regulacao_liberar_vagas',
         'sub_consultas_acompanhar', 'parent_consultas_acompanhar', 'sub_regulacao_acompanhar',
         'sub_consultas_acompanhar_leitura', 'sub_regulacao_acompanhar_leitura', 'parent_consultas_acompanhar_leitura',
-        'sub_consultas_procedimentos', 'parent_consultas_procedimentos',
+        'sub_consultas_definir_agenda', 'parent_consultas_definir_agenda', 'sub_regulacao_definir_agenda',
+        'sub_consultas_procedimentos', 'parent_consultas_procedimentos', 'sub_regulacao_procedimentos',
         'sub_consultas_dados', 'parent_consultas_dados', 'sub_regulacao_dados',
         'sub_consultas_pacientes', 'parent_consultas_pacientes', 'sub_regulacao_pacientes',
         'sub_consultas_gestor', 'parent_consultas_gestor', 'sub_regulacao_gestor'
@@ -340,7 +437,7 @@ BEGIN
         RETURN false;
     END IF;
 
-    IF v_perms && ARRAY['sub_consultas_procedimentos', 'parent_consultas_procedimentos'] THEN
+    IF v_perms && ARRAY['sub_consultas_procedimentos', 'parent_consultas_procedimentos', 'sub_regulacao_procedimentos'] THEN
         RETURN true;
     END IF;
 
@@ -352,15 +449,19 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.is_regulacao_submodule_globally_enabled(text, text[]) FROM anon, public;
 REVOKE ALL ON FUNCTION public.is_regulacao_gestor_or_admin() FROM anon, public;
 REVOKE ALL ON FUNCTION public.can_read_regulacao_agendamentos() FROM anon, public;
+REVOKE ALL ON FUNCTION public.can_write_regulacao_acompanhar() FROM anon, public;
 REVOKE ALL ON FUNCTION public.can_write_regulacao_agendamentos() FROM anon, public;
 REVOKE ALL ON FUNCTION public.can_write_consultas_pacientes() FROM anon, public;
 REVOKE ALL ON FUNCTION public.can_write_consultas_vagas() FROM anon, public;
 REVOKE ALL ON FUNCTION public.can_write_regulacao_catalogo() FROM anon, public;
 
+GRANT EXECUTE ON FUNCTION public.is_regulacao_submodule_globally_enabled(text, text[]) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.is_regulacao_gestor_or_admin() TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.can_read_regulacao_agendamentos() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.can_write_regulacao_acompanhar() TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.can_write_regulacao_agendamentos() TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.can_write_consultas_pacientes() TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.can_write_consultas_vagas() TO authenticated, service_role;
@@ -398,14 +499,14 @@ BEGIN
         ON public.consultas_agendamentos
         FOR UPDATE
         TO authenticated
-        USING (public.can_write_regulacao_agendamentos())
-        WITH CHECK (public.can_write_regulacao_agendamentos());
+        USING (public.can_write_regulacao_acompanhar())
+        WITH CHECK (public.can_write_regulacao_acompanhar());
 
         CREATE POLICY "consultas_agendamentos_delete_gestor"
         ON public.consultas_agendamentos
         FOR DELETE
         TO authenticated
-        USING (public.is_regulacao_gestor_or_admin());
+        USING (public.is_regulacao_gestor_or_admin() AND public.can_write_regulacao_acompanhar());
     ELSE
         RAISE NOTICE 'Tabela public.consultas_agendamentos não encontrada; políticas ignoradas.';
     END IF;
@@ -438,20 +539,20 @@ BEGIN
         ON public.consultas_solicitacoes_cancelamento
         FOR INSERT
         TO authenticated
-        WITH CHECK (public.can_write_regulacao_agendamentos());
+        WITH CHECK (public.can_write_regulacao_acompanhar());
 
         CREATE POLICY "consultas_cancelamentos_update_gestor"
         ON public.consultas_solicitacoes_cancelamento
         FOR UPDATE
         TO authenticated
-        USING (public.is_regulacao_gestor_or_admin())
-        WITH CHECK (public.is_regulacao_gestor_or_admin());
+        USING (public.is_regulacao_gestor_or_admin() AND public.can_write_regulacao_acompanhar())
+        WITH CHECK (public.is_regulacao_gestor_or_admin() AND public.can_write_regulacao_acompanhar());
 
         CREATE POLICY "consultas_cancelamentos_delete_gestor"
         ON public.consultas_solicitacoes_cancelamento
         FOR DELETE
         TO authenticated
-        USING (public.is_regulacao_gestor_or_admin());
+        USING (public.is_regulacao_gestor_or_admin() AND public.can_write_regulacao_acompanhar());
     ELSE
         RAISE NOTICE 'Tabela public.consultas_solicitacoes_cancelamento ainda não existe; políticas ignoradas (aplique 20261029_create_consultas_solicitacoes_cancelamento.sql e re-execute esta migration se desejar persistência no banco).';
     END IF;
@@ -650,7 +751,7 @@ BEGIN
     -- mantendo execução transparente quando disparada internamente por triggers (pg_trigger_depth() > 0).
     IF pg_trigger_depth() = 0
        AND auth.role() <> 'service_role'
-       AND NOT public.can_write_regulacao_agendamentos()
+       AND NOT public.can_write_regulacao_acompanhar()
     THEN
         RAISE EXCEPTION 'Acesso negado: perfil em modo somente leitura não pode processar a fila de espera.';
     END IF;

@@ -68,14 +68,15 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
     const isPacientesActive = isModuleActive('sub_consultas_pacientes') || isModuleActive('parent_consultas_pacientes');
     const isGestorActive = isModuleActive('sub_consultas_gestor') || isModuleActive('parent_consultas_gestor');
 
-    const canAccessNovoAgendamento = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_novo_agendamento', isMobileViewport ? mobileModuleStatus : moduleStatus);
-    const canAccessLiberarVagas = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_liberar_vagas', isMobileViewport ? mobileModuleStatus : moduleStatus);
-    const canAccessAcompanhar = canUserAccessRegulacaoAcompanhar(currentUser, isMobileViewport ? mobileModuleStatus : moduleStatus);
-    const isAcompanharReadOnly = isConsultasAcompanharReadOnly(currentUser, gestorUserIds);
-    const canAccessProcedimentos = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_procedimentos', isMobileViewport ? mobileModuleStatus : moduleStatus);
-    const canAccessDados = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_dados', isMobileViewport ? mobileModuleStatus : moduleStatus);
-    const canAccessPacientes = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_pacientes', isMobileViewport ? mobileModuleStatus : moduleStatus);
-    const canAccessGestor = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_gestor', isMobileViewport ? mobileModuleStatus : moduleStatus);
+    const activeGlobalSettings = isMobileViewport ? mobileModuleStatus : moduleStatus;
+    const canAccessNovoAgendamento = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_novo_agendamento', activeGlobalSettings);
+    const canAccessLiberarVagas = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_liberar_vagas', activeGlobalSettings);
+    const canAccessAcompanhar = canUserAccessRegulacaoAcompanhar(currentUser, activeGlobalSettings);
+    const isAcompanharReadOnly = isConsultasAcompanharReadOnly(currentUser, activeGlobalSettings);
+    const canAccessProcedimentos = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_procedimentos', activeGlobalSettings);
+    const canAccessDados = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_dados', activeGlobalSettings);
+    const canAccessPacientes = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_pacientes', activeGlobalSettings);
+    const canAccessGestor = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_gestor', activeGlobalSettings);
 
     const showNovoAgendamento = (subView === 'novo-agendamento' || (subView?.startsWith('novo-agendamento') ?? false) || subView === 'vagas-reservadas') && canAccessNovoAgendamento;
     const showLiberarVagas = (subView === 'liberar-vagas') && canAccessLiberarVagas;

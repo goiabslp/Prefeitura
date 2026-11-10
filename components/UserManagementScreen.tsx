@@ -52,7 +52,7 @@ interface UserManagementScreenProps {
   users: User[];
   currentUser: User;
   onAddUser: (user: User) => void;
-  onUpdateUser: (user: User) => void;
+  onUpdateUser: (user: User) => Promise<boolean> | Promise<void> | void;
   onDeleteUser: (userId: string) => Promise<{ success: boolean; message?: string } | void> | void;
   onImpersonateUser?: (user: User, initialMode?: 'observer' | 'simulation') => void;
   availableSignatures: Signature[];
@@ -269,6 +269,12 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
     whatsapp: '',
     permissions: ['parent_criar_oficio', 'parent_rh']
   });
+  const latestPermissionsRef = useRef<string[]>(['parent_criar_oficio', 'parent_rh']);
+  const pendingPermissionOpsRef = useRef<number>(0);
+
+  useEffect(() => {
+    latestPermissionsRef.current = (formData.permissions || []) as string[];
+  }, [formData.permissions]);
 
   // Fechar dropdown de assinaturas ao clicar fora
   useEffect(() => {
@@ -345,6 +351,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
       permissions: basePerms,
       password: '' // Limpa campo de senha ao editar usuário existente
     });
+    latestPermissionsRef.current = basePerms as string[];
     setIsEditingPage(true);
 
     if (updateUrl) {
@@ -433,6 +440,16 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
           if (targetId && users.length > 0) {
             const found = users.find(u => u.id === targetId || u.username.toLowerCase() === targetId.toLowerCase());
             if (found) {
+              // Evita reiniciar o formulário em atualizações otimistas/async do mesmo usuário durante edição
+              if (editingUser?.id === found.id) {
+                if (pendingPermissionOpsRef.current === 0) {
+                  const foundPerms = (found.permissions || []) as AppPermission[];
+                  setEditingUser(found);
+                  setFormData(prev => ({ ...prev, permissions: foundPerms }));
+                  latestPermissionsRef.current = foundPerms as string[];
+                }
+                return;
+              }
               handleOpenEditUser(found, false, detectedTab);
               return;
             }
@@ -498,12 +515,13 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
     }));
   };
 
-  const handleToggleUserModulePermission = (key: string, enabled: boolean) => {
+  const handleToggleUserModulePermission = async (key: string, enabled: boolean) => {
     if (!isAdmin) return;
-    
-    const currentPerms = (formData.permissions || []) as string[];
-    // Limpeza profunda: remove chaves canônicas e legadas sem deixar resíduos zumbis
-    const updatedPerms = cleanPermissionsArray(currentPerms, key, enabled);
+
+    const previousPerms = [...latestPermissionsRef.current];
+    // Limpeza profunda encadeada pelo ref mais recente para evitar perda em cliques sequenciais
+    const updatedPerms = cleanPermissionsArray(previousPerms, key, enabled);
+    latestPermissionsRef.current = updatedPerms;
 
     // 1. Atualização otimista imediata no formulário
     setFormData(prev => ({
@@ -511,7 +529,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
       permissions: updatedPerms as AppPermission[]
     }));
 
-    // 2. Se for edição de usuário existente, persiste em tempo real instantaneamente
+    // 2. Se for edição de usuário existente, persiste e aguarda confirmação no Supabase
     if (editingUser) {
       const updatedUser: User = {
         ...editingUser,
@@ -533,9 +551,26 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
         }
       } catch (e) {}
 
-      // Persiste imediatamente no Supabase e atualiza o estado global sem recarregar
-      onUpdateUser(updatedUser);
-      showToast("Permissão atualizada em tempo real!", "success");
+      pendingPermissionOpsRef.current += 1;
+      try {
+        const result = await onUpdateUser(updatedUser);
+        if (result === false) {
+          // Reverte se a gravação no banco falhar
+          latestPermissionsRef.current = previousPerms;
+          setFormData(prev => ({ ...prev, permissions: previousPerms as AppPermission[] }));
+          setEditingUser(prev => prev ? { ...prev, permissions: previousPerms as AppPermission[] } : null);
+          showToast("Não foi possível salvar a permissão no banco de dados.", "error");
+          return;
+        }
+        showToast("Permissão atualizada em tempo real!", "success");
+      } catch (err) {
+        latestPermissionsRef.current = previousPerms;
+        setFormData(prev => ({ ...prev, permissions: previousPerms as AppPermission[] }));
+        setEditingUser(prev => prev ? { ...prev, permissions: previousPerms as AppPermission[] } : null);
+        showToast("Erro ao salvar permissão no banco de dados.", "error");
+      } finally {
+        pendingPermissionOpsRef.current = Math.max(0, pendingPermissionOpsRef.current - 1);
+      }
     }
   };
 

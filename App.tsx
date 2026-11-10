@@ -139,7 +139,7 @@ import { startGlobalLocationTracking, stopGlobalLocationTracking } from './servi
 import { PoliticaPrivacidadeScreen } from './components/PoliticaPrivacidadeScreen';
 import { PoliticaPrivacidadeAppScreen } from './components/PoliticaPrivacidadeAppScreen';
 import { UnauthorizedAccessModal } from './components/common/UnauthorizedAccessModal';
-import { canUserAccessRoute, cleanPermissionsArray, setActivePermissionUser } from './services/permissionService';
+import { canUserAccessRoute, cleanPermissionsArray, setActivePermissionUser, setActiveGlobalModuleSettings } from './services/permissionService';
 import { SystemAIAssistantScreen } from './components/ai/SystemAIAssistantScreen';
 import { EgressMonitorModal } from './components/admin/EgressMonitorModal';
 import { 
@@ -661,8 +661,14 @@ const App: React.FC = () => {
     }
   }, [impersonationSession?.sessionId]);
 
-  const { moduleStatus } = useSystemSettings();
+  const { moduleStatus, mobileModuleStatus } = useSystemSettings();
   const isModuleActive = (key: string) => moduleStatus[key] !== false;
+
+  // Sincroniza configurações globais ativas para validação defensiva na camada de serviços
+  useEffect(() => {
+    const isMob = typeof window !== 'undefined' && window.innerWidth < 768;
+    setActiveGlobalModuleSettings(isMob ? mobileModuleStatus : moduleStatus);
+  }, [moduleStatus, mobileModuleStatus]);
   const permissions = currentUser?.permissions || [];
   const [appState, setAppState] = useState<AppState>(INITIAL_STATE);
   const [activeBlock, setActiveBlock] = useState<BlockType | null>(null);
@@ -2013,6 +2019,9 @@ const App: React.FC = () => {
             setUsers(prev => [...prev, mappedUser]);
           } else if (payload.eventType === 'UPDATE') {
             setUsers(prev => prev.map(u => u.id === ru.id ? mappedUser : u));
+            if (rawUser && rawUser.id === ru.id && typeof refreshUser === 'function') {
+              refreshUser().catch(() => {});
+            }
           }
         }
       )
@@ -5443,7 +5452,7 @@ timestamp: ${new Date().toISOString()}`);
     setCurrentView('licitacao-all');
   };
 
-  const handleUpdateUserInApp = async (u: User) => {
+  const handleUpdateUserInApp = async (u: User): Promise<boolean> => {
     // Handle testRole local persistence
     if (u.testRole !== undefined) {
       if (u.testRole) {
@@ -5460,7 +5469,7 @@ timestamp: ${new Date().toISOString()}`);
     if (isMockUser) {
       console.warn("Skipping DB update for mock user:", u.id);
       setUsers(p => p.map(us => us.id === u.id ? u : us));
-      return;
+      return true;
     }
 
     const updatePayload: any = {
@@ -5492,13 +5501,14 @@ timestamp: ${new Date().toISOString()}`);
       if (rpcError) {
         console.error("Error updating password via RPC:", rpcError);
         alert("Erro ao atualizar senha no sistema de autenticação: " + rpcError.message);
-        return; // Stop execution if auth update fails
+        return false; // Stop execution if auth update fails
       }
     }
 
     if (error) {
       console.error("Error updating user profile:", error);
       alert("Erro ao atualizar perfil: " + error.message);
+      return false;
     } else {
       setUsers(p => p.map(us => us.id === u.id ? u : us));
       if (rawUser && rawUser.id === u.id) {
@@ -5511,6 +5521,7 @@ timestamp: ${new Date().toISOString()}`);
           payload: { userId: u.id }
         });
       }
+      return true;
     }
   };
 
