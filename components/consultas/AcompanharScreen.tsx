@@ -3290,6 +3290,15 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     priority={printingBooking.priority}
                     is_retorno={printingBooking.is_retorno}
                     retorno_tipo={printingBooking.retorno_tipo || (printingBooking.is_retorno ? '1º Retorno' : undefined)}
+                    responsavelNome={printingBooking.responsavel?.name}
+                    createdAt={printingBooking.created_at}
+                    prestador={printingBooking.prestador}
+                    municipio={printingBooking.municipio}
+                    convenio={printingBooking.convenio}
+                    tipoAtendimento={printingBooking.tipo_atendimento}
+                    queuePosition={printingBooking.queue_position}
+                    specialSequence={printingBooking.special_sequence}
+                    pauseReason={printingBooking.pause_reason}
                     currentUser={currentUser}
                     state={appState}
                 />

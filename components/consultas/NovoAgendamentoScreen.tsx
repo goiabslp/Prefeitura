@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { User, ConsultaPaciente, ConsultaProcedimento, AppState, ConsultaAgendamento, ConsultaVaga, AGENTES_DE_SAUDE } from '../../types';
 import { useAgentesSaude } from '../../services/agentesSaudeService';
@@ -28,10 +28,18 @@ import {
     Info,
     ChevronDown,
     RotateCcw,
-    History
+    History,
+    Ban,
+    FileText
 } from 'lucide-react';
 import * as db from '../../services/consultasService';
-import { formatProcedimentoLabel, isSlotPast } from '../../services/consultasService';
+import {
+    formatProcedimentoLabel,
+    isSlotPast,
+    isActiveAgendamentoStatus,
+    formatAgendamentoProtocol,
+    DUPLICATE_AGENDAMENTO_MESSAGE
+} from '../../services/consultasService';
 import { CadastroIncompletoModal, isPatientComplete } from '../common/CadastroIncompletoModal';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -231,8 +239,99 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     const [activeDateDropdownId, setActiveDateDropdownId] = useState<string | null>(null);
     const [activeTimeDropdownId, setActiveTimeDropdownId] = useState<string | null>(null);
     const [printingBooking, setPrintingBooking] = useState<ConsultaAgendamento | null>(null);
-    const [conflictBooking, setConflictBooking] = useState<ConsultaAgendamento | null>(null);
-    const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
+    const [printingDocTitle, setPrintingDocTitle] = useState<string | undefined>(undefined);
+    const [printingDocSubtitle, setPrintingDocSubtitle] = useState<string | undefined>(undefined);
+    const [duplicateModalBooking, setDuplicateModalBooking] = useState<ConsultaAgendamento | null>(null);
+    const [duplicateModalProc, setDuplicateModalProc] = useState<ConsultaProcedimento | null>(null);
+    const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
+    const [checkingDuplicateProcId, setCheckingDuplicateProcId] = useState<string | null>(null);
+    const lastCheckedPairRef = useRef<string | null>(null);
+
+    // Mapa das solicitações ativas do paciente selecionado (por ID e código do procedimento)
+    const activeHistoryByProcMap = useMemo(() => {
+        const map = new Map<string, ConsultaAgendamento>();
+        for (const item of patientHistory) {
+            if (!isActiveAgendamentoStatus(item.status)) continue;
+            if (item.procedimento_id && !map.has(item.procedimento_id)) {
+                map.set(item.procedimento_id, item);
+            }
+            const code = item.procedimento?.code?.trim();
+            if (code && !map.has(`code:${code}`)) {
+                map.set(`code:${code}`, item);
+            }
+        }
+        return map;
+    }, [patientHistory]);
+
+    const openDuplicateBlockedModal = (existingBooking: ConsultaAgendamento | null, proc: ConsultaProcedimento | null) => {
+        setDuplicateModalProc(proc);
+        setDuplicateModalBooking(existingBooking);
+        setIsDuplicateModalOpen(true);
+
+        // Garante carregamento completo de todos os campos (paciente, procedimento, responsável, data) caso venha de metadado mínimo
+        if (existingBooking?.id && (!existingBooking.paciente?.cpf || !existingBooking.responsavel || !existingBooking.created_at)) {
+            db.getAgendamentoById(existingBooking.id)
+                .then((full) => {
+                    if (full) {
+                        setDuplicateModalBooking(prev => (prev?.id === full.id ? full : prev));
+                    }
+                })
+                .catch(() => {});
+        }
+    };
+
+    const handleSelectProcedure = async (proc: ConsultaProcedimento) => {
+        if (!selectedPatient) {
+            setSelectedProcedure(proc);
+            return;
+        }
+        setErrorMessage('');
+        setCheckingDuplicateProcId(proc.id);
+        try {
+            const existingActive = await db.checkActiveDuplicateAgendamento(selectedPatient, proc);
+            if (existingActive) {
+                openDuplicateBlockedModal(existingActive, proc);
+                // Atualiza histórico em segundo plano caso tenha sido criado por outro operador
+                db.getPacienteHistory(selectedPatient.id).then(setPatientHistory).catch(() => {});
+                return;
+            }
+            lastCheckedPairRef.current = `${selectedPatient.id}:${proc.id}`;
+            setSelectedProcedure(proc);
+        } catch (err: any) {
+            console.error('Erro ao verificar duplicidade:', err);
+            setErrorMessage(err?.message || 'Não foi possível verificar se já existe solicitação ativa para este procedimento.');
+        } finally {
+            setCheckingDuplicateProcId(null);
+        }
+    };
+
+    // Revalidação automática caso o paciente seja alterado com um procedimento já selecionado
+    useEffect(() => {
+        if (!selectedPatient || !selectedProcedure) {
+            lastCheckedPairRef.current = null;
+            return;
+        }
+        const pairKey = `${selectedPatient.id}:${selectedProcedure.id}`;
+        if (lastCheckedPairRef.current === pairKey) return;
+
+        let cancelled = false;
+        db.checkActiveDuplicateAgendamento(selectedPatient, selectedProcedure)
+            .then((existingActive) => {
+                if (cancelled) return;
+                if (existingActive) {
+                    openDuplicateBlockedModal(existingActive, selectedProcedure);
+                    setSelectedProcedure(null);
+                    onNavigate('consultas:novo-agendamento-procedimento');
+                } else {
+                    lastCheckedPairRef.current = pairKey;
+                }
+            })
+            .catch(() => {});
+
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedPatient?.id, selectedProcedure?.id]);
 
     // Custom Vagas Calendar Picker States & Helpers
     const [vagas, setVagas] = useState<ConsultaVaga[]>([]);
@@ -749,121 +848,55 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
             );
         } catch (err: any) {
             console.error("Erro ao criar agendamento:", err);
-            setErrorMessage(err.message || 'Erro ao realizar agendamento.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleRescheduleConflict = async () => {
-        const targetDate = bookingDate || formatDateToYYYYMMDD(new Date());
-        if (!conflictBooking || !targetDate || !selectedProcedure) return;
-        setIsConflictModalOpen(false);
-        setLoading(true);
-        try {
-            const hasValidFutureSlot = Boolean(
-                bookingDate && 
-                futureAvailableSlots.some(v => 
-                    v.data === bookingDate && 
-                    (!bookingTime || matchTime(v.hora, bookingTime))
-                )
-            );
-            const isWaitlist = (bookingPriority === 'Especial') || isWaitlistOnly || (!hasValidFutureSlot) || (!bookingDate);
-            const targetStatus = !isWaitlist ? 'Agendado' : 'Fila de espera';
-
-            const result = await db.updateAgendamentoDateAndStatus(conflictBooking.id, !isWaitlist ? targetDate : undefined as any, targetStatus);
-            if (result) {
-                setCreatedBooking(result);
-                setSuccessMessage(
-                    targetStatus === 'Agendado'
-                    ? 'Agendamento existente atualizado e confirmado para a nova data mais próxima com sucesso!'
-                    : 'Agendamento existente atualizado e direcionado para a fila de espera na nova data com sucesso!'
-                );
+            if (err instanceof db.DuplicateAgendamentoError || err?.code === 'DUPLICATE_AGENDAMENTO') {
+                openDuplicateBlockedModal(err.existingBooking || null, selectedProcedure);
             } else {
-                throw new Error('Falha ao atualizar agendamento.');
+                setErrorMessage(err.message || 'Erro ao realizar agendamento.');
             }
-        } catch (err: any) {
-            setErrorMessage(err.message || 'Erro ao atualizar agendamento.');
         } finally {
             setLoading(false);
-            setConflictBooking(null);
         }
     };
 
     // Handle Schedule Submission
     const handleConfirmBooking = async () => {
         if (!selectedPatient || !selectedProcedure) return;
-        const targetDate = bookingDate || formatDateToYYYYMMDD(new Date());
-        
+
         setErrorMessage('');
         setLoading(true);
-        
+
         try {
-            // Apenas verifica conflito de intervalo de 15 dias se for Normal (não se aplica a Urgência nem Especial)
-            const isBypassConflict = bookingPriority === 'Urgência' || bookingPriority === 'Especial';
-            
-            if (!isBypassConflict) {
-                try {
-                    // Fetch patient history to check for active same-procedure bookings within 15 days
-                    const history = await db.getPacienteHistory(selectedPatient.id);
-                    
-                    // Find any active/pending booking for the same procedure that is within 15 days of the proposed date
-                    // and is NOT an urgency or retorno
-                    const activeConflict = history.find(h => {
-                        if (h.procedimento_id !== selectedProcedure.id) return false;
-                        
-                        const isActive = ['Solicitado', 'Agendado', 'Aguardando Data', 'Fila de espera'].includes(h.status);
-                        if (!isActive) return false;
-                        
-                        const isExc = h.priority === 'Urgência' || h.status === 'Retorno' || h.is_retorno === true;
-                        if (isExc) return false;
-
-                        // Calculate days difference
-                        const d1 = new Date(h.appointment_date + 'T12:00:00');
-                        const d2 = new Date(targetDate + 'T12:00:00');
-                        const diffTime = Math.abs(d1.getTime() - d2.getTime());
-                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                        
-                        return diffDays <= 15;
-                    });
-
-                    if (activeConflict) {
-                        const existingDate = new Date(activeConflict.appointment_date + 'T12:00:00');
-                        const newDate = new Date(targetDate + 'T12:00:00');
-                        
-                        if (newDate.getTime() < existingDate.getTime()) {
-                            // Proposed date is closer! Show modal to reschedule
-                            setConflictBooking(activeConflict);
-                            setIsConflictModalOpen(true);
-                            setLoading(false);
-                            return;
-                        } else {
-                            // Existing date is closer! Block booking
-                            const formattedOldDate = new Date(activeConflict.appointment_date + 'T00:00:00').toLocaleDateString('pt-BR');
-                            setErrorMessage(`Não é permitido ter dois agendamentos ativos para o mesmo procedimento no período de 15 dias. O agendamento mais próximo (em ${formattedOldDate}) foi mantido.`);
-                            setLoading(false);
-                            return;
-                        }
-                    }
-                } catch (err: any) {
-                    console.error("Error checking conflict:", err);
-                }
+            // Validação rigorosa em tempo real antes de inserir:
+            // Bloqueia qualquer solicitação ativa existente (Normal, Urgência ou Especial; em qualquer data)
+            const existingActive = await db.checkActiveDuplicateAgendamento(selectedPatient, selectedProcedure);
+            if (existingActive) {
+                openDuplicateBlockedModal(existingActive, selectedProcedure);
+                setLoading(false);
+                return;
             }
 
-            // If no conflict or conflict bypassed/resolved, proceed with normal booking
             await createNewBooking();
         } catch (err: any) {
             console.error("Error in handleConfirmBooking:", err);
-            setErrorMessage(err.message || 'Erro ao confirmar agendamento.');
+            if (err instanceof db.DuplicateAgendamentoError || err?.code === 'DUPLICATE_AGENDAMENTO') {
+                openDuplicateBlockedModal(err.existingBooking || null, selectedProcedure);
+            } else {
+                setErrorMessage(err.message || 'Erro ao confirmar agendamento.');
+            }
             setLoading(false);
         }
     };
 
     // Download Receipt PDF
-    const handleDownloadPdf = async (booking?: ConsultaAgendamento) => {
+    const handleDownloadPdf = async (
+        booking?: ConsultaAgendamento,
+        options?: { documentTitle?: string; documentSubtitle?: string; filePrefix?: string }
+    ) => {
         const targetBooking = booking || createdBooking;
         if (!targetBooking) return;
         setIsGenerating(true);
+        setPrintingDocTitle(options?.documentTitle);
+        setPrintingDocSubtitle(options?.documentSubtitle);
         setPrintingBooking(targetBooking);
 
         // Allow template portal to render
@@ -897,14 +930,81 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
             pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
 
             const protocol = targetBooking.id.substring(0, 8).toUpperCase();
-            pdf.save(`Comprovante-Agendamento-${protocol}.pdf`);
+            const prefix = options?.filePrefix || 'Comprovante-Agendamento';
+            pdf.save(`${prefix}-${protocol}.pdf`);
         } catch (error) {
             console.error('Erro ao gerar PDF do agendamento:', error);
             alert('Não foi possível gerar o PDF no momento.');
         } finally {
             setIsGenerating(false);
             setPrintingBooking(null);
+            setPrintingDocTitle(undefined);
+            setPrintingDocSubtitle(undefined);
         }
+    };
+
+    const handleDownloadDuplicateReceiptPdf = async () => {
+        if (!duplicateModalBooking?.id) return;
+        setIsGenerating(true);
+        try {
+            const fullRecord =
+                (await db.getAgendamentoById(duplicateModalBooking.id).catch(() => null)) ||
+                duplicateModalBooking;
+
+            const enrichedRecord: ConsultaAgendamento = {
+                ...duplicateModalBooking,
+                ...fullRecord,
+                paciente: fullRecord.paciente || duplicateModalBooking.paciente || selectedPatient || undefined,
+                procedimento: fullRecord.procedimento || duplicateModalBooking.procedimento || duplicateModalProc || selectedProcedure || undefined
+            };
+
+            setDuplicateModalBooking(enrichedRecord);
+
+            await handleDownloadPdf(enrichedRecord, {
+                documentTitle: 'Comprovante de Solicitação',
+                documentSubtitle: '2ª Via Completa • Solicitação Registrada na Regulação Municipal',
+                filePrefix: 'Comprovante-Solicitacao'
+            });
+        } catch (err) {
+            console.error('Erro ao preparar comprovante completo da solicitação duplicada:', err);
+            setIsGenerating(false);
+        }
+    };
+
+    const renderPdfPortal = () => {
+        if (!printingBooking) return null;
+        const resolvedPatient = printingBooking.paciente || selectedPatient!;
+        const resolvedProcedure = printingBooking.procedimento || duplicateModalProc || selectedProcedure!;
+        if (!resolvedPatient || !resolvedProcedure) return null;
+
+        return (
+            <ConsultaPdfGenerator
+                bookingId={printingBooking.id}
+                patient={resolvedPatient}
+                procedure={resolvedProcedure}
+                date={printingBooking.appointment_date}
+                solicitationDate={printingBooking.solicitation_date || printingBooking.created_at}
+                appointmentTime={printingBooking.appointment_time}
+                status={printingBooking.status}
+                quantity={printingBooking.quantity || 1}
+                priority={printingBooking.priority || 'Normal'}
+                is_retorno={printingBooking.is_retorno}
+                retorno_tipo={printingBooking.retorno_tipo || (printingBooking.is_retorno ? '1º Retorno' : undefined)}
+                responsavelNome={printingBooking.responsavel?.name}
+                createdAt={printingBooking.created_at}
+                prestador={printingBooking.prestador}
+                municipio={printingBooking.municipio}
+                convenio={printingBooking.convenio}
+                tipoAtendimento={printingBooking.tipo_atendimento}
+                queuePosition={printingBooking.queue_position}
+                specialSequence={printingBooking.special_sequence}
+                pauseReason={printingBooking.pause_reason}
+                documentTitle={printingDocTitle}
+                documentSubtitle={printingDocSubtitle}
+                currentUser={currentUser}
+                state={appState}
+            />
+        );
     };
 
     // Filtragem de procedimentos: pesquisa por início de qualquer palavra na descrição ou no código (case-insensitive & accent-insensitive)
@@ -1113,11 +1213,17 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                     setIsRetorno(false);
                                     setRetornoTipo(null);
                                     setIsRetornoQuestionModalOpen(false);
+                                    setProcedureQuery('');
+                                    setDuplicateModalBooking(null);
+                                    setDuplicateModalProc(null);
+                                    setIsDuplicateModalOpen(false);
+                                    lastCheckedPairRef.current = null;
                                     setErrorMessage('');
                                     setSuccessMessage('');
                                     setCreatedBooking(null);
                                     setBookingTime('');
                                     setActiveDate('');
+                                    onNavigate('consultas:novo-agendamento-paciente');
                                     const d = new Date();
                                     const y = d.getFullYear();
                                     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -1141,23 +1247,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 </div>
 
                 {/* PDF Portal Rendering */}
-                {printingBooking && (
-                    <ConsultaPdfGenerator
-                        bookingId={printingBooking.id}
-                        patient={printingBooking.paciente || selectedPatient!}
-                        procedure={printingBooking.procedimento || selectedProcedure!}
-                        date={printingBooking.appointment_date}
-                        solicitationDate={printingBooking.solicitation_date || printingBooking.created_at}
-                        appointmentTime={printingBooking.appointment_time}
-                        status={printingBooking.status}
-                        quantity={printingBooking.quantity}
-                        priority={printingBooking.priority}
-                        is_retorno={printingBooking.is_retorno}
-                        retorno_tipo={printingBooking.retorno_tipo || (printingBooking.is_retorno ? '1º Retorno' : undefined)}
-                        currentUser={currentUser}
-                        state={appState}
-                    />
-                )}
+                {renderPdfPortal()}
             </div>
         );
     }
@@ -1710,15 +1800,34 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             {filteredProcedures.map((proc) => {
                                                 const hasSlots = proc.available_quantity > 0;
                                                 const isCritical = proc.available_quantity > 0 && proc.available_quantity <= 5;
+                                                const existingActive =
+                                                    activeHistoryByProcMap.get(proc.id) ||
+                                                    (proc.code ? activeHistoryByProcMap.get(`code:${proc.code.trim()}`) : undefined);
+                                                const isCheckingThis = checkingDuplicateProcId === proc.id;
                                                 return (
                                                     <div 
                                                         key={proc.id}
-                                                        onClick={() => setSelectedProcedure(proc)}
-                                                        className="p-3 rounded-xl border bg-white border-slate-200/80 hover:border-sky-400 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 flex flex-col justify-center group cursor-pointer"
+                                                        onClick={() => {
+                                                            if (!checkingDuplicateProcId) {
+                                                                handleSelectProcedure(proc);
+                                                            }
+                                                        }}
+                                                        className={`p-3 rounded-xl border transition-all duration-300 flex flex-col justify-center group cursor-pointer relative ${
+                                                            existingActive
+                                                            ? 'bg-amber-50/40 border-amber-200 hover:border-rose-400 hover:bg-rose-50/30 hover:shadow-md'
+                                                            : 'bg-white border-slate-200/80 hover:border-sky-400 hover:shadow-md hover:-translate-y-0.5'
+                                                        }`}
                                                     >
                                                         <div className="space-y-1.5">
-                                                            <div className="font-extrabold text-slate-800 text-[11px] uppercase group-hover:text-sky-600 transition-colors leading-snug">
-                                                                {formatProcedimentoLabel(proc)}
+                                                            <div className="flex items-start justify-between gap-2">
+                                                                <div className={`font-extrabold text-[11px] uppercase transition-colors leading-snug ${
+                                                                    existingActive ? 'text-slate-800 group-hover:text-rose-700' : 'text-slate-800 group-hover:text-sky-600'
+                                                                }`}>
+                                                                    {formatProcedimentoLabel(proc)}
+                                                                </div>
+                                                                {isCheckingThis && (
+                                                                    <Loader2 className="w-4 h-4 text-sky-600 animate-spin shrink-0 mt-0.5" />
+                                                                )}
                                                             </div>
                                                             <div className="flex items-center gap-1.5 flex-wrap">
                                                                 <span className={`px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border ${
@@ -1744,6 +1853,12 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                                         : 'bg-emerald-50 text-emerald-600 border-emerald-100'
                                                                     }`}>
                                                                         {Math.max(0, proc.available_quantity)} vagas
+                                                                    </span>
+                                                                )}
+                                                                {existingActive && (
+                                                                    <span className="px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border bg-rose-100/80 border-rose-200 text-rose-700 flex items-center gap-1">
+                                                                        <Ban className="w-2.5 h-2.5" />
+                                                                        Solicitação Ativa ({existingActive.status})
                                                                     </span>
                                                                 )}
                                                             </div>
@@ -2333,72 +2448,200 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 </div>,
                 document.body
             )}
-            {/* MODAL: CONFLITO DE DATA (MAIS PRÓXIMA) */}
-            {isConflictModalOpen && conflictBooking && typeof document !== 'undefined' && createPortal(
-                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-md animate-in fade-in duration-300">
-                    <div className="bg-white rounded-[2.5rem] shadow-[0_25px_70px_rgba(0,0,0,0.15)] w-full max-w-md overflow-hidden border border-slate-100 flex flex-col transform transition-all animate-in zoom-in-95 slide-in-from-bottom-8 duration-300">
-                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
-                            <div>
-                                <h3 className="text-sm font-black text-amber-600 uppercase tracking-wider flex items-center gap-1.5">
-                                    <AlertTriangle className="w-4 h-4" /> Alterar Data do Agendamento
-                                </h3>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Procedimento já agendado anteriormente</p>
-                            </div>
-                            <button 
-                                onClick={() => {
-                                    setIsConflictModalOpen(false);
-                                    setConflictBooking(null);
-                                }} 
-                                className="p-2 hover:bg-slate-200 rounded-xl text-slate-400 hover:text-slate-700 transition-all hover:rotate-90 duration-300"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <p className="text-xs text-slate-600 font-semibold leading-relaxed">
-                                O paciente já possui um agendamento ativo para **{formatProcedimentoLabel(selectedProcedure)}**. 
-                                Como a nova data proposta é mais próxima, você pode optar por transferir o agendamento existente para a nova data.
-                            </p>
-                            
-                            <div className="p-4 bg-slate-50 border border-slate-200/50 rounded-2xl space-y-2.5 text-xs font-bold text-slate-700 shadow-inner">
-                                <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-                                    <span className="text-slate-400 font-semibold">Data Atual:</span>
-                                    <span className="text-slate-800 line-through">
-                                        {new Date(conflictBooking.appointment_date + 'T00:00:00').toLocaleDateString('pt-BR')}
-                                    </span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sky-600 font-black">Nova Data Mais Próxima:</span>
-                                    <span className="text-sky-600 font-black bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-lg">
-                                        {new Date(bookingDate + 'T00:00:00').toLocaleDateString('pt-BR')}
-                                    </span>
-                                </div>
-                            </div>
-                            
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                                * Nota: Não é permitido ter 2 agendamentos ativos para o mesmo procedimento. O agendamento antigo será atualizado para a nova data.
-                            </p>
-                        </div>
-                        <div className="p-5 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+            {/* MODAL: BLOQUEIO DE SOLICITAÇÃO DUPLICADA */}
+            {isDuplicateModalOpen && typeof document !== 'undefined' && createPortal(
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="duplicate-booking-modal-title"
+                    className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md animate-in fade-in duration-200"
+                >
+                    <div className="bg-white rounded-[2rem] shadow-[0_30px_90px_rgba(15,23,42,0.28)] w-full max-w-xl max-h-[92vh] overflow-y-auto border border-slate-200/80 flex flex-col transform transition-all animate-in zoom-in-95 slide-in-from-bottom-6 duration-300">
+                        {/* Cabeçalho institucional de alerta */}
+                        <div className="relative overflow-hidden bg-gradient-to-br from-rose-600 via-rose-500 to-amber-500 p-6 text-white shrink-0">
+                            <div className="absolute top-0 right-0 w-36 h-36 bg-white/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+                            <div className="absolute bottom-0 left-0 w-24 h-24 bg-amber-300/20 rounded-full blur-xl translate-y-1/2 -translate-x-1/2 pointer-events-none" />
+
                             <button
                                 type="button"
                                 onClick={() => {
-                                    setIsConflictModalOpen(false);
-                                    setConflictBooking(null);
+                                    setIsDuplicateModalOpen(false);
+                                    setDuplicateModalBooking(null);
+                                    setDuplicateModalProc(null);
+                                    if (selectedProcedure) {
+                                        setSelectedProcedure(null);
+                                        onNavigate('consultas:novo-agendamento-procedimento');
+                                    }
                                 }}
-                                className="px-5 py-3 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all"
+                                className="absolute top-4 right-4 p-2 bg-white/15 hover:bg-white/25 rounded-xl text-white transition-all hover:rotate-90 duration-300 cursor-pointer"
+                                aria-label="Fechar aviso"
                             >
-                                Manter Anterior
+                                <X className="w-4 h-4" />
                             </button>
+
+                            <div className="flex items-center gap-4">
+                                <div className="w-13 h-13 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-lg ring-1 ring-white/30 shrink-0">
+                                    <Ban className="w-7 h-7 text-white drop-shadow-sm" />
+                                </div>
+                                <div>
+                                    <span className="inline-block text-[10px] font-black uppercase tracking-widest bg-white/20 px-2.5 py-0.5 rounded-full mb-1">
+                                        Regulação • Bloqueio Automático
+                                    </span>
+                                    <h3 id="duplicate-booking-modal-title" className="text-lg font-black text-white leading-tight uppercase tracking-tight">
+                                        Solicitação Duplicada
+                                    </h3>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Corpo com a mensagem obrigatória e detalhes do pedido existente */}
+                        <div className="p-6 space-y-4 bg-white">
+                            <div className="p-4 rounded-2xl bg-rose-50/90 border border-rose-200 flex items-start gap-3 shadow-xs">
+                                <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                                <p className="text-xs sm:text-sm text-rose-950 font-bold leading-relaxed">
+                                    {DUPLICATE_AGENDAMENTO_MESSAGE}
+                                </p>
+                            </div>
+
+                            {/* Informações do Pedido Existente */}
+                            <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3 shadow-inner">
+                                <div className="flex items-center justify-between border-b border-slate-200/70 pb-2">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
+                                        <FileText className="w-3.5 h-3.5 text-slate-400" />
+                                        Dados da Solicitação Existente
+                                    </span>
+                                    {duplicateModalBooking?.priority && (
+                                        <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                                            duplicateModalBooking.priority === 'Especial'
+                                            ? 'bg-amber-100 text-amber-800 border-amber-200'
+                                            : duplicateModalBooking.priority === 'Urgência'
+                                            ? 'bg-rose-100 text-rose-700 border-rose-200'
+                                            : 'bg-white text-slate-600 border-slate-200'
+                                        }`}>
+                                            Prioridade: {duplicateModalBooking.priority}
+                                        </span>
+                                    )}
+                                </div>
+
+                                <div className="space-y-2 text-xs">
+                                    <div>
+                                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">Paciente</span>
+                                        <span className="font-extrabold text-slate-800 uppercase">
+                                            {formatPatientName(duplicateModalBooking?.paciente || selectedPatient) || 'Não informado'}
+                                        </span>
+                                        {(duplicateModalBooking?.paciente?.cpf || selectedPatient?.cpf) && (
+                                            <span className="ml-2 text-[11px] font-mono font-bold text-slate-500">
+                                                (CPF: {(duplicateModalBooking?.paciente?.cpf || selectedPatient?.cpf || '').replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')})
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">Procedimento</span>
+                                        <span className="font-extrabold text-slate-800 uppercase break-words">
+                                            {formatProcedimentoLabel(duplicateModalBooking?.procedimento || duplicateModalProc || selectedProcedure) || 'Não informado'}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-slate-200/70">
+                                    {/* Protocolo */}
+                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">
+                                            Protocolo
+                                        </span>
+                                        <span className="text-xs font-mono font-black text-slate-900">
+                                            {formatAgendamentoProtocol(duplicateModalBooking?.id)}
+                                        </span>
+                                    </div>
+
+                                    {/* Data da Solicitação */}
+                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">
+                                            Data da Solicitação
+                                        </span>
+                                        <span className="text-xs font-extrabold text-slate-800">
+                                            {(() => {
+                                                const rawDate = duplicateModalBooking?.solicitation_date || duplicateModalBooking?.created_at;
+                                                if (!rawDate) return 'Não disponível';
+                                                const dateOnly = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate;
+                                                const parsed = new Date(`${dateOnly}T12:00:00`);
+                                                return isNaN(parsed.getTime()) ? 'Não disponível' : parsed.toLocaleDateString('pt-BR');
+                                            })()}
+                                        </span>
+                                    </div>
+
+                                    {/* Status Atual */}
+                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">
+                                            Status Atual
+                                        </span>
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wide border ${
+                                            duplicateModalBooking?.status === 'Agendado'
+                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                            : duplicateModalBooking?.status === 'Fila de espera' || (duplicateModalBooking?.status as string) === 'Fila de Espera'
+                                            ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                            : duplicateModalBooking?.status === 'Aguardando Data'
+                                            ? 'bg-sky-50 text-sky-700 border-sky-200'
+                                            : duplicateModalBooking?.status === 'Solicitado'
+                                            ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                            : duplicateModalBooking?.status === 'Retorno'
+                                            ? 'bg-teal-50 text-teal-800 border-teal-200'
+                                            : 'bg-slate-100 text-slate-700 border-slate-300'
+                                        }`}>
+                                            {duplicateModalBooking?.status || 'Ativo'}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {duplicateModalBooking?.appointment_date && (
+                                    <div className="pt-2 border-t border-slate-200/70 flex items-center justify-between text-xs">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Data Agendada:</span>
+                                        <span className="font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-lg">
+                                            {new Date(`${duplicateModalBooking.appointment_date.split('T')[0]}T12:00:00`).toLocaleDateString('pt-BR')}
+                                            {duplicateModalBooking.appointment_time ? ` às ${duplicateModalBooking.appointment_time.substring(0, 5)}` : ''}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <p className="text-[11px] text-slate-500 font-semibold leading-relaxed flex items-start gap-2">
+                                <Info className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
+                                <span>
+                                    Um paciente não pode possuir mais de uma solicitação ativa para o mesmo procedimento. Um novo pedido só poderá ser cadastrado quando a solicitação atual for <strong>Concluída/Realizada</strong> ou <strong>Cancelada</strong>.
+                                </span>
+                            </p>
+                        </div>
+
+                        {/* Rodapé */}
+                        <div className="p-5 bg-slate-50 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
                             <button
                                 type="button"
-                                onClick={handleRescheduleConflict}
-                                disabled={loading}
-                                className="px-6 py-3 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 disabled:opacity-50 text-white font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all flex items-center gap-1.5 shadow-md shadow-sky-500/20"
+                                onClick={() => {
+                                    setIsDuplicateModalOpen(false);
+                                    setDuplicateModalBooking(null);
+                                    setDuplicateModalProc(null);
+                                    if (selectedProcedure) {
+                                        setSelectedProcedure(null);
+                                        onNavigate('consultas:novo-agendamento-procedimento');
+                                    }
+                                }}
+                                className="w-full sm:w-auto px-5 py-3 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-black rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all shadow-2xs cursor-pointer"
                             >
-                                {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                                Alterar Data
+                                Entendi, Escolher Outro
                             </button>
+
+                            {duplicateModalBooking?.id && (
+                                <button
+                                    type="button"
+                                    onClick={handleDownloadDuplicateReceiptPdf}
+                                    disabled={isGenerating}
+                                    className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 disabled:opacity-60 text-white font-black rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all shadow-lg shadow-sky-600/20 flex items-center justify-center gap-2 cursor-pointer"
+                                >
+                                    {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+                                    {isGenerating ? 'Gerando PDF...' : 'Baixar Comprovante de Solicitação'}
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>,
@@ -3454,6 +3697,8 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 </div>,
                 document.body
             )}
+            {/* Portal de Impressão / Download do Comprovante em PDF */}
+            {renderPdfPortal()}
         </div>
     );
 };

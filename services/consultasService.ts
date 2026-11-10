@@ -320,6 +320,248 @@ export const getPacienteHistory = async (pacienteId: string): Promise<ConsultaAg
     }
 };
 
+// --- VALIDAÇÃO DE DUPLICIDADE DE SOLICITAÇÕES ---
+
+export const ACTIVE_AGENDAMENTO_STATUSES: readonly string[] = [
+    'Solicitado',
+    'Aguardando Data',
+    'Fila de espera',
+    'Fila de Espera',
+    'Agendado',
+    'Retorno',
+    'Pausada'
+];
+
+export const FINALIZED_AGENDAMENTO_STATUSES: readonly string[] = [
+    'Cancelado',
+    'Cancelada',
+    'Realizado',
+    'Não Realizado'
+];
+
+export const DUPLICATE_AGENDAMENTO_MESSAGE =
+    'Já existe uma solicitação cadastrada para este paciente e procedimento. Não é permitido realizar um pedido duplicado.';
+
+export const isActiveAgendamentoStatus = (status?: string | null): boolean => {
+    if (!status) return false;
+    const normalized = status.trim().toLowerCase();
+    return ![
+        'cancelado',
+        'cancelada',
+        'realizado',
+        'concluido',
+        'concluído',
+        'não realizado',
+        'nao realizado'
+    ].includes(normalized);
+};
+
+export const formatAgendamentoProtocol = (bookingId?: string | null): string => {
+    if (!bookingId) return '—';
+    return `#${bookingId.substring(0, 8).toUpperCase()}`;
+};
+
+export class DuplicateAgendamentoError extends Error {
+    public readonly existingBooking: ConsultaAgendamento | null;
+    public readonly code = 'DUPLICATE_AGENDAMENTO';
+
+    constructor(existingBooking: ConsultaAgendamento | null, message: string = DUPLICATE_AGENDAMENTO_MESSAGE) {
+        super(message);
+        this.name = 'DuplicateAgendamentoError';
+        this.existingBooking = existingBooking;
+        Object.setPrototypeOf(this, DuplicateAgendamentoError.prototype);
+    }
+}
+
+const parseDuplicateExceptionMetadata = (
+    errMsg: string,
+    patientId: string,
+    procedimentoId: string
+): ConsultaAgendamento | null => {
+    const match = errMsg.match(/SOLICITACAO_DUPLICADA\|([^|]*)\|([^|]*)\|([^\s|]*)/);
+    if (!match) return null;
+    const [, id, status, solDate] = match;
+    if (!id) return null;
+    return {
+        id: id.trim(),
+        patient_id: patientId,
+        procedimento_id: procedimentoId,
+        status: (status?.trim() || 'Solicitado') as ConsultaAgendamento['status'],
+        solicitation_date: solDate?.trim() || undefined,
+        quantity: 1,
+        priority: 'Normal',
+        created_by: ''
+    };
+};
+
+/**
+ * Consulta no banco de dados se já existe uma solicitação ATIVA para o mesmo paciente (ID ou CPF)
+ * e o mesmo procedimento (ID ou código único).
+ * Solicitações com status 'Cancelado', 'Realizado' ou 'Não Realizado' NÃO bloqueiam novo cadastro.
+ */
+export const checkActiveDuplicateAgendamento = async (
+    patient: { id: string; cpf?: string | null },
+    procedimento: { id: string; code?: string | null },
+    excludeAgendamentoId?: string
+): Promise<ConsultaAgendamento | null> => {
+    if (!patient?.id || !procedimento?.id) return null;
+
+    const cleanCpfInput = patient.cpf ? patient.cpf.replace(/\D/g, '').trim() : '';
+    const cleanCodeInput = procedimento.code ? procedimento.code.trim() : '';
+
+    // 1. Tentar primeiro via RPC SECURITY DEFINER (se já implantada no Supabase),
+    //    garantindo verificação global entre setores mesmo com RLS restritivo.
+    if (!excludeAgendamentoId) {
+        try {
+            const { data: rpcData, error: rpcError } = await supabase.rpc('verificar_solicitacao_ativa_duplicada', {
+                p_patient_id: patient.id,
+                p_procedimento_id: procedimento.id,
+                p_cpf: cleanCpfInput || null,
+                p_proc_code: cleanCodeInput || null
+            });
+
+            if (!rpcError) {
+                const rows = Array.isArray(rpcData) ? rpcData : rpcData ? [rpcData] : [];
+                if (rows.length === 0) {
+                    return null;
+                }
+                const hit = rows[0] as any;
+                // Tentar enriquecer via consulta direta caso o usuário tenha visibilidade de leitura
+                const fullRow = await getAgendamentoById(hit.id).catch(() => null);
+                if (fullRow) return fullRow;
+
+                return {
+                    id: hit.id,
+                    patient_id: hit.patient_id || patient.id,
+                    procedimento_id: hit.procedimento_id || procedimento.id,
+                    status: hit.status,
+                    solicitation_date: hit.solicitation_date || undefined,
+                    appointment_date: hit.appointment_date || null,
+                    appointment_time: hit.appointment_time || undefined,
+                    priority: hit.priority || 'Normal',
+                    created_at: hit.created_at,
+                    is_retorno: hit.is_retorno,
+                    retorno_tipo: hit.retorno_tipo,
+                    quantity: 1,
+                    created_by: ''
+                };
+            }
+            // Se erro indicar que a RPC ainda não existe no banco, segue para consulta direta abaixo
+            const msg = String(rpcError.message || '');
+            if (
+                rpcError.code !== '42883' &&
+                rpcError.code !== 'PGRST202' &&
+                !msg.includes('Could not find the function') &&
+                !msg.includes('does not exist')
+            ) {
+                console.warn('[consultasService] Aviso ao chamar RPC verificar_solicitacao_ativa_duplicada, usando consulta direta:', msg);
+            }
+        } catch {
+            // Fallback transparente para consulta direta
+        }
+    }
+
+    // 2. Consulta direta em tempo real nas tabelas do Supabase
+    const patientIdsSet = new Set<string>([patient.id]);
+    if (cleanCpfInput.length === 11) {
+        const formattedCpf = cleanCpfInput.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+        const { data: matchingPatients } = await supabase
+            .from('consultas_pacientes')
+            .select('id')
+            .or(`cpf.eq.${cleanCpfInput},cpf.eq.${formattedCpf}`);
+        (matchingPatients || []).forEach((p: any) => {
+            if (p?.id) patientIdsSet.add(p.id);
+        });
+    }
+
+    const procIdsSet = new Set<string>([procedimento.id]);
+    if (cleanCodeInput) {
+        const { data: matchingProcs } = await supabase
+            .from('consultas_procedimentos')
+            .select('id')
+            .eq('code', cleanCodeInput);
+        (matchingProcs || []).forEach((pr: any) => {
+            if (pr?.id) procIdsSet.add(pr.id);
+        });
+    }
+
+    const patientIds = Array.from(patientIdsSet);
+    const procIds = Array.from(procIdsSet);
+
+    let query = supabase
+        .from('consultas_agendamentos')
+        .select(`
+            *,
+            paciente:consultas_pacientes(*),
+            procedimento:consultas_procedimentos(*),
+            responsavel:profiles(id, name)
+        `)
+        .in('patient_id', patientIds)
+        .in('procedimento_id', procIds)
+        .in('status', [...ACTIVE_AGENDAMENTO_STATUSES])
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+    if (excludeAgendamentoId) {
+        query = query.neq('id', excludeAgendamentoId);
+    }
+
+    let { data, error } = await query;
+
+    if (error && (error.code === '42703' || error.code === 'PGRST204' || error.message?.includes('column'))) {
+        let fallbackQuery = supabase
+            .from('consultas_agendamentos')
+            .select(`
+                id,
+                patient_id,
+                procedimento_id,
+                status,
+                appointment_date,
+                priority,
+                created_at,
+                paciente:consultas_pacientes(id, name, cpf),
+                procedimento:consultas_procedimentos(id, name, code, type)
+            `)
+            .in('patient_id', patientIds)
+            .in('procedimento_id', procIds)
+            .in('status', [...ACTIVE_AGENDAMENTO_STATUSES])
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (excludeAgendamentoId) {
+            fallbackQuery = fallbackQuery.neq('id', excludeAgendamentoId);
+        }
+
+        const fallbackRes = await fallbackQuery;
+        data = fallbackRes.data as any;
+        error = fallbackRes.error;
+    }
+
+    if (error) {
+        console.error('[consultasService] Erro ao verificar duplicidade:', error.message);
+        throw error;
+    }
+
+    if (data && data.length > 0) {
+        const row: any = data[0];
+        if (row.procedimento) {
+            const espId = row.procedimento.especialista_id || getProcEspecialistaMapping(row.procedimento.id);
+            if (espId) {
+                const especialistas = await getEspecialistas().catch(() => []);
+                const espObj = especialistas.find(e => e.id === espId) || null;
+                row.procedimento = {
+                    ...row.procedimento,
+                    especialista_id: espId,
+                    especialista: espObj
+                };
+            }
+        }
+        return row as ConsultaAgendamento;
+    }
+
+    return null;
+};
+
 // --- PROFISSIONAIS ESPECIALISTAS ---
 
 const ESPECIALISTA_STORAGE_KEY = 'consultas_especialistas_cache';
@@ -1834,20 +2076,20 @@ export const searchRemoteAgendamentos = async (
 
 export const createAgendamento = async (agendamento: Omit<ConsultaAgendamento, 'id' | 'created_at'>): Promise<ConsultaAgendamento> => {
     try {
-        // 1. Conflict Prevention check: check if this patient already has an active booking for this procedure on this day
-        if (agendamento.status === 'Agendado' && agendamento.appointment_date) {
-            const { data: conflicts, error: conflictErr } = await supabase
-                .from('consultas_agendamentos')
-                .select('id')
-                .eq('patient_id', agendamento.patient_id)
-                .eq('procedimento_id', agendamento.procedimento_id)
-                .eq('appointment_date', agendamento.appointment_date)
-                .eq('status', 'Agendado')
-                .limit(1);
+        // 1. Bloqueio rigoroso de solicitações duplicadas ativas (mesmo paciente + mesmo procedimento)
+        //    Válido para todos os status ativos (Solicitado, Aguardando Data, Fila de espera, Agendado, Retorno, Pausada)
+        //    e para todas as prioridades/usuários/setores.
+        const patientCpf: string | null = (agendamento as any)?.paciente?.cpf || null;
+        const procCode: string | null = (agendamento as any)?.procedimento?.code || null;
 
-            if (conflictErr) throw conflictErr;
-            if (conflicts && conflicts.length > 0) {
-                throw new Error('Paciente já possui um agendamento ativo para este exame/consulta nesta data.');
+        if (isActiveAgendamentoStatus(agendamento.status || 'Solicitado')) {
+            const activeDuplicate = await checkActiveDuplicateAgendamento(
+                { id: agendamento.patient_id, cpf: patientCpf },
+                { id: agendamento.procedimento_id, code: procCode }
+            );
+
+            if (activeDuplicate) {
+                throw new DuplicateAgendamentoError(activeDuplicate);
             }
         }
 
@@ -1995,6 +2237,24 @@ export const createAgendamento = async (agendamento: Omit<ConsultaAgendamento, '
         }
 
         if (error) {
+            const errMsg = String(error.message || '');
+            const isDuplicateErr =
+                error.code === '23505' ||
+                errMsg.includes('SOLICITACAO_DUPLICADA') ||
+                errMsg.includes('idx_consultas_agendamentos_unique_active') ||
+                errMsg.includes('unique_active_appointment');
+
+            if (isDuplicateErr) {
+                const existingDup =
+                    (await checkActiveDuplicateAgendamento(
+                        { id: agendamento.patient_id, cpf: patientCpf },
+                        { id: agendamento.procedimento_id, code: procCode }
+                    ).catch(() => null)) ||
+                    parseDuplicateExceptionMetadata(errMsg, agendamento.patient_id, agendamento.procedimento_id);
+
+                throw new DuplicateAgendamentoError(existingDup);
+            }
+
             // Check if it's the trigger error
             if (error.message && error.message.includes('Vagas insuficientes')) {
                 throw new Error('Vagas esgotadas para este procedimento.');
@@ -2195,25 +2455,38 @@ export const getAgendamentoById = async (id: string): Promise<ConsultaAgendament
             .single();
 
         if (!error && data) {
+            let enriched: any = { ...data };
+            if (enriched.procedimento) {
+                const espId = enriched.procedimento.especialista_id || getProcEspecialistaMapping(enriched.procedimento.id);
+                if (espId) {
+                    const especialistas = await getEspecialistas().catch(() => []);
+                    const espObj = especialistas.find(e => e.id === espId) || null;
+                    enriched.procedimento = {
+                        ...enriched.procedimento,
+                        especialista_id: espId,
+                        especialista: espObj
+                    };
+                }
+            }
             const metaMap = getPausedMetadataMap();
             const meta = metaMap[id];
             if (meta) {
                 return {
-                    ...data,
+                    ...enriched,
                     is_paused: meta.is_paused,
-                    status: meta.is_paused ? 'Pausada' : data.status,
-                    paused_at: meta.paused_at || data.paused_at,
-                    paused_by: meta.paused_by || data.paused_by,
-                    paused_by_name: meta.paused_by_name || data.paused_by_name,
-                    pause_reason: meta.pause_reason || data.pause_reason,
-                    resumed_at: meta.resumed_at || data.resumed_at,
-                    resumed_by: meta.resumed_by || data.resumed_by,
-                    resumed_by_name: meta.resumed_by_name || data.resumed_by_name,
-                    original_status: meta.original_status || data.original_status,
-                    pause_history: meta.pause_history || data.pause_history || []
+                    status: meta.is_paused ? 'Pausada' : enriched.status,
+                    paused_at: meta.paused_at || enriched.paused_at,
+                    paused_by: meta.paused_by || enriched.paused_by,
+                    paused_by_name: meta.paused_by_name || enriched.paused_by_name,
+                    pause_reason: meta.pause_reason || enriched.pause_reason,
+                    resumed_at: meta.resumed_at || enriched.resumed_at,
+                    resumed_by: meta.resumed_by || enriched.resumed_by,
+                    resumed_by_name: meta.resumed_by_name || enriched.resumed_by_name,
+                    original_status: meta.original_status || enriched.original_status,
+                    pause_history: meta.pause_history || enriched.pause_history || []
                 } as unknown as ConsultaAgendamento;
             }
-            return data as unknown as ConsultaAgendamento;
+            return enriched as unknown as ConsultaAgendamento;
         }
     } catch (e) {}
 
@@ -2823,6 +3096,43 @@ export const updateAgendamento = async (
         if (cleanUpdates.canceled_by_name === '') cleanUpdates.canceled_by_name = null;
         if (cleanUpdates.canceled_at === '') cleanUpdates.canceled_at = null;
 
+        // Validar duplicidade em edições/transferências/reativações que alteram paciente, procedimento ou reativam status encerrado
+        if (
+            cleanUpdates.patient_id !== undefined ||
+            cleanUpdates.procedimento_id !== undefined ||
+            (cleanUpdates.status !== undefined && isActiveAgendamentoStatus(cleanUpdates.status))
+        ) {
+            const { data: currentItem } = await supabase
+                .from('consultas_agendamentos')
+                .select('patient_id, procedimento_id, status')
+                .eq('id', id)
+                .maybeSingle();
+
+            if (currentItem) {
+                const targetPatientId = cleanUpdates.patient_id || currentItem.patient_id;
+                const targetProcId = cleanUpdates.procedimento_id || currentItem.procedimento_id;
+                const targetStatus = cleanUpdates.status || currentItem.status;
+
+                const changedPair =
+                    targetPatientId !== currentItem.patient_id ||
+                    targetProcId !== currentItem.procedimento_id;
+                const reactivatingFromFinalized =
+                    !isActiveAgendamentoStatus(currentItem.status) &&
+                    isActiveAgendamentoStatus(targetStatus);
+
+                if ((changedPair || reactivatingFromFinalized) && isActiveAgendamentoStatus(targetStatus)) {
+                    const existingDup = await checkActiveDuplicateAgendamento(
+                        { id: targetPatientId, cpf: paciente?.cpf },
+                        { id: targetProcId, code: procedimento?.code },
+                        id
+                    );
+                    if (existingDup) {
+                        throw new DuplicateAgendamentoError(existingDup);
+                    }
+                }
+            }
+        }
+
         // Sincronizar procedimento com cotas livres caso haja transição para Agendado ou definição de data
         let procId = cleanUpdates.procedimento_id;
         if (cleanUpdates.status === 'Agendado' || cleanUpdates.appointment_date) {
@@ -2996,7 +3306,18 @@ export const updateAgendamento = async (
         }
 
         return data;
-    } catch (error) {
+    } catch (error: any) {
+        if (error instanceof DuplicateAgendamentoError || error?.code === 'DUPLICATE_AGENDAMENTO') {
+            throw error;
+        }
+        const errMsg = String(error?.message || '');
+        if (
+            error?.code === '23505' ||
+            errMsg.includes('SOLICITACAO_DUPLICADA') ||
+            errMsg.includes('idx_consultas_agendamentos_unique_active')
+        ) {
+            throw new DuplicateAgendamentoError(null);
+        }
         const appError = handleSupabaseError(error);
         console.error('[consultasService] updateAgendamento Error:', appError.message);
         throw appError;
