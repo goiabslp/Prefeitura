@@ -12,6 +12,7 @@ import { seedDefaultProcedures } from '../../services/procedimentosSeed';
 import { formatPatientName } from '../common/PacientesTab';
 import { RevisarDuplicidadesModal } from './RevisarDuplicidadesModal';
 import { procedureMatchesSearch } from '../../services/procedimentosStandardizer';
+import { buildProcedimentosHierarchy, formatProcedimentoDisplay } from '../../utils/procedimentosHierarchy';
 
 interface ProcedimentosScreenProps {
     currentUser?: User | null;
@@ -157,7 +158,7 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
     };
 
     // Ação de cópia rápida de código e nome do procedimento (Restrita a Administradores)
-    const handleCopyProcedure = async (e: React.MouseEvent, proc: ConsultaProcedimento) => {
+    const handleCopyProcedure = async (e: React.MouseEvent, proc: ConsultaProcedimento, parentName?: string) => {
         e.preventDefault();
         e.stopPropagation();
 
@@ -167,12 +168,12 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
         }
 
         const code = proc.code !== undefined && proc.code !== null ? String(proc.code).trim() : '';
-        const name = proc.name !== undefined && proc.name !== null ? String(proc.name).trim() : '';
+        const displayName = formatProcedimentoDisplay(proc, parentName, especialistas);
 
         // Formato obrigatório:
         // Código: [código]
         // Procedimento: [nome]
-        const textToCopy = `Código: ${code}\nProcedimento: ${name}`;
+        const textToCopy = `Código: ${code}\nProcedimento: ${displayName}`;
 
         try {
             if (navigator?.clipboard?.writeText) {
@@ -402,99 +403,30 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
         });
     }, [procedures, especialistas, procSearch, selectedTypeFilter, selectedStatusFilter]);
 
-    // Procedimentos agrupados hierarquicamente: Pais (sem parent_id e sem especialista) e Filhos (vinculados a especialistas)
+    // Procedimentos agrupados hierarquicamente: Pais + vinculados órfãos sem pai associado
     const hierarchicalProcedures = useMemo(() => {
-        // Procedimentos pais são aqueles que não possuem parent_id e não possuem especialista_id direto
-        const parents = procedures.filter(p => !p.parent_id && !p.especialista_id);
-        
-        // Mapear filhos para cada pai
-        const childrenByParent = new Map<string, ConsultaProcedimento[]>();
-        
-        // Filhos reais com parent_id ou que têm código derivado (ex: 0397-10) ou possuem especialista_id
-        procedures.forEach(p => {
-            if (p.parent_id) {
-                const list = childrenByParent.get(p.parent_id) || [];
-                list.push(p);
-                childrenByParent.set(p.parent_id, list);
-            } else if (p.code && p.code.includes('-')) {
-                const parentCode = p.code.split('-')[0];
-                const matchingParent = parents.find(parent => parent.code === parentCode);
-                if (matchingParent) {
-                    const list = childrenByParent.get(matchingParent.id) || [];
-                    if (!list.some(existing => existing.id === p.id)) {
-                        list.push(p);
-                        childrenByParent.set(matchingParent.id, list);
-                    }
-                }
-            } else if (p.especialista_id) {
-                // Procedimento legado com especialista direto que não tem parent_id explícito
-                // Se houver um pai com mesmo tipo ou prefixo, associa; senão, trata individualmente
-                const matchingParent = parents.find(parent => p.name.toUpperCase().startsWith(parent.name.toUpperCase()) && parent.id !== p.id);
-                if (matchingParent) {
-                    const list = childrenByParent.get(matchingParent.id) || [];
-                    if (!list.some(existing => existing.id === p.id)) {
-                        list.push(p);
-                        childrenByParent.set(matchingParent.id, list);
-                    }
-                }
-            }
+        return buildProcedimentosHierarchy(procedures, especialistas, {
+            search: procSearch,
+            typeFilter: selectedTypeFilter,
+            statusFilter: selectedStatusFilter
         });
-
-        // Filtragem inteligente da lista
-        const cleanSearch = procSearch.toLowerCase().trim();
-
-        const filteredParents = parents.filter(parent => {
-            const children = childrenByParent.get(parent.id) || [];
-
-            // Tipo Filter
-            if (selectedTypeFilter !== 'Todos' && parent.type !== selectedTypeFilter) {
-                return false;
-            }
-
-            // Status Filter
-            if (selectedStatusFilter === 'Ativos' && parent.status !== 'Ativo') {
-                return false;
-            }
-            if (selectedStatusFilter === 'Suspensos' && parent.status === 'Ativo') {
-                return false;
-            }
-
-            // Busca de texto inteligente: por código pai, nome do procedimento, código do filho ou nome do médico
-            if (cleanSearch) {
-                const parentMatches = 
-                    procedureMatchesSearch(parent.name, cleanSearch, parent.code) ||
-                    parent.type.toLowerCase().includes(cleanSearch);
-
-                const childMatches = children.some(child => {
-                    const espName = child.especialista?.nome || especialistas.find(e => e.id === child.especialista_id)?.nome || '';
-                    return (
-                        procedureMatchesSearch(child.name, cleanSearch, child.code) ||
-                        procedureMatchesSearch(espName, cleanSearch)
-                    );
-                });
-
-                return parentMatches || childMatches;
-            }
-
-            return true;
-        });
-
-        return {
-            parents: filteredParents,
-            allParents: parents,
-            childrenByParent
-        };
     }, [procedures, especialistas, procSearch, selectedTypeFilter, selectedStatusFilter]);
 
-    // Metrics summary (apenas procedimentos principais contabilizados nas métricas de procedimentos)
+    // Métricas resumidas cobrindo todos os cards visíveis na raiz e o total cadastrado no banco
     const metrics = useMemo(() => {
-        const parents = procedures.filter(p => !p.parent_id && !p.especialista_id);
-        const total = parents.length;
-        const ativos = parents.filter(p => p.status === 'Ativo').length;
-        const suspensos = parents.filter(p => p.status !== 'Ativo').length;
+        const roots = hierarchicalProcedures.allVisibleRoots;
+        const total = roots.length;
+        const ativos = roots.filter(p => p.status === 'Ativo').length;
+        const suspensos = roots.filter(p => p.status !== 'Ativo').length;
         const totalCotas = procedures.reduce((sum, p) => sum + Math.max(0, p.available_quantity || 0), 0);
-        return { total, ativos, suspensos, totalCotas };
-    }, [procedures]);
+        return {
+            total,
+            ativos,
+            suspensos,
+            totalCotas,
+            ...hierarchicalProcedures.counts
+        };
+    }, [procedures, hierarchicalProcedures]);
 
     // Modal Handlers: Novo Procedimento Principal
     const handleOpenProcModal = (proc: ConsultaProcedimento | null = null) => {
@@ -832,7 +764,10 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
 
                     {/* Quick Metrics Cards */}
                     <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl shadow-xs">
+                        <div
+                            className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl shadow-xs"
+                            title={`${metrics.strictParentsCount} procedimentos principais + ${metrics.orphanCount} vinculados sem pai associado`}
+                        >
                             <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total</span>
                             <span className="text-xs font-black text-slate-800">{metrics.total}</span>
                         </div>
@@ -844,6 +779,15 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                             <span className="text-[10px] font-black uppercase tracking-wider text-amber-700">Suspensos</span>
                             <span className="text-xs font-black text-amber-800">{metrics.suspensos}</span>
                         </div>
+                        {metrics.groupedChildrenCount > 0 && (
+                            <div
+                                className="flex items-center gap-2 px-3 py-1.5 bg-violet-50 border border-violet-200 rounded-xl shadow-xs"
+                                title={`${metrics.total} na listagem principal + ${metrics.groupedChildrenCount} vinculados dentro de procedimentos pais = ${metrics.totalRegisteredCount} registros no banco`}
+                            >
+                                <span className="text-[10px] font-black uppercase tracking-wider text-violet-700">Banco</span>
+                                <span className="text-xs font-black text-violet-800">{metrics.totalRegisteredCount}</span>
+                            </div>
+                        )}
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-xl shadow-xs">
                             <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700">Cotas</span>
                             <span className="text-xs font-black text-indigo-800">{metrics.totalCotas}</span>
@@ -889,7 +833,7 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                                     <div className="relative inline-flex items-center shrink-0">
                                                         <button
                                                             type="button"
-                                                            onClick={(e) => handleCopyProcedure(e, selectedProc)}
+                                                            onClick={(e) => handleCopyProcedure(e, selectedProc, selectedProc.parent_name)}
                                                             className={`p-1.5 rounded-md transition-all cursor-pointer ${
                                                                 copiedProcId === selectedProc.id
                                                                     ? 'text-emerald-600 bg-emerald-50 border border-emerald-200 shadow-2xs'
@@ -1237,6 +1181,11 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                     const children = hierarchicalProcedures.childrenByParent.get(parent.id) || [];
                                     const isExpanded = !!expandedParentIds[parent.id];
                                     const isSuspended = parent.status !== 'Ativo';
+                                    const isOrphanSpecialist = hierarchicalProcedures.orphanRootIds.has(parent.id);
+                                    const rootEspObj = isOrphanSpecialist
+                                        ? (parent.especialista || especialistas.find(e => e.id === parent.especialista_id) || null)
+                                        : null;
+                                    const rootEspNome = rootEspObj?.nome || (parent.especialista_id ? 'Especialista Vinculado' : '');
 
                                     const typeConfig = (() => {
                                         switch (parent.type) {
@@ -1295,10 +1244,28 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                                                 {parent.type}
                                                             </span>
 
-                                                            {/* Badge Procedimento Principal */}
-                                                            <span className="px-2 py-0.5 rounded-lg text-[8.5px] font-extrabold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
-                                                                Procedimento Principal
-                                                            </span>
+                                                            {/* Badge Procedimento Principal vs. Especialista Vinculado sem Pai */}
+                                                            {isOrphanSpecialist ? (
+                                                                <>
+                                                                    <span
+                                                                        className="px-2 py-0.5 rounded-lg text-[8.5px] font-extrabold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200 inline-flex items-center gap-1"
+                                                                        title={rootEspObj?.especialidade ? `Especialista: ${rootEspNome} (${rootEspObj.especialidade})` : `Especialista: ${rootEspNome}`}
+                                                                    >
+                                                                        <Stethoscope className="w-2.5 h-2.5 shrink-0" />
+                                                                        <span>Especialista: {rootEspNome || 'Vinculado'}</span>
+                                                                    </span>
+                                                                    <span
+                                                                        className="px-2 py-0.5 rounded-lg text-[8.5px] font-extrabold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200"
+                                                                        title="Procedimento vinculado a especialista sem procedimento pai associado"
+                                                                    >
+                                                                        Sem Pai Associado
+                                                                    </span>
+                                                                </>
+                                                            ) : (
+                                                                <span className="px-2 py-0.5 rounded-lg text-[8.5px] font-extrabold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                                                                    Procedimento Principal
+                                                                </span>
+                                                            )}
 
                                                             {/* Badge Contador de Especialistas */}
                                                             {children.length > 0 ? (
@@ -1312,11 +1279,11 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                                                     <span>{children.length} especialista{children.length > 1 ? 's' : ''} vinculado{children.length > 1 ? 's' : ''}</span>
                                                                     {isExpanded ? <ChevronUp className="w-3 h-3 ml-0.5" /> : <ChevronDown className="w-3 h-3 ml-0.5" />}
                                                                 </button>
-                                                            ) : (
+                                                            ) : !isOrphanSpecialist ? (
                                                                 <span className="text-[8.5px] font-semibold text-slate-400">
                                                                     Sem especialistas vinculados
                                                                 </span>
-                                                            )}
+                                                            ) : null}
                                                         </div>
 
                                                         <div className="flex items-center gap-1.5 min-w-0">
@@ -1368,18 +1335,20 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                                         </span>
                                                     </div>
 
-                                                    {/* Botão Rápido: + Especialista neste pai */}
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleOpenAddEspecialistaModal(parent.id);
-                                                        }}
-                                                        className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
-                                                        title={`Adicionar Especialista a ${parent.name}`}
-                                                    >
-                                                        <Plus className="w-3 h-3" />
-                                                        <span>Especialista</span>
-                                                    </button>
+                                                    {/* Botão Rápido: + Especialista neste pai (apenas para procedimentos principais reais) */}
+                                                    {!isOrphanSpecialist && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleOpenAddEspecialistaModal(parent.id);
+                                                            }}
+                                                            className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
+                                                            title={`Adicionar Especialista a ${parent.name}`}
+                                                        >
+                                                            <Plus className="w-3 h-3" />
+                                                            <span>Especialista</span>
+                                                        </button>
+                                                    )}
 
                                                     {/* Actions Area */}
                                                     <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -1392,7 +1361,7 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                                                     ? 'text-amber-600 bg-amber-50/60 hover:bg-amber-100 border-amber-200'
                                                                     : 'text-emerald-600 bg-emerald-50/60 hover:bg-emerald-100 border-emerald-200'
                                                             }`}
-                                                            title={!isSuspended ? 'Suspender Procedimento Principal' : 'Reativar Procedimento Principal'}
+                                                            title={!isSuspended ? (isOrphanSpecialist ? 'Suspender Procedimento' : 'Suspender Procedimento Principal') : (isOrphanSpecialist ? 'Reativar Procedimento' : 'Reativar Procedimento Principal')}
                                                         >
                                                             {actionLoading === `suspend-${parent.id}` ? (
                                                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -1407,7 +1376,7 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                                         <button
                                                             onClick={() => handleOpenProcModal(parent)}
                                                             className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 border border-slate-200/80 rounded-lg transition-all cursor-pointer"
-                                                            title="Editar Procedimento Principal"
+                                                            title={isOrphanSpecialist ? 'Editar Procedimento' : 'Editar Procedimento Principal'}
                                                         >
                                                             <Edit2 className="w-3.5 h-3.5" />
                                                         </button>
@@ -1416,7 +1385,7 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                                         <button
                                                             onClick={(e) => handleDeleteProcedure(e, parent.id, parent.name)}
                                                             className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200/80 rounded-lg transition-all cursor-pointer"
-                                                            title="Excluir Procedimento Principal"
+                                                            title={isOrphanSpecialist ? 'Excluir Procedimento' : 'Excluir Procedimento Principal'}
                                                         >
                                                             <Trash2 className="w-3.5 h-3.5" />
                                                         </button>
@@ -1481,13 +1450,18 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                                                                         {espObj.especialidade}
                                                                                     </span>
                                                                                 )}
+                                                                                {espNome && espNome !== 'Especialista' && (
+                                                                                    <span className="px-1.5 py-0.2 rounded text-[8px] font-extrabold uppercase bg-indigo-100/80 text-indigo-800 border border-indigo-200">
+                                                                                        {espNome}
+                                                                                    </span>
+                                                                                )}
                                                                             </div>
                                                                             <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
                                                                                 {isAdmin && (
                                                                                     <div className="relative inline-flex items-center shrink-0">
                                                                                         <button
                                                                                             type="button"
-                                                                                            onClick={(e) => handleCopyProcedure(e, child)}
+                                                                                            onClick={(e) => handleCopyProcedure(e, child, parent.name)}
                                                                                             className={`p-1 rounded-md transition-all cursor-pointer ${
                                                                                                 copiedProcId === child.id
                                                                                                     ? 'text-emerald-600 bg-emerald-50 border border-emerald-200 shadow-2xs'
@@ -1509,8 +1483,11 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                                                                         )}
                                                                                     </div>
                                                                                 )}
-                                                                                <h5 className="font-extrabold text-slate-800 text-xs truncate uppercase">
-                                                                                    {child.name}
+                                                                                <h5 
+                                                                                    className="font-extrabold text-slate-800 text-xs truncate uppercase"
+                                                                                    title={formatProcedimentoDisplay(child, parent.name, especialistas)}
+                                                                                >
+                                                                                    {formatProcedimentoDisplay(child, parent.name, especialistas) || `${parent.name} - ${espNome}`}
                                                                                 </h5>
                                                                             </div>
                                                                         </div>
@@ -1730,7 +1707,7 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                         <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
                             <div>
                                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Adicionar Vagas em Lote</h3>
-                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">{selectedProc.name}</p>
+                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">{formatProcedimentoDisplay(selectedProc, selectedProc.parent_name, especialistas)}</p>
                             </div>
                             <button onClick={() => { setIsAddVagasModalOpen(false); setSelectedTimes([]); }} className="p-1.5 hover:bg-slate-200 rounded-xl text-slate-400 hover:text-slate-700 transition-colors">
                                 <X className="w-5 h-5" />

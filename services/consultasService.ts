@@ -1608,39 +1608,45 @@ export const saveProcEspecialistaMapping = (procId: string, especialistaId?: str
     })();
 };
 
+import { formatProcedimentoDisplay } from '../utils/procedimentosHierarchy';
+
+// Cache em memória dos nomes de procedimentos principais para resolução em seletores/pesquisas
+let memProcParentNamesMap = new Map<string, string>();
+
+export const getCachedProcedimentosParents = (): Map<string, string> => {
+    return memProcParentNamesMap;
+};
+
+export const setCachedProcedimentosParents = (map: Map<string, string>) => {
+    memProcParentNamesMap = map;
+};
+
 /**
- * Formata o label do procedimento conforme regra estrita:
- * Com especialista: "Nome do Procedimento - Especialista" (ex: "Consulta em Cardiologia - Dr. Carlos Silva")
- * Sem especialista: "Nome do Procedimento" (ex: "Consulta em Cardiologia")
+ * Formata o label do procedimento conforme regra estrita da camada de apresentação:
+ * Com especialista: "NOME DO PROCEDIMENTO PAI - NOME COMPLETO DO ESPECIALISTA" (ex: "CONSULTA EM CARDIOLOGIA - EURICO ABREU DE OLIVEIRA JÚNIOR")
+ * Sem especialista: "NOME DO PROCEDIMENTO" (ex: "CONSULTA EM CARDIOLOGIA")
+ * Preserva o nome do pai caso o procedimento seja filho e evita duplicidades.
  */
 export const formatProcedimentoLabel = (
-    procedimento?: { id?: string; name: string; especialista?: { nome: string } | null; especialista_id?: string | null } | null,
-    especialistasList?: ConsultaEspecialista[]
+    procedimento?: { id?: string; name: string; code?: string; especialista?: { nome: string } | null; especialista_id?: string | null; parent_id?: string | null; parent_name?: string | null } | null,
+    especialistasList?: ConsultaEspecialista[],
+    parentProcOrName?: { id?: string; name: string } | string | null
 ): string => {
     if (!procedimento || !procedimento.name) return '';
-    
-    let espName = procedimento.especialista?.nome;
-    const espId = procedimento.especialista_id || (procedimento.id ? getProcEspecialistaMapping(procedimento.id) : null);
 
-    if (!espName && espId) {
-        const list = (especialistasList && especialistasList.length > 0) ? especialistasList : getCachedEspecialistas();
-        const found = list.find(e => e.id === espId);
-        if (found) {
-            espName = found.nome;
+    // Se o procedimento não tiver parent_name nem parentProcOrName, tenta resolver pelo mapeamento conhecido
+    let resolvedParentName = typeof parentProcOrName === 'string'
+        ? parentProcOrName
+        : parentProcOrName?.name || procedimento.parent_name || null;
+
+    if (!resolvedParentName && procedimento.parent_id) {
+        if (memProcParentNamesMap.has(procedimento.parent_id)) {
+            resolvedParentName = memProcParentNamesMap.get(procedimento.parent_id)!;
         }
     }
 
-    if (espName && espName.trim()) {
-        const cleanProcName = procedimento.name.trim();
-        const cleanEspName = espName.trim();
-        // Evita duplicar se o nome já contiver o especialista
-        if (cleanProcName.toUpperCase().includes(cleanEspName.toUpperCase())) {
-            return cleanProcName;
-        }
-        return `${cleanProcName} - ${cleanEspName}`;
-    }
-
-    return procedimento.name.trim();
+    const list = (especialistasList && especialistasList.length > 0) ? especialistasList : getCachedEspecialistas();
+    return formatProcedimentoDisplay(procedimento as any, resolvedParentName, list);
 };
 
 // --- MAPEAMENTO CENTRALIZADO: PROCEDIMENTO PAI <-> PROCEDIMENTOS FILHOS ---
@@ -1784,13 +1790,38 @@ export const getProcedimentos = async (
             }
         } catch {}
 
+        // Identificar nomes dos pais estritos para enriquecer filhos
+        const parentNameById = new Map<string, string>();
+        const parentNameByCode = new Map<string, string>();
+        procs.forEach(p => {
+            if (!p.parent_id && !p.especialista_id) {
+                parentNameById.set(p.id, p.name);
+                if (p.code) parentNameByCode.set(p.code, p.name);
+            }
+        });
+
+        // Atualiza cache em memória dos pais para uso nos seletores
+        setCachedProcedimentosParents(parentNameById);
+
         const mapped = procs.map(p => {
             const espId = p.especialista_id || getProcEspecialistaMapping(p.id);
             const parentId = p.parent_id || getProcParentMapping(p.id) || null;
             const espObj = (espId ? espMap.get(espId) : null) || p.especialista || null;
+
+            let resolvedParentName: string | null = null;
+            if (parentId && parentNameById.has(parentId)) {
+                resolvedParentName = parentNameById.get(parentId)!;
+            } else if (p.code && p.code.includes('-')) {
+                const parentCode = p.code.split('-')[0];
+                if (parentNameByCode.has(parentCode)) {
+                    resolvedParentName = parentNameByCode.get(parentCode)!;
+                }
+            }
+
             return {
                 ...p,
                 parent_id: parentId,
+                parent_name: resolvedParentName,
                 especialista_id: espId || null,
                 especialista: espObj
             };
@@ -2307,7 +2338,15 @@ export const recalculateAndPersistQueuePositions = async (): Promise<void> => {
 
         if (!queueItems || queueItems.length === 0) return;
 
-        // Agrupa por procedimento para garantir que cada fila médica tenha suas posições
+        // Excluir da ordenação da fila ativa itens suspensos por cancelamento pendente
+        const pendingCancelMap = await getMapaCancelamentosPendentes().catch(() => ({}));
+        queueItems = queueItems.filter(item => {
+            if (item.status === 'Cancelamento Pendente' || item.cancelamento_pendente) return false;
+            if (pendingCancelMap[item.id]) return false;
+            return true;
+        });
+
+        if (queueItems.length === 0) return;
         // 1º lugar, 2º lugar... com Agendamento Especial sempre no topo daquele procedimento
         const byProc: Record<string, ConsultaAgendamento[]> = {};
         queueItems.forEach(item => {
@@ -3535,8 +3574,12 @@ export const getQueueEligibilityMap = (
         const freeSlots = getFreeSlotsForProcedure(procVagas, procBookings);
         const freeSlotsCount = freeSlots.length;
 
-        // Fila de espera deste procedimento (ignora completamente solicitações pausadas)
-        const waitlist = procBookings.filter(b => (b.status === 'Fila de espera' || b.status === 'Aguardando Data') && !b.is_paused);
+        // Fila de espera deste procedimento (ignora completamente solicitações pausadas ou suspensas por cancelamento pendente)
+        const waitlist = procBookings.filter(b => 
+            (b.status === 'Fila de espera' || b.status === 'Aguardando Data') && 
+            !b.is_paused && 
+            !b.cancelamento_pendente
+        );
         const orderedWaitlist = orderConsultasQueue(waitlist);
 
         const firstUnscheduled = orderedWaitlist.length > 0 ? orderedWaitlist[0] : null;
@@ -4927,15 +4970,24 @@ export const solicitarCancelamentoAgendamento = async (params: {
         const now = new Date().toISOString();
         const rawCpf = targetBooking.paciente?.cpf || '';
         const formattedCpf = rawCpf ? rawCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : 'S/ CPF';
+        const rawPosicao = targetBooking.queue_position ?? null;
+        const procCodigo = targetBooking.procedimento?.code || '';
+        const procNome = targetBooking.procedimento?.name || 'Procedimento não informado';
+        const procId = targetBooking.procedimento_id || targetBooking.procedimento?.id || '';
+        const dataOriginal = targetBooking.solicitation_date || (targetBooking.created_at ? targetBooking.created_at.split('T')[0] : '');
 
         const payload: Omit<ConsultaSolicitacaoCancelamento, 'id'> = {
             agendamento_id: agendamentoId,
             paciente_nome: targetBooking.paciente?.name || 'Paciente não informado',
             paciente_cpf: formattedCpf,
-            procedimento_nome: targetBooking.procedimento?.name || 'Procedimento não informado',
+            procedimento_id: procId,
+            procedimento_nome: procNome,
+            procedimento_codigo: procCodigo,
             procedimento_categoria: targetBooking.procedimento?.type || (targetBooking.procedimento as any)?.category || 'Geral',
             protocolo: (targetBooking as any).protocolo || agendamentoId.substring(0, 8).toUpperCase(),
             prioridade: targetBooking.priority || 'Normal',
+            posicao_anterior: rawPosicao,
+            data_original_solicitacao: dataOriginal,
             situacao_agendamento: targetBooking.status || 'Solicitado',
             data_agendada: targetBooking.appointment_date || null,
             solicitante_id: solicitante.id,
@@ -4974,6 +5026,57 @@ export const solicitarCancelamentoAgendamento = async (params: {
         localList.push(localItem);
         saveLocalSolicitacoesCancelamento(localList);
 
+        // Suspender imediatamente a solicitação da fila ativa
+        const originalStatus = targetBooking.status && targetBooking.status !== 'Cancelamento Pendente'
+            ? targetBooking.status
+            : (targetBooking.original_status || 'Fila de espera');
+
+        try {
+            const { error: upErr } = await supabase
+                .from('consultas_agendamentos')
+                .update({
+                    status: 'Cancelamento Pendente',
+                    original_status: originalStatus,
+                    cancelamento_pendente: true,
+                    queue_position: null,
+                    special_sequence: null
+                })
+                .eq('id', agendamentoId);
+
+            if (upErr) {
+                // Fallback com campos mínimos caso colunas opcionais não existam
+                await supabase
+                    .from('consultas_agendamentos')
+                    .update({
+                        original_status: originalStatus,
+                        cancelamento_pendente: true,
+                        queue_position: null,
+                        special_sequence: null
+                    })
+                    .eq('id', agendamentoId);
+            }
+        } catch (e: any) {
+            console.warn('[consultasService] Erro ao suspender agendamento no Supabase:', e.message);
+        }
+
+        // Recalcular a fila ativa de todos os outros pacientes
+        await recalculateAndPersistQueuePositions().catch(() => {});
+
+        // Registro de Auditoria
+        await auditLogService.logAction({
+            action_type: 'SOLICITAR_CANCELAMENTO',
+            module: 'Regulação - Acompanhar',
+            description: `Cancelamento solicitado por ${solicitante.name} para o paciente ${targetBooking.paciente?.name || 'Paciente'} (${procNome}). Posição na fila suspensa temporariamente.`,
+            details: {
+                agendamento_id: agendamentoId,
+                solicitante_id: solicitante.id,
+                solicitante_nome: solicitante.name,
+                justificativa: justificativa.trim(),
+                posicao_anterior: rawPosicao,
+                data_original_solicitacao: dataOriginal
+            }
+        }).catch(() => {});
+
         // Notificar eventos para tempo real
         window.dispatchEvent(new CustomEvent('consultas-solicitacoes-cancelamento-changed'));
         window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
@@ -4990,7 +5093,7 @@ export const solicitarCancelamentoAgendamento = async (params: {
  */
 export const aprovarSolicitacaoCancelamento = async (params: {
     solicitacaoId: string;
-    aprovador: { id: string; name: string };
+    aprovador: { id: string; name: string; role?: string; is_admin?: boolean; access_level?: string };
 }): Promise<{ success: boolean; error?: string }> => {
     try {
         assertCanMutateRegulacao('Aprovar Solicitação de Cancelamento', 'acompanhar');
@@ -5024,6 +5127,19 @@ export const aprovarSolicitacaoCancelamento = async (params: {
             return {
                 success: false,
                 error: `Esta solicitação já foi decidida anteriormente por outro gestor (Status atual: ${solicitacao.status}).`
+            };
+        }
+
+        // Regra de segurança: O solicitante não pode aprovar seu próprio cancelamento, salvo se administrador
+        const isApproverAdmin = Boolean(
+            aprovador.role === 'admin' ||
+            aprovador.is_admin ||
+            aprovador.access_level === 'ADMIN'
+        );
+        if (solicitacao.solicitante_id === aprovador.id && !isApproverAdmin) {
+            return {
+                success: false,
+                error: 'O usuário solicitante não pode aprovar seu próprio cancelamento. A análise deve ser realizada por outro gestor ou administrador.'
             };
         }
 
@@ -5067,7 +5183,10 @@ export const aprovarSolicitacaoCancelamento = async (params: {
                 cancellation_reason: cancellationReason,
                 canceled_by: aprovador.id,
                 canceled_by_name: aprovador.name,
-                canceled_at: now
+                canceled_at: now,
+                cancelamento_pendente: false,
+                queue_position: null,
+                special_sequence: null
             })
             .eq('id', agendamentoId);
 
@@ -5125,7 +5244,24 @@ export const aprovarSolicitacaoCancelamento = async (params: {
         });
         saveLocalSolicitacoesCancelamento(updatedLocal);
 
-        // 6. Notificar em tempo real
+        // 6. Recalcular as posições da fila após retirada definitiva
+        await recalculateAndPersistQueuePositions().catch(() => {});
+
+        // 7. Registro de Auditoria
+        await auditLogService.logAction({
+            action_type: 'APROVAR_CANCELAMENTO',
+            module: 'Regulação - Acompanhar',
+            description: `Cancelamento aprovado por ${aprovador.name} para o paciente ${solicitacao.paciente_nome}. Solicitação cancelada definitivamente e retirada da fila.`,
+            details: {
+                solicitacao_id: solicitacaoId,
+                agendamento_id: agendamentoId,
+                aprovador_id: aprovador.id,
+                aprovador_nome: aprovador.name,
+                justificativa_original: solicitacao.justificativa_solicitacao
+            }
+        }).catch(() => {});
+
+        // 8. Notificar em tempo real
         window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
         window.dispatchEvent(new CustomEvent('consultas-solicitacoes-cancelamento-changed'));
         window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
@@ -5139,11 +5275,12 @@ export const aprovarSolicitacaoCancelamento = async (params: {
 
 /**
  * Gestor / Admin: Rejeita a solicitação de cancelamento com justificativa obrigatória
+ * Reativa a solicitação na fila mantendo a data original de solicitação e prioridade
  */
 export const rejeitarSolicitacaoCancelamento = async (params: {
     solicitacaoId: string;
     justificativaRecusa: string;
-    rejeitador: { id: string; name: string };
+    rejeitador: { id: string; name: string; role?: string; is_admin?: boolean; access_level?: string };
 }): Promise<{ success: boolean; error?: string }> => {
     try {
         assertCanMutateRegulacao('Rejeitar Solicitação de Cancelamento', 'acompanhar');
@@ -5158,7 +5295,47 @@ export const rejeitarSolicitacaoCancelamento = async (params: {
 
         const now = new Date().toISOString();
 
-        // 1. Atualizar no Supabase
+        // 1. Buscar a solicitação para verificação concorrente
+        let solicitacao: ConsultaSolicitacaoCancelamento | null = null;
+        try {
+            const { data } = await supabase
+                .from('consultas_solicitacoes_cancelamento')
+                .select('*')
+                .eq('id', solicitacaoId)
+                .single();
+            if (data) solicitacao = data;
+        } catch (_) {}
+
+        if (!solicitacao) {
+            const localList = getLocalSolicitacoesCancelamento();
+            solicitacao = localList.find(s => s.id === solicitacaoId) || null;
+        }
+
+        if (!solicitacao) {
+            return { success: false, error: 'Solicitação de cancelamento não localizada.' };
+        }
+
+        if (solicitacao.status !== 'Aguardando Aprovação') {
+            return {
+                success: false,
+                error: `Esta solicitação já foi decidida anteriormente (Status: ${solicitacao.status}).`
+            };
+        }
+
+        // Regra de segurança: O solicitante não pode rejeitar seu próprio cancelamento, salvo se administrador geral
+        const isRejectionAdmin = Boolean(
+            rejeitador.role === 'admin' ||
+            rejeitador.is_admin ||
+            rejeitador.access_level === 'ADMIN'
+        );
+        if (solicitacao.solicitante_id === rejeitador.id && !isRejectionAdmin) {
+            return {
+                success: false,
+                error: 'O usuário solicitante não pode rejeitar seu próprio cancelamento. A análise deve ser realizada por outro gestor ou administrador.'
+            };
+        }
+
+        // 2. Atualizar no Supabase a solicitação para Rejeitada
         try {
             const { error } = await supabase
                 .from('consultas_solicitacoes_cancelamento')
@@ -5177,7 +5354,7 @@ export const rejeitarSolicitacaoCancelamento = async (params: {
             }
         } catch (_) {}
 
-        // 2. Atualizar no fallback local
+        // 3. Atualizar no fallback local
         const localList = getLocalSolicitacoesCancelamento();
         const updatedLocal = localList.map(s => {
             if (s.id === solicitacaoId) {
@@ -5195,7 +5372,51 @@ export const rejeitarSolicitacaoCancelamento = async (params: {
         });
         saveLocalSolicitacoesCancelamento(updatedLocal);
 
-        // 3. Notificar em tempo real (o agendamento é mantido sem alterações de status)
+        // 4. Reativar o agendamento na fila, restaurando o status original
+        // REGRA FUNDAMENTAL: Preservar intactas a data de solicitação e a prioridade
+        let restoredStatus = 'Fila de espera';
+        try {
+            const { data: bData } = await supabase
+                .from('consultas_agendamentos')
+                .select('original_status, status')
+                .eq('id', solicitacao.agendamento_id)
+                .single();
+            if (bData?.original_status && bData.original_status !== 'Cancelamento Pendente') {
+                restoredStatus = bData.original_status;
+            }
+        } catch (_) {}
+
+        try {
+            await supabase
+                .from('consultas_agendamentos')
+                .update({
+                    status: restoredStatus,
+                    cancelamento_pendente: false
+                })
+                .eq('id', solicitacao.agendamento_id);
+        } catch (upErr: any) {
+            console.warn('[consultasService] Erro ao reativar agendamento no Supabase:', upErr.message);
+        }
+
+        // 5. Recalcular todas as posições da fila ativa
+        // O paciente volta automaticamente à sua posição correta por prioridade e data original
+        await recalculateAndPersistQueuePositions().catch(() => {});
+
+        // 6. Registro de Auditoria
+        await auditLogService.logAction({
+            action_type: 'REJEITAR_CANCELAMENTO',
+            module: 'Regulação - Acompanhar',
+            description: `Cancelamento recusado por ${rejeitador.name} para o paciente ${solicitacao.paciente_nome}. Solicitação reativada na fila na posição original. Justificativa: ${justificativaRecusa.trim()}`,
+            details: {
+                solicitacao_id: solicitacaoId,
+                agendamento_id: solicitacao.agendamento_id,
+                rejeitador_id: rejeitador.id,
+                rejeitador_nome: rejeitador.name,
+                justificativa_recusa: justificativaRecusa.trim()
+            }
+        }).catch(() => {});
+
+        // 7. Notificar em tempo real
         window.dispatchEvent(new CustomEvent('consultas-solicitacoes-cancelamento-changed'));
         window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
 
@@ -5203,5 +5424,494 @@ export const rejeitarSolicitacaoCancelamento = async (params: {
     } catch (err: any) {
         console.error('[consultasService] rejeitarSolicitacaoCancelamento erro:', err);
         return { success: false, error: err.message || 'Erro inesperado ao rejeitar solicitação.' };
+    }
+};
+
+// --- OPERAÇÕES EM LOTE (BATCH ACTIONS) ---
+
+export interface BatchOperationResult {
+    totalRequested: number;
+    successCount: number;
+    failureCount: number;
+    errors: { id: string; patientName?: string; message: string }[];
+}
+
+export interface BatchTransferParams {
+    bookingIds: string[];
+    targetProcedimentoId: string;
+    preserveSolicitationDate?: boolean;
+    preservePriority?: boolean;
+    reason?: string;
+    user: { id: string; name: string; email?: string };
+    onProgress?: (current: number, total: number) => void;
+}
+
+export const batchTransferAgendamentos = async (params: BatchTransferParams): Promise<BatchOperationResult> => {
+    assertCanMutateRegulacao('Transferir Agendamentos em Lote', 'acompanhar');
+    const {
+        bookingIds,
+        targetProcedimentoId,
+        preserveSolicitationDate = true,
+        preservePriority = true,
+        reason,
+        user,
+        onProgress
+    } = params;
+
+    const result: BatchOperationResult = {
+        totalRequested: bookingIds.length,
+        successCount: 0,
+        failureCount: 0,
+        errors: []
+    };
+
+    if (bookingIds.length === 0) return result;
+
+    try {
+        // 1. Obter informações do procedimento de destino
+        const procs = await getProcedimentos();
+        const targetProc = procs.find(p => p.id === targetProcedimentoId);
+        if (!targetProc) {
+            throw new Error('Procedimento de destino não encontrado.');
+        }
+
+        // 2. Buscar agendamentos diretamente do banco para validação recente
+        const { data: dbBookings, error: fetchErr } = await supabase
+            .from('consultas_agendamentos')
+            .select(`
+                id,
+                status,
+                priority,
+                solicitation_date,
+                appointment_date,
+                appointment_time,
+                tipo_atendimento,
+                prestador,
+                municipio,
+                convenio,
+                vaga_id,
+                created_at,
+                procedimento_id,
+                patient_id,
+                paciente:consultas_pacientes(name),
+                procedimento:consultas_procedimentos(name)
+            `)
+            .in('id', bookingIds);
+
+        if (fetchErr) throw fetchErr;
+
+        const bookingMap = new Map((dbBookings || []).map((b: any) => [b.id, b]));
+
+        // 3. Processar cada solicitação individualmente com tolerância a falhas
+        for (let i = 0; i < bookingIds.length; i++) {
+            const id = bookingIds[i];
+            const currentBooking: any = bookingMap.get(id);
+
+            if (!currentBooking) {
+                result.failureCount++;
+                result.errors.push({ id, message: 'Solicitação não localizada no banco de dados.' });
+                if (onProgress) onProgress(i + 1, bookingIds.length);
+                continue;
+            }
+
+            const currentProcId = currentBooking.procedimento_id;
+            if (currentProcId === targetProcedimentoId) {
+                result.failureCount++;
+                result.errors.push({
+                    id,
+                    patientName: currentBooking.paciente?.name,
+                    message: 'A solicitação já pertence ao procedimento selecionado.'
+                });
+                if (onProgress) onProgress(i + 1, bookingIds.length);
+                continue;
+            }
+
+            if (currentBooking.status === 'Cancelado') {
+                result.failureCount++;
+                result.errors.push({
+                    id,
+                    patientName: currentBooking.paciente?.name,
+                    message: 'Solicitações canceladas não podem ser transferidas.'
+                });
+                if (onProgress) onProgress(i + 1, bookingIds.length);
+                continue;
+            }
+
+            try {
+                const willResetToWaitlist = currentBooking.status === 'Agendado' || currentBooking.status === 'Realizado';
+                const newStatus: ConsultaAgendamento['status'] = willResetToWaitlist ? 'Fila de espera' : (currentBooking.status || 'Fila de espera');
+
+                const payloadUpdates: Partial<ConsultaAgendamento> = {
+                    procedimento_id: targetProcedimentoId,
+                    status: newStatus,
+                    appointment_date: willResetToWaitlist ? null : (currentBooking.appointment_date || null),
+                    appointment_time: willResetToWaitlist ? null : (currentBooking.appointment_time || null),
+                    tipo_atendimento: willResetToWaitlist ? null : (currentBooking.tipo_atendimento || null),
+                    prestador: willResetToWaitlist ? null : (currentBooking.prestador || null),
+                    municipio: willResetToWaitlist ? null : (currentBooking.municipio || null),
+                    convenio: willResetToWaitlist ? null : (currentBooking.convenio || null),
+                    vaga_id: willResetToWaitlist ? null : (currentBooking.vaga_id || null),
+                    solicitation_date: preserveSolicitationDate
+                        ? (currentBooking.solicitation_date || (currentBooking.created_at ? currentBooking.created_at.split('T')[0] : new Date().toISOString().split('T')[0]))
+                        : new Date().toISOString().split('T')[0],
+                    priority: preservePriority ? (currentBooking.priority || 'Normal') : 'Normal'
+                };
+
+                await updateAgendamento(id, payloadUpdates);
+                result.successCount++;
+            } catch (itemErr: any) {
+                result.failureCount++;
+                result.errors.push({
+                    id,
+                    patientName: currentBooking.paciente?.name,
+                    message: itemErr.message || 'Erro ao atualizar registro.'
+                });
+            }
+
+            if (onProgress) onProgress(i + 1, bookingIds.length);
+        }
+
+        // 4. Recalcular e persistir posições da fila após todas as transferências
+        await recalculateAndPersistQueuePositions();
+
+        // 5. Registrar log de auditoria detalhado
+        await auditLogService.logAction({
+            action_type: 'BATCH_TRANSFER_AGENDAMENTOS',
+            module: 'Regulação - Acompanhar',
+            description: `Transferência em lote de ${result.successCount} solicitação(ões) para o procedimento "${targetProc.name}".`,
+            details: {
+                target_procedimento_id: targetProcedimentoId,
+                target_procedimento_name: targetProc.name,
+                preserve_date: preserveSolicitationDate,
+                preserve_priority: preservePriority,
+                reason: reason || null,
+                total_solicitado: bookingIds.length,
+                sucesso: result.successCount,
+                falhas: result.failureCount,
+                errors: result.errors
+            },
+            user
+        });
+
+        // 6. Notificações e eventos
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+        }
+
+        return result;
+    } catch (err: any) {
+        console.error('[consultasService] batchTransferAgendamentos Erro crítico:', err);
+        throw err;
+    }
+};
+
+export interface BatchCancelParams {
+    bookingIds: string[];
+    reason: string;
+    user: { id: string; name: string; sector?: string; email?: string };
+    isGestorOrAdmin: boolean;
+    onProgress?: (current: number, total: number) => void;
+}
+
+export const batchCancelAgendamentos = async (params: BatchCancelParams): Promise<BatchOperationResult> => {
+    assertCanMutateRegulacao('Cancelar Agendamentos em Lote', 'acompanhar');
+    const { bookingIds, reason, user, isGestorOrAdmin, onProgress } = params;
+
+    const result: BatchOperationResult = {
+        totalRequested: bookingIds.length,
+        successCount: 0,
+        failureCount: 0,
+        errors: []
+    };
+
+    if (bookingIds.length === 0) return result;
+
+    try {
+        const { data: dbBookings } = await supabase
+            .from('consultas_agendamentos')
+            .select('*, paciente:consultas_pacientes(*), procedimento:consultas_procedimentos(*)')
+            .in('id', bookingIds);
+
+        const bookingMap = new Map((dbBookings || []).map((b: any) => [b.id, b]));
+
+        for (let i = 0; i < bookingIds.length; i++) {
+            const id = bookingIds[i];
+            const currentBooking: any = bookingMap.get(id);
+
+            if (!currentBooking) {
+                result.failureCount++;
+                result.errors.push({ id, message: 'Solicitação não localizada no banco de dados.' });
+                if (onProgress) onProgress(i + 1, bookingIds.length);
+                continue;
+            }
+
+            if (currentBooking.status === 'Cancelado') {
+                result.failureCount++;
+                result.errors.push({
+                    id,
+                    patientName: currentBooking.paciente?.name,
+                    message: 'Esta solicitação já se encontra cancelada.'
+                });
+                if (onProgress) onProgress(i + 1, bookingIds.length);
+                continue;
+            }
+
+            try {
+                if (isGestorOrAdmin) {
+                    await cancelAgendamentoWithReason(id, reason.trim(), user);
+                    result.successCount++;
+                } else {
+                    const reqRes = await solicitarCancelamentoAgendamento({
+                        agendamentoId: id,
+                        justificativa: reason.trim(),
+                        solicitante: {
+                            id: user.id,
+                            name: user.name,
+                            sector: user.sector
+                        },
+                        bookingSnapshot: currentBooking
+                    });
+                    if (reqRes.success) {
+                        result.successCount++;
+                    } else {
+                        result.failureCount++;
+                        result.errors.push({
+                            id,
+                            patientName: currentBooking.paciente?.name,
+                            message: reqRes.error || 'Erro ao enviar solicitação de cancelamento.'
+                        });
+                    }
+                }
+            } catch (itemErr: any) {
+                result.failureCount++;
+                result.errors.push({
+                    id,
+                    patientName: currentBooking.paciente?.name,
+                    message: itemErr.message || 'Erro ao processar cancelamento.'
+                });
+            }
+
+            if (onProgress) onProgress(i + 1, bookingIds.length);
+        }
+
+        await recalculateAndPersistQueuePositions();
+
+        await auditLogService.logAction({
+            action_type: isGestorOrAdmin ? 'BATCH_CANCEL_AGENDAMENTOS' : 'BATCH_SOLICITAR_CANCELAMENTO',
+            module: 'Regulação - Acompanhar',
+            description: `${isGestorOrAdmin ? 'Cancelamento em lote' : 'Solicitações de cancelamento em lote'} de ${result.successCount} agendamento(s).`,
+            details: {
+                reason,
+                total_solicitado: bookingIds.length,
+                sucesso: result.successCount,
+                falhas: result.failureCount,
+                errors: result.errors
+            },
+            user
+        });
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-solicitacoes-cancelamento-changed'));
+        }
+
+        return result;
+    } catch (err: any) {
+        console.error('[consultasService] batchCancelAgendamentos Erro:', err);
+        throw err;
+    }
+};
+
+export interface BatchDeleteParams {
+    bookingIds: string[];
+    user: { id: string; name: string; email?: string };
+    onProgress?: (current: number, total: number) => void;
+}
+
+export const batchDeleteAgendamentos = async (params: BatchDeleteParams): Promise<BatchOperationResult> => {
+    assertCanMutateRegulacao('Excluir Agendamentos em Lote', 'acompanhar');
+    const { bookingIds, user, onProgress } = params;
+
+    const result: BatchOperationResult = {
+        totalRequested: bookingIds.length,
+        successCount: 0,
+        failureCount: 0,
+        errors: []
+    };
+
+    if (bookingIds.length === 0) return result;
+
+    try {
+        for (let i = 0; i < bookingIds.length; i++) {
+            const id = bookingIds[i];
+            try {
+                await deleteAgendamento(id);
+                result.successCount++;
+            } catch (itemErr: any) {
+                result.failureCount++;
+                result.errors.push({
+                    id,
+                    message: itemErr.message || 'Erro ao excluir solicitação.'
+                });
+            }
+            if (onProgress) onProgress(i + 1, bookingIds.length);
+        }
+
+        await recalculateAndPersistQueuePositions();
+
+        await auditLogService.logAction({
+            action_type: 'BATCH_DELETE_AGENDAMENTOS',
+            module: 'Regulação - Acompanhar',
+            description: `Exclusão em lote de ${result.successCount} solicitação(ões).`,
+            details: {
+                total_solicitado: bookingIds.length,
+                sucesso: result.successCount,
+                falhas: result.failureCount,
+                errors: result.errors
+            },
+            user
+        });
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+        }
+
+        return result;
+    } catch (err: any) {
+        console.error('[consultasService] batchDeleteAgendamentos Erro:', err);
+        throw err;
+    }
+};
+
+export interface BatchPriorityParams {
+    bookingIds: string[];
+    priority: 'Normal' | 'Urgência' | 'Especial';
+    user: { id: string; name: string; email?: string };
+    onProgress?: (current: number, total: number) => void;
+}
+
+export const batchUpdatePriority = async (params: BatchPriorityParams): Promise<BatchOperationResult> => {
+    assertCanMutateRegulacao('Alterar Prioridade em Lote', 'acompanhar');
+    const { bookingIds, priority, user, onProgress } = params;
+
+    const result: BatchOperationResult = {
+        totalRequested: bookingIds.length,
+        successCount: 0,
+        failureCount: 0,
+        errors: []
+    };
+
+    if (bookingIds.length === 0) return result;
+
+    try {
+        for (let i = 0; i < bookingIds.length; i++) {
+            const id = bookingIds[i];
+            try {
+                await updateAgendamento(id, { priority });
+                result.successCount++;
+            } catch (itemErr: any) {
+                result.failureCount++;
+                result.errors.push({
+                    id,
+                    message: itemErr.message || 'Erro ao atualizar prioridade.'
+                });
+            }
+            if (onProgress) onProgress(i + 1, bookingIds.length);
+        }
+
+        await recalculateAndPersistQueuePositions();
+
+        await auditLogService.logAction({
+            action_type: 'BATCH_UPDATE_PRIORITY',
+            module: 'Regulação - Acompanhar',
+            description: `Alteração de prioridade em lote para "${priority}" em ${result.successCount} agendamento(s).`,
+            details: {
+                priority,
+                total_solicitado: bookingIds.length,
+                sucesso: result.successCount,
+                falhas: result.failureCount,
+                errors: result.errors
+            },
+            user
+        });
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+        }
+
+        return result;
+    } catch (err: any) {
+        console.error('[consultasService] batchUpdatePriority Erro:', err);
+        throw err;
+    }
+};
+
+export interface BatchPauseResumeParams {
+    bookingIds: string[];
+    action: 'pause' | 'resume';
+    reason?: string;
+    user: { id: string; name: string; email?: string };
+    onProgress?: (current: number, total: number) => void;
+}
+
+export const batchPauseResumeAgendamentos = async (params: BatchPauseResumeParams): Promise<BatchOperationResult> => {
+    assertCanMutateRegulacao(params.action === 'pause' ? 'Pausar Agendamentos em Lote' : 'Retomar Agendamentos em Lote', 'acompanhar');
+    const { bookingIds, action, reason, user, onProgress } = params;
+
+    const result: BatchOperationResult = {
+        totalRequested: bookingIds.length,
+        successCount: 0,
+        failureCount: 0,
+        errors: []
+    };
+
+    if (bookingIds.length === 0) return result;
+
+    try {
+        for (let i = 0; i < bookingIds.length; i++) {
+            const id = bookingIds[i];
+            try {
+                if (action === 'pause') {
+                    await pausarAgendamento(id, reason || 'Pausa em lote aplicada pela regulação', user as any);
+                } else {
+                    await retomarAgendamento(id, user as any);
+                }
+                result.successCount++;
+            } catch (itemErr: any) {
+                result.failureCount++;
+                result.errors.push({
+                    id,
+                    message: itemErr.message || `Erro ao ${action === 'pause' ? 'pausar' : 'retomar'} solicitação.`
+                });
+            }
+            if (onProgress) onProgress(i + 1, bookingIds.length);
+        }
+
+        await recalculateAndPersistQueuePositions();
+
+        await auditLogService.logAction({
+            action_type: action === 'pause' ? 'BATCH_PAUSE_AGENDAMENTOS' : 'BATCH_RESUME_AGENDAMENTOS',
+            module: 'Regulação - Acompanhar',
+            description: `${action === 'pause' ? 'Pausa em lote' : 'Retomada em lote'} de ${result.successCount} solicitação(ões).`,
+            details: {
+                action,
+                reason: reason || null,
+                total_solicitado: bookingIds.length,
+                sucesso: result.successCount,
+                falhas: result.failureCount,
+                errors: result.errors
+            },
+            user
+        });
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+        }
+
+        return result;
+    } catch (err: any) {
+        console.error('[consultasService] batchPauseResumeAgendamentos Erro:', err);
+        throw err;
     }
 };

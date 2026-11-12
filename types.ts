@@ -687,6 +687,7 @@ export interface ConsultaProcedimento {
   status: 'Ativo' | 'Inativo';
   recurso?: 'Não Se Aplica' | 'FM' | 'PPI';
   parent_id?: string | null;
+  parent_name?: string | null;
   especialista_id?: string | null;
   especialista?: ConsultaEspecialista | null;
   created_at?: string;
@@ -714,7 +715,7 @@ export interface ConsultaAgendamento {
   priority: 'Normal' | 'Urgência' | 'Especial';
   queue_position?: number;
   special_sequence?: number;
-  status: 'Solicitado' | 'Agendado' | 'Realizado' | 'Cancelado' | 'Não Realizado' | 'Fila de espera' | 'Aguardando Data' | 'Retorno' | 'Pausada';
+  status: 'Solicitado' | 'Agendado' | 'Realizado' | 'Cancelado' | 'Não Realizado' | 'Fila de espera' | 'Aguardando Data' | 'Retorno' | 'Pausada' | 'Cancelamento Pendente';
   created_by: string;
   created_at?: string;
   is_retorno?: boolean;
@@ -763,10 +764,14 @@ export interface ConsultaSolicitacaoCancelamento {
   agendamento_id: string;
   paciente_nome: string;
   paciente_cpf?: string;
+  procedimento_id?: string;
   procedimento_nome: string;
+  procedimento_codigo?: string;
   procedimento_categoria?: string;
   protocolo?: string;
   prioridade?: string;
+  posicao_anterior?: number | null;
+  data_original_solicitacao?: string;
   situacao_agendamento?: string;
   data_agendada?: string | null;
   solicitante_id: string;

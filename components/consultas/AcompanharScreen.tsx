@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { User, ConsultaPaciente, ConsultaAgendamento, ConsultaProcedimento, AppState, ConsultaVaga, ConsultaSolicitacaoCancelamento } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users, UserCheck, Building2, ShieldCheck, FileText, Phone, MapPin, Lock, ArrowRightLeft, PauseCircle, PlayCircle, Pause, Play, Eye } from 'lucide-react';
+import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users, UserCheck, Building2, ShieldCheck, ShieldAlert, FileText, Phone, MapPin, Lock, ArrowRightLeft, PauseCircle, PlayCircle, Pause, Play, Eye, CheckSquare, CheckCheck } from 'lucide-react';
 import * as db from '../../services/consultasService';
-import { formatProcedimentoLabel } from '../../services/consultasService';
+import { formatProcedimentoLabel, BatchOperationResult } from '../../services/consultasService';
 import { isConsultasAcompanharReadOnly } from '../../services/permissionService';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { useAgentesSaude } from '../../services/agentesSaudeService';
@@ -14,6 +14,16 @@ import { ConsultasReportPdfGenerator } from './ConsultasReportPdfGenerator';
 import { ConsultasReportModal } from './ConsultasReportModal';
 import { DefinirDataModal } from './DefinirDataModal';
 import { ConfirmacaoAtendimentosModal } from './ConfirmacaoAtendimentosModal';
+import { BatchActionBar } from './BatchActionBar';
+import {
+    BatchTransferModal,
+    BatchCancelModal,
+    BatchDeleteModal,
+    BatchPriorityModal,
+    BatchPauseResumeModal,
+    BatchResultSummaryModal
+} from './BatchActionsModals';
+import { SolicitacoesCancelamentoModal } from './SolicitacoesCancelamentoModal';
 
 const formatPatientName = (patient?: ConsultaPaciente | null) => {
     if (!patient) return '';
@@ -466,6 +476,9 @@ interface AgendamentoCardProps {
     agentPsf?: string;
     isCancelamentoPendente?: boolean;
     solicitacaoPendente?: ConsultaSolicitacaoCancelamento | null;
+    isSelectionMode?: boolean;
+    isSelected?: boolean;
+    onToggleSelect?: (bookingId: string) => void;
 }
 
 const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
@@ -501,10 +514,18 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
     formatPatientName,
     agentPsf,
     isCancelamentoPendente = false,
-    solicitacaoPendente = null
+    solicitacaoPendente = null,
+    isSelectionMode = false,
+    isSelected = false,
+    onToggleSelect
 }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const isPaused = booking.is_paused || booking.status === 'Pausada';
+    const isSuspendedCancellation = Boolean(
+        isCancelamentoPendente ||
+        booking.cancelamento_pendente ||
+        booking.status === 'Cancelamento Pendente'
+    );
 
     // Determina se a data da consulta já foi ultrapassada
     const isAppointmentPassed = useMemo(() => {
@@ -571,9 +592,17 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
     return (
         <div className="rounded-2xl shadow-xs hover:shadow-md transition-all duration-300 mb-3">
             <div
-                onClick={() => setIsExpanded(!isExpanded)}
+                onClick={() => {
+                    if (isSelectionMode) {
+                        onToggleSelect?.(booking.id);
+                    } else {
+                        setIsExpanded(!isExpanded);
+                    }
+                }}
                 className={`group bg-white rounded-2xl border transition-all duration-300 relative overflow-hidden cursor-pointer ${
-                    isPaused
+                    isSelected
+                    ? 'bg-gradient-to-r from-indigo-50/80 via-indigo-50/30 to-white border-indigo-400 ring-2 ring-indigo-500/40 shadow-sm'
+                    : isPaused
                     ? 'bg-gradient-to-r from-amber-50/50 via-yellow-50/20 to-white border-amber-300 hover:border-amber-400 ring-1 ring-amber-400/20 shadow-xs'
                     : isEligibleForVaga
                     ? isNextInQueue
@@ -586,7 +615,9 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
             >
                 {/* Faixa lateral indicadora suave */}
                 <div className={`absolute top-0 left-0 w-1.5 h-full transition-all ${
-                    isPaused
+                    isSelected
+                    ? 'bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-xs shadow-indigo-500/40'
+                    : isPaused
                     ? 'bg-gradient-to-b from-amber-500 via-amber-600 to-amber-700 shadow-xs shadow-amber-500/40'
                     : isEligibleForVaga 
                     ? isNextInQueue
@@ -596,9 +627,31 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                 }`} />
 
                 <div className="flex flex-col wide:flex-row items-stretch min-h-[72px] sm:min-h-[76px]">
+                    {/* Checkbox de Seleção Múltipla */}
+                    {isSelectionMode && (
+                        <div
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onToggleSelect?.(booking.id);
+                            }}
+                            className="flex items-center justify-center pl-3 sm:pl-4 pr-1 py-2 cursor-pointer shrink-0 border-b wide:border-b-0 wide:border-r border-slate-100 bg-slate-50/50"
+                            title={isSelected ? "Desmarcar solicitação" : "Selecionar solicitação"}
+                        >
+                            <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all ${
+                                isSelected
+                                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs'
+                                    : 'bg-white border-slate-300 hover:border-indigo-500'
+                            }`}>
+                                {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                            </div>
+                        </div>
+                    )}
+
                     {/* CARD DE PRIMEIRA INFORMAÇÃO - POSIÇÃO E DADOS DO PACIENTE */}
                     <div className={`border-b wide:border-b-0 wide:border-r p-2 sm:p-2.5 sm:px-4 flex items-center gap-3 shrink-0 self-stretch wide:w-[305px] transition-all relative ${
-                        isPaused
+                        isSuspendedCancellation
+                        ? 'bg-amber-100/60 border-amber-300'
+                        : isPaused
                         ? 'bg-amber-100/50 border-amber-200'
                         : isEligibleForVaga 
                         ? isNextInQueue
@@ -609,7 +662,9 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                         {/* Bloco de Destaque: POSIÇÃO */}
                         <div 
                             className={`min-w-[72px] sm:min-w-[80px] h-14 sm:h-16 px-1.5 py-1 rounded-2xl flex flex-col items-center justify-center shrink-0 border transition-all duration-300 shadow-xs relative overflow-hidden ${
-                                isPaused
+                                isSuspendedCancellation
+                                    ? 'bg-gradient-to-br from-amber-100 via-orange-100/90 to-amber-200 border-amber-400 text-amber-950 ring-2 ring-amber-400/50 shadow-xs'
+                                    : isPaused
                                     ? 'bg-gradient-to-br from-amber-100 via-yellow-100 to-amber-200 border-amber-400 text-amber-950 ring-1 ring-amber-400/40'
                                     : isEligibleForVaga
                                     ? isNextInQueue
@@ -628,7 +683,9 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                     : 'bg-gradient-to-br from-slate-50 to-slate-100 border-slate-200 text-slate-800'
                             }`}
                             title={
-                                isPaused
+                                isSuspendedCancellation
+                                    ? 'POSIÇÃO SUSPENSA: Solicitação aguardando análise de cancelamento pela Regulação. Retirada temporariamente da fila ativa.'
+                                    : isPaused
                                     ? `Solicitação PAUSADA. Posição original preservada: ${queuePosition || booking.queue_position || 1}º lugar na fila.`
                                     : isEligibleForVaga
                                     ? isNextInQueue
@@ -639,7 +696,20 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                     : `Status: ${booking.status}`
                             }
                         >
-                            {isPaused ? (
+                            {isSuspendedCancellation ? (
+                                <>
+                                    <span className="text-[7.5px] font-black uppercase tracking-wider text-amber-800 leading-none">
+                                        POSIÇÃO
+                                    </span>
+                                    <span className="text-xs sm:text-[13px] font-black uppercase tracking-tight text-amber-950 my-0.5 text-center leading-none flex items-center justify-center gap-1 whitespace-nowrap bg-amber-300/80 px-2 py-0.5 rounded-lg border border-amber-400 shadow-2xs">
+                                        <Clock className="w-3 h-3 text-amber-800 animate-pulse shrink-0" />
+                                        SUSPENSA
+                                    </span>
+                                    <span className="text-[6.5px] font-bold uppercase tracking-wider text-amber-800 leading-none">
+                                        SOB ANÁLISE
+                                    </span>
+                                </>
+                            ) : isPaused ? (
                                 <>
                                     <span className="text-[7.5px] font-black uppercase tracking-wider text-amber-800 leading-none">
                                         FILA ({queuePosition ? `${queuePosition}º` : (booking.queue_position ? `${booking.queue_position}º` : '—')})
@@ -1908,6 +1978,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [cancelError, setCancelError] = useState('');
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
     const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
+    const [isCancelamentoAprovacaoModalOpen, setIsCancelamentoAprovacaoModalOpen] = useState(false);
 
     const loadCancelamentosPendentes = async () => {
         try {
@@ -1961,6 +2032,23 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [transferError, setTransferError] = useState('');
     const [isTransferring, setIsTransferring] = useState(false);
     const [transferSuccessToast, setTransferSuccessToast] = useState<string | null>(null);
+
+    // ==================== ESTADOS DE SELEÇÃO MÚLTIPLA E AÇÕES EM LOTE ====================
+    const [isSelectionMode, setIsSelectionMode] = useState(false);
+    const [selectedBookingIds, setSelectedBookingIds] = useState<Set<string>>(new Set());
+    const [isBatchTransferModalOpen, setIsBatchTransferModalOpen] = useState(false);
+    const [isBatchCancelModalOpen, setIsBatchCancelModalOpen] = useState(false);
+    const [isBatchDeleteModalOpen, setIsBatchDeleteModalOpen] = useState(false);
+    const [isBatchPriorityModalOpen, setIsBatchPriorityModalOpen] = useState(false);
+    const [batchPauseResumeMode, setBatchPauseResumeMode] = useState<'pause' | 'resume' | null>(null);
+    const [batchResultSummary, setBatchResultSummary] = useState<{ title: string; result: BatchOperationResult } | null>(null);
+    const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+    const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
+
+    // REGRA OBRIGATÓRIA: Limpar a seleção anterior ao alterar qualquer termo pesquisado ou filtro ativo
+    useEffect(() => {
+        setSelectedBookingIds(new Set());
+    }, [globalSearch, filterDate, filterStatus, filterTipoAtendimento]);
 
     useEffect(() => {
         const fetchGestores = async () => {
@@ -2120,24 +2208,33 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const loadData = async (silent = false) => {
         if (!silent) setLoading(true);
         try {
-            const [allBookingData, procData, allVagasData] = await Promise.all([
+            const [allBookingData, procData, allVagasData, pendingCancelMap] = await Promise.all([
                 db.getAgendamentos({ readOnly: isReadOnly }), // Busca completa sem filtro para cálculo exato da fila (sem gravações no modo somente leitura)
                 db.getProcedimentos(),
-                db.getVagas()
+                db.getVagas(),
+                db.getMapaCancelamentosPendentes().catch(() => ({} as Record<string, ConsultaSolicitacaoCancelamento>))
             ]);
             setProcedures(procData);
             setAllBookings(allBookingData);
             setAllVagas(allVagasData);
+            setCancelamentosPendentesMap(pendingCancelMap);
 
             // 1. Agrupar e calcular a fila de espera estritamente por PROCEDIMENTO
-            const isWaitlistItem = (b: ConsultaAgendamento) => 
-                !b.status || 
-                b.status === 'Fila de espera' || 
-                b.status === 'Aguardando Data' || 
-                b.status === 'Solicitado' || 
-                b.status === 'Retorno' ||
-                b.status.toLowerCase().includes('fila') ||
-                b.status.toLowerCase().includes('aguard');
+            // REGRA: Solicitações com cancelamento pendente são suspensas e não recebem posição numérica na fila
+            const isWaitlistItem = (b: ConsultaAgendamento) => {
+                if (b.status === 'Cancelamento Pendente' || b.cancelamento_pendente || pendingCancelMap[b.id]) {
+                    return false;
+                }
+                return (
+                    !b.status || 
+                    b.status === 'Fila de espera' || 
+                    b.status === 'Aguardando Data' || 
+                    b.status === 'Solicitado' || 
+                    b.status === 'Retorno' ||
+                    b.status.toLowerCase().includes('fila') ||
+                    b.status.toLowerCase().includes('aguard')
+                );
+            };
 
             const allWaitlist = allBookingData.filter(isWaitlistItem);
             
@@ -2340,41 +2437,28 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         setOperatingId(cancelTarget.id);
         setIsSubmittingCancel(true);
         try {
-            if (isGestorOrAdmin) {
-                // Administradores e Gestores: Cancelamento Imediato Definitivo
-                await db.cancelAgendamentoWithReason(cancelTarget.id, cancelReason.trim(), {
+            // Fluxo Oficial: Solicitação de cancelamento com suspensão imediata da fila e aprovação obrigatória
+            const res = await db.solicitarCancelamentoAgendamento({
+                agendamentoId: cancelTarget.id,
+                justificativa: cancelReason.trim(),
+                solicitante: {
                     id: currentUser.id,
-                    name: currentUser.name
-                });
-                setIsCancelModalOpen(false);
-                setCancelTarget(null);
-                setCancelReason('');
-                await loadCancelamentosPendentes();
-                loadData(true);
-            } else {
-                // Usuários Comuns: Solicitação de Cancelamento para aprovação da Regulação
-                const res = await db.solicitarCancelamentoAgendamento({
-                    agendamentoId: cancelTarget.id,
-                    justificativa: cancelReason.trim(),
-                    solicitante: {
-                        id: currentUser.id,
-                        name: currentUser.name,
-                        sector: currentUser.sector
-                    },
-                    bookingSnapshot: cancelTarget
-                });
+                    name: currentUser.name,
+                    sector: currentUser.sector
+                },
+                bookingSnapshot: cancelTarget
+            });
 
-                if (!res.success) {
-                    setCancelError(res.error || 'Erro ao solicitar cancelamento.');
-                    return;
-                }
-
-                setIsCancelModalOpen(false);
-                setCancelTarget(null);
-                setCancelReason('');
-                await loadCancelamentosPendentes();
-                loadData(true);
+            if (!res.success) {
+                setCancelError(res.error || 'Erro ao solicitar cancelamento.');
+                return;
             }
+
+            setIsCancelModalOpen(false);
+            setCancelTarget(null);
+            setCancelReason('');
+            await loadCancelamentosPendentes();
+            await loadData(true);
         } catch (err: any) {
             setCancelError(err.message || 'Erro ao processar o cancelamento.');
         } finally {
@@ -2915,59 +2999,263 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         return filteredAndSortedBookings.slice(0, displayLimit);
     }, [filteredAndSortedBookings, displayLimit]);
 
+    // ==================== HANDLERS DE SELEÇÃO E AÇÕES EM LOTE ====================
+    const handleToggleSelect = (bookingId: string) => {
+        setSelectedBookingIds(prev => {
+            const next = new Set(prev);
+            if (next.has(bookingId)) {
+                next.delete(bookingId);
+            } else {
+                next.add(bookingId);
+            }
+            return next;
+        });
+    };
+
+    const handleSelectAllFiltered = () => {
+        setIsSelectionMode(true);
+        setSelectedBookingIds(new Set(filteredAndSortedBookings.map(b => b.id)));
+    };
+
+    const handleDeselectAll = () => {
+        setSelectedBookingIds(new Set());
+    };
+
+    const handleToggleSelectAll = () => {
+        if (filteredAndSortedBookings.length === 0) return;
+        setIsSelectionMode(true);
+        const allSelected = filteredAndSortedBookings.length > 0 && filteredAndSortedBookings.every(b => selectedBookingIds.has(b.id));
+        if (allSelected) {
+            handleDeselectAll();
+        } else {
+            handleSelectAllFiltered();
+        }
+    };
+
+    // Handler unificado de seleção conforme fluxo estrito:
+    // 1. Ao clicar em SELECIONAR: ativa modo de seleção e exibe caixas de seleção
+    // 2. O mesmo botão vira SELECIONAR TODOS: marca todos os resultados da pesquisa/filtros ativos
+    // 3. Após selecionar todos, vira DESMARCAR TODOS: ao clicar novamente, desmarca todos
+    const handleUnifiedSelectionClick = () => {
+        if (filteredAndSortedBookings.length === 0) return;
+        if (!isSelectionMode) {
+            setIsSelectionMode(true);
+        } else if (!isAllFilteredSelected) {
+            handleSelectAllFiltered();
+        } else {
+            handleDeselectAll();
+        }
+    };
+
+    const handleExitSelectionMode = () => {
+        setIsSelectionMode(false);
+        setSelectedBookingIds(new Set());
+    };
+
+    const selectedBookingsList = useMemo(() => {
+        if (selectedBookingIds.size === 0) return [];
+        return allBookings.filter(b => selectedBookingIds.has(b.id));
+    }, [allBookings, selectedBookingIds]);
+
+    const isAllFilteredSelected = useMemo(() => {
+        if (filteredAndSortedBookings.length === 0) return false;
+        return filteredAndSortedBookings.every(b => selectedBookingIds.has(b.id));
+    }, [filteredAndSortedBookings, selectedBookingIds]);
+
+    const handleConfirmBatchTransfer = async (params: {
+        targetProcedimentoId: string;
+        preserveSolicitationDate: boolean;
+        preservePriority: boolean;
+        reason: string;
+    }) => {
+        setIsBatchProcessing(true);
+        setBatchProgress({ current: 0, total: selectedBookingIds.size });
+        try {
+            const result = await db.batchTransferAgendamentos({
+                bookingIds: Array.from(selectedBookingIds),
+                targetProcedimentoId: params.targetProcedimentoId,
+                preserveSolicitationDate: params.preserveSolicitationDate,
+                preservePriority: params.preservePriority,
+                reason: params.reason,
+                user: currentUser,
+                onProgress: (current, total) => setBatchProgress({ current, total })
+            });
+            setIsBatchTransferModalOpen(false);
+            setBatchResultSummary({
+                title: 'Transferência em Lote Concluída',
+                result
+            });
+            setSelectedBookingIds(new Set());
+            await loadData(true);
+        } catch (err: any) {
+            console.error('Erro na transferência em lote:', err);
+            throw err;
+        } finally {
+            setIsBatchProcessing(false);
+            setBatchProgress(null);
+        }
+    };
+
+    const handleConfirmBatchCancel = async (reason: string) => {
+        setIsBatchProcessing(true);
+        setBatchProgress({ current: 0, total: selectedBookingIds.size });
+        try {
+            const result = await db.batchCancelAgendamentos({
+                bookingIds: Array.from(selectedBookingIds),
+                reason,
+                user: currentUser,
+                isGestorOrAdmin,
+                onProgress: (current, total) => setBatchProgress({ current, total })
+            });
+            setIsBatchCancelModalOpen(false);
+            setBatchResultSummary({
+                title: isGestorOrAdmin ? 'Cancelamento em Lote Concluído' : 'Solicitações de Cancelamento Enviadas',
+                result
+            });
+            setSelectedBookingIds(new Set());
+            await loadCancelamentosPendentes();
+            await loadData(true);
+        } catch (err: any) {
+            console.error('Erro no cancelamento em lote:', err);
+            throw err;
+        } finally {
+            setIsBatchProcessing(false);
+            setBatchProgress(null);
+        }
+    };
+
+    const handleConfirmBatchDelete = async () => {
+        setIsBatchProcessing(true);
+        setBatchProgress({ current: 0, total: selectedBookingIds.size });
+        try {
+            const result = await db.batchDeleteAgendamentos({
+                bookingIds: Array.from(selectedBookingIds),
+                user: currentUser,
+                onProgress: (current, total) => setBatchProgress({ current, total })
+            });
+            setIsBatchDeleteModalOpen(false);
+            setBatchResultSummary({
+                title: 'Exclusão em Lote Concluída',
+                result
+            });
+            setSelectedBookingIds(new Set());
+            await loadData(true);
+        } catch (err: any) {
+            console.error('Erro na exclusão em lote:', err);
+            throw err;
+        } finally {
+            setIsBatchProcessing(false);
+            setBatchProgress(null);
+        }
+    };
+
+    const handleConfirmBatchPriority = async (priority: 'Normal' | 'Urgência' | 'Especial') => {
+        setIsBatchProcessing(true);
+        setBatchProgress({ current: 0, total: selectedBookingIds.size });
+        try {
+            const result = await db.batchUpdatePriority({
+                bookingIds: Array.from(selectedBookingIds),
+                priority,
+                user: currentUser,
+                onProgress: (current, total) => setBatchProgress({ current, total })
+            });
+            setIsBatchPriorityModalOpen(false);
+            setBatchResultSummary({
+                title: 'Alteração de Prioridade Concluída',
+                result
+            });
+            setSelectedBookingIds(new Set());
+            await loadData(true);
+        } catch (err: any) {
+            console.error('Erro na alteração de prioridade em lote:', err);
+            throw err;
+        } finally {
+            setIsBatchProcessing(false);
+            setBatchProgress(null);
+        }
+    };
+
+    const handleConfirmBatchPauseResume = async (reason: string) => {
+        if (!batchPauseResumeMode) return;
+        setIsBatchProcessing(true);
+        setBatchProgress({ current: 0, total: selectedBookingIds.size });
+        try {
+            const result = await db.batchPauseResumeAgendamentos({
+                bookingIds: Array.from(selectedBookingIds),
+                action: batchPauseResumeMode,
+                reason,
+                user: currentUser,
+                onProgress: (current, total) => setBatchProgress({ current, total })
+            });
+            setBatchPauseResumeMode(null);
+            setBatchResultSummary({
+                title: `${batchPauseResumeMode === 'pause' ? 'Pausa' : 'Retomada'} em Lote Concluída`,
+                result
+            });
+            setSelectedBookingIds(new Set());
+            await loadData(true);
+        } catch (err: any) {
+            console.error('Erro ao pausar/retomar em lote:', err);
+            throw err;
+        } finally {
+            setIsBatchProcessing(false);
+            setBatchProgress(null);
+        }
+    };
+
 
 
 
 
     return (
         <div className="w-full mx-auto flex flex-col flex-1 h-full max-h-full min-h-0 bg-white rounded-3xl border border-slate-200/80 shadow-2xl shadow-slate-100 overflow-hidden">
-            {/* Mobile Header (Limpa e otimizada para mobile) */}
-            <div className="block md:hidden bg-white border-b border-slate-200/80 p-3.5 space-y-2.5 shrink-0">
+            {/* Mobile Header (Limpa, organizada e sem sobreposições) */}
+            <div className="block md:hidden bg-white border-b border-slate-200/80 p-3 space-y-2.5 shrink-0">
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2">
                         <button 
                             onClick={onBack} 
-                            className="p-2 -ml-1 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-2xl active:scale-95 transition-all cursor-pointer"
+                            className="p-1.5 -ml-1 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-xl active:scale-95 transition-all cursor-pointer"
                             title="Voltar"
                         >
                             <ArrowLeft className="w-5 h-5" />
                         </button>
-                        <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-sky-50 to-blue-50/80 border border-sky-200/80 flex items-center justify-center text-sky-600 shadow-2xs">
-                            <Activity className="w-4.5 h-4.5" />
+                        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-50 to-blue-50/80 border border-sky-200/80 flex items-center justify-center text-sky-600 shadow-2xs">
+                            <Activity className="w-4 h-4" />
                         </div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-black bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 bg-clip-text text-transparent tracking-tight text-base uppercase leading-none">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            <h3 className="font-black bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 bg-clip-text text-transparent tracking-tight text-sm uppercase leading-none">
                                 Acompanhar
                             </h3>
-                            <span className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-sky-50 to-blue-50 text-sky-700 font-black text-[11px] uppercase border border-sky-200/80 shadow-2xs">
+                            <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-sky-50 to-blue-50 text-sky-700 font-black text-[10px] uppercase border border-sky-200/80 shadow-2xs">
                                 {filteredAndSortedBookings.length}
                             </span>
                             {isReadOnly && (
                                 <span
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 font-extrabold text-[10px] uppercase tracking-wider shadow-2xs"
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 font-extrabold text-[9px] uppercase tracking-wider shadow-2xs"
                                     title="Acesso exclusivo para consulta e impressão individual"
                                 >
-                                    <Eye className="w-3 h-3 text-amber-600" />
-                                    Modo Somente Leitura
+                                    <Eye className="w-2.5 h-2.5 text-amber-600" />
+                                    Leitura
                                 </span>
                             )}
                         </div>
                     </div>
 
                     {!isReadOnly && (
-                        <>
+                        <div className="flex items-center gap-1.5">
                             {/* Botão de Confirmação de Atendimentos no Mobile */}
                             <button
                                 type="button"
                                 onClick={() => setIsConfirmacaoModalOpen(true)}
-                                className={`p-2 rounded-2xl border transition-all cursor-pointer flex items-center gap-1.5 ${
+                                className={`p-1.5 px-2.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1 text-xs font-bold ${
                                     pendenciasConfirmacao.length > 0
                                         ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-500/25'
                                         : 'bg-emerald-50 text-emerald-700 border-emerald-200/80 hover:bg-emerald-100'
                                 }`}
                                 title={pendenciasConfirmacao.length > 0 ? `Confirmar Atendimentos (${pendenciasConfirmacao.length} pendentes)` : 'Atendimentos em Dia'}
                             >
-                                <CheckCircle2 className="w-4.5 h-4.5" />
+                                <CheckCircle2 className="w-3.5 h-3.5" />
                                 {pendenciasConfirmacao.length > 0 && (
                                     <span className="text-[10px] font-black px-1.5 py-0.2 bg-white text-amber-700 rounded-full">
                                         {pendenciasConfirmacao.length}
@@ -2980,86 +3268,268 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => setIsReportModalOpen(true)}
-                                    className="p-2 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded-2xl border border-slate-200/80 transition-all cursor-pointer"
+                                    className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded-xl border border-slate-200/80 transition-all cursor-pointer"
                                     title="Relatórios"
                                 >
-                                    <FileDown className="w-4.5 h-4.5" />
+                                    <FileDown className="w-4 h-4" />
                                 </button>
                             )}
-                        </>
+
+                            {/* Botão de Cancelamentos Pendentes no Mobile para Gestores/Admins */}
+                            {isGestorOrAdmin && Object.keys(cancelamentosPendentesMap).length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => setIsCancelamentoAprovacaoModalOpen(true)}
+                                    className="p-1.5 px-2 bg-gradient-to-r from-rose-500 to-amber-600 text-white rounded-xl text-xs font-black uppercase flex items-center gap-1 shrink-0 shadow-sm animate-pulse cursor-pointer"
+                                    title={`${Object.keys(cancelamentosPendentesMap).length} cancelamento(s) pendente(s) de aprovação`}
+                                >
+                                    <ShieldAlert className="w-4 h-4" />
+                                    <span>{Object.keys(cancelamentosPendentesMap).length}</span>
+                                </button>
+                            )}
+                        </div>
                     )}
                 </div>
 
-                {/* Barra de Busca Superior quando houver busca ou filtros ativos no Mobile */}
-                {(globalSearch.trim() || filterDate || filterStatus) && (
-                    <div className="relative w-full animate-in fade-in duration-200">
-                        <input
-                            type="text"
-                            placeholder="Buscar por Paciente, Código (ex: 0279), Procedimento, CPF..."
-                            className="w-full bg-slate-50 border border-slate-200/90 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 rounded-2xl pl-9 pr-9 py-2 text-xs font-bold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
-                            value={globalSearch}
-                            onChange={(e) => setGlobalSearch(e.target.value)}
-                        />
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
-                        {globalSearch && (
+                {/* Barra de Busca Superior no Mobile */}
+                <div className="relative w-full">
+                    <input
+                        type="text"
+                        placeholder="Buscar por Paciente, Código, Procedimento, CPF..."
+                        className="w-full bg-slate-50 border border-slate-200/90 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 rounded-xl pl-8 pr-8 py-1.5 text-xs font-bold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
+                        value={globalSearch}
+                        onChange={(e) => setGlobalSearch(e.target.value)}
+                    />
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                    {globalSearch && (
+                        <button
+                            type="button"
+                            onClick={() => setGlobalSearch('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-0.5 rounded-full hover:bg-slate-200/60 transition-colors"
+                            title="Limpar busca"
+                        >
+                            <X className="w-3.5 h-3.5" />
+                        </button>
+                    )}
+                </div>
+
+                {/* Controles de Seleção Unificados no Mobile */}
+                {!isReadOnly && filteredAndSortedBookings.length > 0 && (
+                    <div className="flex items-center gap-2 pt-0.5 w-full">
+                        <button
+                            type="button"
+                            onClick={handleUnifiedSelectionClick}
+                            className={`flex-1 py-1.5 px-3 rounded-xl border text-[11px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-2xs ${
+                                !isSelectionMode
+                                    ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                                    : isAllFilteredSelected
+                                    ? 'bg-slate-800 text-white border-slate-800'
+                                    : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600 shadow-xs'
+                            }`}
+                        >
+                            {!isSelectionMode ? (
+                                <>
+                                    <CheckSquare className="w-3.5 h-3.5 text-indigo-600" />
+                                    <span>Selecionar</span>
+                                </>
+                            ) : isAllFilteredSelected ? (
+                                <>
+                                    <CheckCheck className="w-3.5 h-3.5" />
+                                    <span>Desmarcar Todos</span>
+                                </>
+                            ) : (
+                                <>
+                                    <CheckCheck className="w-3.5 h-3.5" />
+                                    <span>Selecionar Todos ({filteredAndSortedBookings.length})</span>
+                                </>
+                            )}
+                        </button>
+
+                        {isSelectionMode && (
                             <button
                                 type="button"
-                                onClick={() => setGlobalSearch('')}
-                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-0.5 rounded-full hover:bg-slate-200/60 transition-colors"
-                                title="Limpar busca"
+                                onClick={handleExitSelectionMode}
+                                className="px-2.5 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition-all"
+                                title="Cancelar modo de seleção"
                             >
                                 <X className="w-3.5 h-3.5" />
+                                <span>Sair</span>
                             </button>
                         )}
                     </div>
                 )}
             </div>
 
-            {/* Desktop Integrated Single-Line Header */}
-            <div className="hidden md:flex bg-white border-b border-slate-200/80 p-2 md:px-3.5 shrink-0 items-center justify-between gap-2.5 overflow-x-auto custom-scrollbar">
-                {/* Left: Voltar + Icon + Title + Counter */}
-                <div className="flex items-center gap-2 shrink-0">
-                    <button 
-                        onClick={onBack} 
-                        className="p-1.5 -ml-1 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-xl active:scale-95 transition-all cursor-pointer shrink-0"
-                        title="Voltar"
-                    >
-                        <ArrowLeft className="w-4.5 h-4.5" />
-                    </button>
-                    <div className="w-8.5 h-8.5 rounded-xl bg-gradient-to-br from-sky-50 to-blue-50/80 border border-sky-200/80 flex items-center justify-center text-sky-600 shadow-2xs shrink-0">
-                        <Activity className="w-4.5 h-4.5" />
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                        <h3 className="font-black bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 bg-clip-text text-transparent tracking-tight text-sm md:text-base uppercase leading-none whitespace-nowrap">
-                            Acompanhar
-                        </h3>
-                        <span className="flex h-2 w-2 relative shrink-0">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                        </span>
-                        <span className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-sky-50 to-blue-50 text-sky-700 font-black text-[11px] uppercase tracking-wider border border-sky-200/80 shadow-2xs shrink-0">
-                            {filteredAndSortedBookings.length}
-                        </span>
-                        {isReadOnly && (
-                            <span
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 font-extrabold text-[10px] uppercase tracking-wider shadow-2xs shrink-0 whitespace-nowrap"
-                                title="Permissão restrita à consulta e impressão individual de comprovantes"
-                            >
-                                <Eye className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                                <span>Modo Somente Leitura</span>
+            {/* Desktop Integrated Two-Line Responsive Header (Sem sobreposição e sem overflow) */}
+            <div className="hidden md:flex flex-col bg-white border-b border-slate-200/80 shrink-0">
+                {/* Linha 1: Título, Status, Contagem e Botões de Ação */}
+                <div className="flex items-center justify-between gap-3 p-2.5 px-4">
+                    {/* Lado Esquerdo: Voltar + Ícone + Título + Status + Contador */}
+                    <div className="flex items-center gap-2.5 shrink-0">
+                        <button 
+                            onClick={onBack} 
+                            className="p-1.5 -ml-1 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-xl active:scale-95 transition-all cursor-pointer shrink-0"
+                            title="Voltar"
+                        >
+                            <ArrowLeft className="w-4.5 h-4.5" />
+                        </button>
+                        <div className="w-8.5 h-8.5 rounded-xl bg-gradient-to-br from-sky-50 to-blue-50/80 border border-sky-200/80 flex items-center justify-center text-sky-600 shadow-2xs shrink-0">
+                            <Activity className="w-4.5 h-4.5" />
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                            <h3 className="font-black bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 bg-clip-text text-transparent tracking-tight text-base uppercase leading-none whitespace-nowrap">
+                                Acompanhar
+                            </h3>
+                            <span className="flex h-2 w-2 relative shrink-0">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                             </span>
+                            <span className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-sky-50 to-blue-50 text-sky-700 font-black text-[11px] uppercase tracking-wider border border-sky-200/80 shadow-2xs shrink-0">
+                                {filteredAndSortedBookings.length}
+                            </span>
+                            {isReadOnly && (
+                                <span
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 font-extrabold text-[10px] uppercase tracking-wider shadow-2xs shrink-0 whitespace-nowrap"
+                                    title="Permissão restrita à consulta e impressão individual de comprovantes"
+                                >
+                                    <Eye className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                    <span>Modo Somente Leitura</span>
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Lado Direito: Ações Principais e Botão Unificado de Seleção */}
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                        {/* Confirmar Atendimentos */}
+                        {!isReadOnly && (
+                            <button
+                                onClick={() => setIsConfirmacaoModalOpen(true)}
+                                className={`px-3 py-1.5 font-extrabold rounded-2xl active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                                    pendenciasConfirmacao.length > 0
+                                        ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md shadow-amber-500/25 animate-pulse'
+                                        : 'bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/90 text-emerald-700 shadow-2xs'
+                                }`}
+                                title={pendenciasConfirmacao.length > 0 ? `Confirmar Atendimentos (${pendenciasConfirmacao.length} pendentes)` : 'Atendimentos em Dia'}
+                            >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>
+                                    {pendenciasConfirmacao.length > 0 ? `Confirmar (${pendenciasConfirmacao.length})` : 'Em Dia'}
+                                </span>
+                            </button>
+                        )}
+
+                        {/* Relatório */}
+                        {canReport && (
+                            <button
+                                onClick={() => setIsReportModalOpen(true)}
+                                className="px-3 py-1.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-extrabold rounded-2xl shadow-md shadow-sky-500/20 hover:shadow-sky-500/35 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0"
+                                title="Gerar Relatórios"
+                            >
+                                <FileDown className="w-3.5 h-3.5" />
+                                <span>Relatório</span>
+                            </button>
+                        )}
+
+                        {/* Botão de Cancelamentos Pendentes para Gestores/Admins */}
+                        {isGestorOrAdmin && Object.keys(cancelamentosPendentesMap).length > 0 && (
+                            <button
+                                type="button"
+                                onClick={() => setIsCancelamentoAprovacaoModalOpen(true)}
+                                className="px-3 py-1.5 bg-gradient-to-r from-rose-500 to-amber-600 hover:from-rose-600 hover:to-amber-700 text-white font-extrabold rounded-2xl shadow-md shadow-rose-500/20 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 animate-pulse"
+                                title={`${Object.keys(cancelamentosPendentesMap).length} solicitação(ões) de cancelamento aguardando decisão do gestor`}
+                            >
+                                <ShieldAlert className="w-3.5 h-3.5" />
+                                <span>Cancelamentos ({Object.keys(cancelamentosPendentesMap).length})</span>
+                            </button>
+                        )}
+
+                        {/* Fila */}
+                        <button
+                            onClick={() => setFilterStatus(prev => prev === 'Fila de espera' ? '' : 'Fila de espera')}
+                            className={`px-3 py-1.5 font-extrabold rounded-2xl active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                                filterStatus === 'Fila de espera'
+                                ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md shadow-amber-500/25'
+                                : 'bg-white hover:bg-amber-50/60 border border-amber-200/80 hover:border-amber-300 text-amber-700 shadow-2xs'
+                            }`}
+                            title="Filtrar por Pacientes na Fila de Espera"
+                        >
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>Fila</span>
+                        </button>
+
+                        {/* Divisor */}
+                        {!isReadOnly && filteredAndSortedBookings.length > 0 && (
+                            <div className="h-5 w-px bg-slate-200 shrink-0 mx-0.5" />
+                        )}
+
+                        {/* Botão Unificado de Seleção (SELECIONAR -> SELECIONAR TODOS -> DESMARCAR TODOS) */}
+                        {!isReadOnly && filteredAndSortedBookings.length > 0 && (
+                            <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                    type="button"
+                                    onClick={handleUnifiedSelectionClick}
+                                    className={`px-3.5 py-1.5 font-extrabold rounded-2xl active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                                        !isSelectionMode
+                                            ? 'bg-white hover:bg-slate-100 border border-slate-200/90 text-slate-700 shadow-2xs'
+                                            : isAllFilteredSelected
+                                            ? 'bg-slate-800 hover:bg-slate-700 text-white shadow-2xs'
+                                            : 'bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white shadow-md shadow-indigo-500/20'
+                                    }`}
+                                    title={
+                                        !isSelectionMode
+                                            ? "Habilitar modo de seleção individual"
+                                            : isAllFilteredSelected
+                                            ? "Desmarcar todas as solicitações"
+                                            : `Selecionar todas as ${filteredAndSortedBookings.length} solicitações filtradas em todas as páginas`
+                                    }
+                                >
+                                    {!isSelectionMode ? (
+                                        <CheckSquare className="w-3.5 h-3.5 text-indigo-600" />
+                                    ) : (
+                                        <CheckCheck className="w-3.5 h-3.5" />
+                                    )}
+                                    <span>
+                                        {!isSelectionMode
+                                            ? 'Selecionar'
+                                            : isAllFilteredSelected
+                                            ? 'Desmarcar Todos'
+                                            : `Selecionar Todos (${filteredAndSortedBookings.length})`}
+                                    </span>
+                                </button>
+
+                                {/* Informações da seleção ativa e botão para sair */}
+                                {isSelectionMode && (
+                                    <div className="flex items-center gap-1 pl-1">
+                                        {selectedBookingIds.size > 0 && (
+                                            <span className="px-2 py-0.5 rounded-lg bg-indigo-50 border border-indigo-200/80 text-indigo-700 text-[10px] font-black uppercase tracking-wider">
+                                                {selectedBookingIds.size} selecionada{selectedBookingIds.size === 1 ? '' : 's'}
+                                            </span>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={handleExitSelectionMode}
+                                            className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                            title="Sair do modo de seleção"
+                                            aria-label="Sair do modo de seleção"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         )}
                     </div>
                 </div>
 
-                {/* Center / Right: Integrated Modern Single-Line Filters & Actions */}
-                <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
-                    {/* Campo de Busca Otimizado e Preciso */}
-                    <div className="relative flex-1 min-w-[200px] max-w-md shrink-0">
+                {/* Linha 2: Busca Ampla + Filtros Integrados */}
+                <div className="flex items-center gap-2.5 p-2 px-4 bg-slate-50/50 border-t border-slate-100 flex-wrap sm:flex-nowrap">
+                    {/* Campo de Busca Ampliado */}
+                    <div className="relative flex-1 min-w-[240px]">
                         <input
                             type="text"
                             placeholder="Buscar por Paciente, Código (ex: 0279), Procedimento, CPF..."
-                            className="w-full bg-slate-50/90 hover:bg-slate-100/80 focus:bg-white border border-slate-200/90 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 rounded-2xl pl-9 pr-8 py-1.5 text-xs font-semibold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
+                            className="w-full bg-white hover:bg-slate-50 focus:bg-white border border-slate-200/90 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 rounded-2xl pl-9 pr-8 py-1.5 text-xs font-semibold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
                             value={globalSearch}
                             onChange={(e) => setGlobalSearch(e.target.value)}
                         />
@@ -3076,93 +3546,64 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         )}
                     </div>
 
-                    {/* Filter: Custom Modern Date Picker */}
-                    <ModernDatePicker
-                        value={filterDate}
-                        onChange={setFilterDate}
-                        placeholder="Data"
-                    />
+                    {/* Filtros em Linha: Data, Tipo, Filtro */}
+                    <div className="flex items-center gap-2 shrink-0">
+                        <ModernDatePicker
+                            value={filterDate}
+                            onChange={setFilterDate}
+                            placeholder="Data"
+                        />
 
-                    {/* Filter: Tipo de Atendimento (INTERNO / EXTERNO) */}
-                    <ModernDropdown
-                        value={filterTipoAtendimento}
-                        onChange={setFilterTipoAtendimento}
-                        options={[
-                            { value: '', label: 'Todos os Tipos' },
-                            { value: 'INTERNO', label: '🏥 Interno (Agendado)' },
-                            { value: 'EXTERNO', label: '🌐 Externo (Agendado)' },
-                            { value: 'NAO_DEFINIDO', label: '⏳ Aguardando Vaga (—)' }
-                        ]}
-                        placeholder="Tipo"
-                        minWidth="w-28 sm:w-36 lg:w-44"
-                    />
+                        <ModernDropdown
+                            value={filterTipoAtendimento}
+                            onChange={setFilterTipoAtendimento}
+                            options={[
+                                { value: '', label: 'Todos os Tipos' },
+                                { value: 'INTERNO', label: '🏥 Interno (Agendado)' },
+                                { value: 'EXTERNO', label: '🌐 Externo (Agendado)' },
+                                { value: 'NAO_DEFINIDO', label: '⏳ Aguardando Vaga (—)' }
+                            ]}
+                            placeholder="Tipo"
+                            minWidth="w-28 sm:w-36 lg:w-44"
+                        />
 
-                    {/* Filter: Select (Modern Popover Dropdown) */}
-                    <ModernDropdown
-                        value={filterStatus}
-                        onChange={setFilterStatus}
-                        options={[
-                            { value: '', label: 'Todos os Status' },
-                            { value: 'Urgencias', label: '🚨 Urgências' },
-                            { value: 'Definir Data', label: 'Definir Data' },
-                            { value: 'Fila de espera', label: 'Fila de espera' },
-                            { value: 'Pausada', label: '⏸ Pausada' },
-                            { value: 'Agendado', label: 'Agendado' },
-                            { value: 'Solicitado', label: 'Solicitado' },
-                            { value: 'Realizado', label: 'Realizado' },
-                            { value: 'Não Realizado', label: 'Não Realizado' },
-                            { value: 'Cancelado', label: 'Cancelado' },
-                        ]}
-                        placeholder="Filtro"
-                        minWidth="w-28 sm:w-36 lg:w-40"
-                    />
+                        <ModernDropdown
+                            value={filterStatus}
+                            onChange={setFilterStatus}
+                            options={[
+                                { value: '', label: 'Todos os Status' },
+                                { value: 'Urgencias', label: '🚨 Urgências' },
+                                { value: 'Definir Data', label: 'Definir Data' },
+                                { value: 'Fila de espera', label: 'Fila de espera' },
+                                { value: 'Pausada', label: '⏸ Pausada' },
+                                { value: 'Agendado', label: 'Agendado' },
+                                { value: 'Solicitado', label: 'Solicitado' },
+                                { value: 'Realizado', label: 'Realizado' },
+                                { value: 'Não Realizado', label: 'Não Realizado' },
+                                { value: 'Cancelado', label: 'Cancelado' },
+                            ]}
+                            placeholder="Filtro"
+                            minWidth="w-28 sm:w-36 lg:w-40"
+                        />
 
-                    {/* Action Button 0: Confirmar Atendimentos (oculto em Modo Somente Leitura) */}
-                    {!isReadOnly && (
-                        <button
-                            onClick={() => setIsConfirmacaoModalOpen(true)}
-                            className={`px-3.5 py-1.5 font-extrabold rounded-2xl active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                                pendenciasConfirmacao.length > 0
-                                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md shadow-amber-500/25 animate-pulse'
-                                    : 'bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/90 text-emerald-700 shadow-2xs'
-                            }`}
-                            title={pendenciasConfirmacao.length > 0 ? `Confirmar Atendimentos (${pendenciasConfirmacao.length} pendentes)` : 'Atendimentos em Dia'}
-                        >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span className="hidden xl:inline">
-                                {pendenciasConfirmacao.length > 0 ? `Confirmar Atendimentos (${pendenciasConfirmacao.length})` : 'Atendimentos em Dia'}
-                            </span>
-                            <span className="xl:hidden">
-                                {pendenciasConfirmacao.length > 0 ? `Confirmar (${pendenciasConfirmacao.length})` : 'Em Dia'}
-                            </span>
-                        </button>
-                    )}
-
-                    {/* Action Button 1: Relatório (bloqueado em Modo Somente Leitura) */}
-                    {canReport && (
-                        <button
-                            onClick={() => setIsReportModalOpen(true)}
-                            className="px-3.5 py-1.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-extrabold rounded-2xl shadow-md shadow-sky-500/20 hover:shadow-sky-500/35 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0"
-                            title="Gerar Relatórios"
-                        >
-                            <FileDown className="w-3.5 h-3.5" />
-                            <span className="hidden xl:inline">Relatório</span>
-                        </button>
-                    )}
-
-                    {/* Action Button 2: Fila de Espera */}
-                    <button
-                        onClick={() => setFilterStatus(prev => prev === 'Fila de espera' ? '' : 'Fila de espera')}
-                        className={`px-3.5 py-1.5 font-extrabold rounded-2xl active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                            filterStatus === 'Fila de espera'
-                            ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md shadow-amber-500/25'
-                            : 'bg-white hover:bg-amber-50/60 border border-amber-200/80 hover:border-amber-300 text-amber-700 shadow-2xs'
-                        }`}
-                        title="Filtrar por Pacientes na Fila de Espera"
-                    >
-                        <Clock className="w-3.5 h-3.5" />
-                        <span className="hidden xl:inline">Fila</span>
-                    </button>
+                        {/* Botão Limpar Filtros quando houver busca ou filtros aplicados */}
+                        {(globalSearch.trim() || filterDate || filterStatus || filterTipoAtendimento) && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setGlobalSearch('');
+                                    setFilterDate('');
+                                    setFilterStatus('');
+                                    setFilterTipoAtendimento('');
+                                }}
+                                className="p-1.5 px-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                                title="Limpar todos os filtros e busca"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                                <span className="text-[11px] hidden xl:inline">Limpar</span>
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -3253,6 +3694,39 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     </div>
                 ) : filteredAndSortedBookings.length > 0 ? (
                     <div className="space-y-3 w-full pb-6">
+                        {/* Banner Informativo do Modo de Seleção Ativo */}
+                        {isSelectionMode && (
+                            <div className="p-3 sm:px-4 sm:py-2.5 bg-gradient-to-r from-indigo-50/95 via-purple-50/40 to-white border border-indigo-200/90 rounded-2xl flex flex-wrap items-center justify-between gap-2.5 shadow-2xs text-xs animate-in fade-in duration-200">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse shrink-0" />
+                                    <div>
+                                        <span className="font-black text-indigo-950 uppercase tracking-wider block sm:inline mr-2">
+                                            Modo de Seleção Ativo
+                                        </span>
+                                        <span className="font-bold text-indigo-800 text-[11px]">
+                                            {selectedBookingIds.size} de {filteredAndSortedBookings.length} {filteredAndSortedBookings.length === 1 ? 'solicitação selecionada' : 'solicitações selecionadas'} nesta pesquisa/filtro
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleToggleSelectAll}
+                                        className="px-3 py-1 bg-white hover:bg-indigo-50 border border-indigo-300 text-indigo-700 font-extrabold rounded-xl text-xs transition-all cursor-pointer shadow-2xs"
+                                    >
+                                        {isAllFilteredSelected ? 'Desmarcar Todos' : `Selecionar Todos (${filteredAndSortedBookings.length})`}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleExitSelectionMode}
+                                        className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold rounded-xl text-xs transition-all cursor-pointer"
+                                    >
+                                        Fechar Seleção
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         {visibleBookings.map((booking) => {
                             const eligibility = eligibilityMap.get(booking.id);
                             const cardQueuePos = queuePositions[booking.id] ?? eligibility?.queuePosition ?? booking.queue_position;
@@ -3300,6 +3774,9 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                     isGenerating={isGenerating}
                                     formatPatientName={formatPatientName}
                                     agentPsf={agentPsfMap[(booking.paciente?.agente_saude || '').toUpperCase().trim()]}
+                                    isSelectionMode={isSelectionMode}
+                                    isSelected={selectedBookingIds.has(booking.id)}
+                                    onToggleSelect={handleToggleSelect}
                                 />
                             );
                         })}
@@ -4761,6 +5238,96 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     pendencias={pendenciasConfirmacao}
                     currentUser={currentUser}
                     onConfirmar={handleConfirmarComparecimento}
+                />
+            )}
+
+            {/* ==================== BARRA DE AÇÕES EM LOTE (FIXA / FLUTUANTE) ==================== */}
+            {!isReadOnly && (
+                <BatchActionBar
+                    selectedCount={selectedBookingIds.size}
+                    totalFilteredCount={filteredAndSortedBookings.length}
+                    canTransfer={canEdit}
+                    canCancel={canCancel}
+                    canDelete={canDelete && isGestorOrAdmin}
+                    canPause={canPause}
+                    canEdit={canEdit}
+                    onOpenTransfer={() => setIsBatchTransferModalOpen(true)}
+                    onOpenCancel={() => setIsBatchCancelModalOpen(true)}
+                    onOpenDelete={() => setIsBatchDeleteModalOpen(true)}
+                    onOpenPriority={() => setIsBatchPriorityModalOpen(true)}
+                    onOpenPauseResume={(mode) => setBatchPauseResumeMode(mode)}
+                    onDeselectAll={handleDeselectAll}
+                    onExitSelectionMode={handleExitSelectionMode}
+                />
+            )}
+
+            {/* ==================== MODAIS DE EXECUÇÃO EM LOTE ==================== */}
+            <BatchTransferModal
+                isOpen={isBatchTransferModalOpen}
+                onClose={() => setIsBatchTransferModalOpen(false)}
+                selectedBookings={selectedBookingsList}
+                procedures={procedures}
+                onConfirmTransfer={handleConfirmBatchTransfer}
+                isProcessing={isBatchProcessing}
+                progress={batchProgress}
+            />
+
+            <BatchCancelModal
+                isOpen={isBatchCancelModalOpen}
+                onClose={() => setIsBatchCancelModalOpen(false)}
+                selectedCount={selectedBookingIds.size}
+                isGestorOrAdmin={isGestorOrAdmin}
+                onConfirmCancel={handleConfirmBatchCancel}
+                isProcessing={isBatchProcessing}
+                progress={batchProgress}
+            />
+
+            <BatchDeleteModal
+                isOpen={isBatchDeleteModalOpen}
+                onClose={() => setIsBatchDeleteModalOpen(false)}
+                selectedCount={selectedBookingIds.size}
+                onConfirmDelete={handleConfirmBatchDelete}
+                isProcessing={isBatchProcessing}
+                progress={batchProgress}
+            />
+
+            <BatchPriorityModal
+                isOpen={isBatchPriorityModalOpen}
+                onClose={() => setIsBatchPriorityModalOpen(false)}
+                selectedCount={selectedBookingIds.size}
+                onConfirmPriority={handleConfirmBatchPriority}
+                isProcessing={isBatchProcessing}
+                progress={batchProgress}
+            />
+
+            <BatchPauseResumeModal
+                isOpen={Boolean(batchPauseResumeMode)}
+                mode={batchPauseResumeMode || 'pause'}
+                onClose={() => setBatchPauseResumeMode(null)}
+                selectedCount={selectedBookingIds.size}
+                onConfirm={handleConfirmBatchPauseResume}
+                isProcessing={isBatchProcessing}
+                progress={batchProgress}
+            />
+
+            <BatchResultSummaryModal
+                isOpen={Boolean(batchResultSummary)}
+                onClose={() => setBatchResultSummary(null)}
+                title={batchResultSummary?.title || 'Resultado da Operação'}
+                result={batchResultSummary?.result || null}
+            />
+
+            {/* Modal de Análise e Decisão de Cancelamentos para Gestores e Administradores */}
+            {isGestorOrAdmin && (
+                <SolicitacoesCancelamentoModal
+                    currentUser={currentUser}
+                    isGestorOrAdmin={isGestorOrAdmin}
+                    isOpen={isCancelamentoAprovacaoModalOpen}
+                    onClose={() => setIsCancelamentoAprovacaoModalOpen(false)}
+                    onChanged={() => {
+                        loadCancelamentosPendentes();
+                        loadData(true);
+                    }}
                 />
             )}
         </div>
