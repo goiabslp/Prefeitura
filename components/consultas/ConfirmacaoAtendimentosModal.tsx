@@ -22,6 +22,7 @@ import {
     Plus
 } from 'lucide-react';
 import { formatProcedimentoLabel, updatePaciente } from '../../services/consultasService';
+import { isConsultasAcompanharReadOnly, hasConsultasAcompanharOperationalAccess } from '../../services/permissionService';
 
 // Helpers para formatação e máscara de telefone
 const formatPhoneNumber = (phone?: string | null): string => {
@@ -68,6 +69,10 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
     currentUser,
     onConfirmar
 }) => {
+    // Validação Dinâmica de Permissão: Usuários com acesso Somente Leitura NUNCA acessam ou executam este modal
+    const isReadOnlyUser = isConsultasAcompanharReadOnly(currentUser);
+    const hasOperational = hasConsultasAcompanharOperationalAccess(currentUser);
+
     // Estados dos Filtros
     const [searchTerm, setSearchTerm] = useState('');
     const [periodFilter, setPeriodFilter] = useState<PeriodFilterType>('todas');
@@ -101,6 +106,11 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
     };
 
     const handleSavePhone = async (pId: string) => {
+        if (isReadOnlyUser || !hasOperational) {
+            setPhoneSaveError('Acesso negado: seu usuário possui permissão Somente Leitura.');
+            return;
+        }
+
         const digits = phoneInputValue.replace(/\D/g, '');
         if (digits.length > 0 && digits.length < 10) {
             setPhoneSaveError('Informe DDD + Número (ao menos 10 dígitos).');
@@ -305,6 +315,14 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
 
     // Executar ação de confirmação individual
     const handleAction = async (id: string, situacao: 'Realizado' | 'Não Realizado') => {
+        if (isReadOnlyUser || !hasOperational) {
+            setRowErrors(prev => ({
+                ...prev,
+                [id]: 'Acesso negado: seu usuário possui permissão Somente Leitura.'
+            }));
+            return;
+        }
+
         if (processingIds[id]) return;
 
         setProcessingIds(prev => ({ ...prev, [id]: situacao }));
@@ -331,7 +349,8 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
         }
     };
 
-    if (!isOpen) return null;
+    // Defesa em profundidade: Se o usuário estiver em Somente Leitura ou não tiver permissão operacional, o modal nunca renderiza
+    if (!isOpen || isReadOnlyUser || !hasOperational) return null;
 
     return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/70 backdrop-blur-md p-1 sm:p-2 md:p-3 overflow-hidden select-none animate-in fade-in duration-200">

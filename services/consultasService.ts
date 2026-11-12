@@ -3050,8 +3050,12 @@ export const getHojeBrasilDateStr = (): string => {
  * Identifica agendamentos cuja data de atendimento já passou (anterior a hoje no fuso de Brasília),
  * que ainda não possuem confirmação de comparecimento (ou seja, status ainda 'Agendado' e sem confirmed_at),
  * e não foram cancelados.
+ * Bloqueia execução desnecessária para usuários com permissão Somente Leitura.
  */
-export const getAgendamentosPendentesConfirmacao = async (): Promise<ConsultaAgendamento[]> => {
+export const getAgendamentosPendentesConfirmacao = async (currentUser?: User | null): Promise<ConsultaAgendamento[]> => {
+    if (currentUser && (isConsultasAcompanharReadOnly(currentUser) || !hasConsultasAcompanharOperationalAccess(currentUser))) {
+        return [];
+    }
     try {
         const hojeBr = getHojeBrasilDateStr();
         const { data, error } = await supabase
@@ -3081,12 +3085,16 @@ export const getAgendamentosPendentesConfirmacao = async (): Promise<ConsultaAge
 /**
  * Confirma o comparecimento ('Realizado') ou ausência ('Não Realizado' / Faltou) de um agendamento.
  * Registra data, hora, servidor responsável e auditoria completa.
+ * Bloqueia categoricamente tentativas de mutação para usuários Somente Leitura.
  */
 export const confirmarComparecimentoAgendamento = async (
     id: string,
     situacao: 'Realizado' | 'Não Realizado',
     currentUser: User
 ): Promise<ConsultaAgendamento> => {
+    if (!currentUser || isConsultasAcompanharReadOnly(currentUser) || !hasConsultasAcompanharOperationalAccess(currentUser)) {
+        throw new Error('Acesso negado (Modo Somente Leitura): seu usuário não possui permissão operacional para confirmar comparecimento de atendimentos.');
+    }
     assertCanMutateRegulacao('Confirmar Comparecimento de Atendimento', 'acompanhar', currentUser);
     const agoraIso = new Date().toISOString();
     const serverName = currentUser?.name || 'Servidor Municipal';

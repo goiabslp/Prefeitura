@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { User, ConsultaPaciente, ConsultaAgendamento, ConsultaProcedimento, AppState, ConsultaVaga, ConsultaSolicitacaoCancelamento } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users, UserCheck, Building2, ShieldCheck, ShieldAlert, FileText, Phone, MapPin, Lock, ArrowRightLeft, PauseCircle, PlayCircle, Pause, Play, Eye, CheckSquare, CheckCheck } from 'lucide-react';
+import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Copy, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users, UserCheck, Building2, ShieldCheck, ShieldAlert, FileText, Phone, MapPin, Lock, ArrowRightLeft, PauseCircle, PlayCircle, Pause, Play, Eye, CheckSquare, CheckCheck } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { formatProcedimentoLabel, BatchOperationResult } from '../../services/consultasService';
-import { isConsultasAcompanharReadOnly } from '../../services/permissionService';
+import { isConsultasAcompanharReadOnly, hasConsultasAcompanharOperationalAccess } from '../../services/permissionService';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { useAgentesSaude } from '../../services/agentesSaudeService';
 import { jsPDF } from 'jspdf';
@@ -520,6 +520,29 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
     onToggleSelect
 }) => {
     const [isExpanded, setIsExpanded] = useState(false);
+    const [isCopiedCode, setIsCopiedCode] = useState(false);
+
+    const handleCopyCode = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const code = booking.procedimento?.code;
+        if (!code) return;
+        try {
+            if (navigator?.clipboard?.writeText) {
+                await navigator.clipboard.writeText(code);
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = code;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            }
+            setIsCopiedCode(true);
+            setTimeout(() => setIsCopiedCode(false), 1500);
+        } catch (err) {
+            console.error('Erro ao copiar código do procedimento:', err);
+        }
+    };
     const isPaused = booking.is_paused || booking.status === 'Pausada';
     const isSuspendedCancellation = Boolean(
         isCancelamentoPendente ||
@@ -850,32 +873,62 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                 />
 
                                 {/* EXAME / PROCEDIMENTO */}
-                                <div className="flex flex-col gap-0.5 col-span-2 sm:col-span-2 wide:flex-1 min-w-[180px]">
+                                <div className="flex flex-col gap-1 col-span-2 sm:col-span-2 wide:flex-1 min-w-[200px]">
                                     <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1 leading-none">
                                         <Activity className="w-2.5 h-2.5 shrink-0 text-slate-400" />
                                         <span>Exame / Procedimento</span>
                                     </span>
-                                    <div className="flex items-center gap-1.5 flex-wrap min-w-0 mt-0.5">
-                                        <span className="text-xs sm:text-[13px] font-black text-slate-900 uppercase whitespace-normal break-words leading-tight" title={formatProcedimentoLabel(booking.procedimento)}>
+                                    <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0 mt-0.5">
+                                        {/* Badge Moderna e Destacada do Código (ANTES do nome) */}
+                                        {booking.procedimento?.code && (
+                                            <div className="relative inline-flex items-center shrink-0">
+                                                <button
+                                                    type="button"
+                                                    onClick={handleCopyCode}
+                                                    className="group inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:py-1 bg-blue-50/90 hover:bg-blue-100 border border-blue-200/90 hover:border-blue-300 rounded-lg text-blue-900 transition-all shadow-2xs cursor-pointer active:scale-95"
+                                                    title="Clique para copiar o código"
+                                                    aria-label={`Código ${booking.procedimento.code}. Clique para copiar.`}
+                                                >
+                                                    <span className="font-mono font-black text-xs sm:text-[13px] tracking-wide text-blue-900 tabular-nums leading-none">
+                                                        {booking.procedimento.code}
+                                                    </span>
+                                                    {isCopiedCode ? (
+                                                        <Check className="w-3 h-3 text-emerald-600 shrink-0 animate-in zoom-in-75 duration-150" />
+                                                    ) : (
+                                                        <Copy className="w-2.5 h-2.5 text-blue-400 group-hover:text-blue-600 shrink-0 transition-colors" />
+                                                    )}
+                                                </button>
+                                                {isCopiedCode && (
+                                                    <span className="absolute -top-6 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded shadow-md whitespace-nowrap z-30 animate-in fade-in zoom-in-95 duration-150 pointer-events-none">
+                                                        Copiado!
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Nome do Procedimento em Negrito */}
+                                        <span 
+                                            className="text-xs sm:text-[13px] font-black text-slate-900 uppercase whitespace-normal break-words leading-tight" 
+                                            title={formatProcedimentoLabel(booking.procedimento)}
+                                        >
                                             {formatProcedimentoLabel(booking.procedimento) || 'Não informado'}
                                         </span>
-                                        {booking.procedimento?.code && (
-                                            <span className="text-[9px] text-slate-600 font-mono font-extrabold bg-slate-100 px-1.5 py-0.5 rounded-md border border-slate-200 shrink-0 leading-none">
-                                                {booking.procedimento.code}
-                                            </span>
-                                        )}
-                                        {booking.procedimento?.type && (
-                                            <span className={`px-1.5 py-0.5 text-[8.5px] font-black uppercase tracking-wider rounded-md shrink-0 leading-none ${
+                                    </div>
+
+                                    {/* Tipo do Procedimento (CIRURGIA / EXAME / CONSULTA) */}
+                                    {booking.procedimento?.type && (
+                                        <div className="mt-0.5">
+                                            <span className={`inline-flex px-1.5 py-0.5 text-[8.5px] font-black uppercase tracking-wider rounded-md shrink-0 leading-none border ${
                                                 booking.procedimento.type === 'Exame'
-                                                ? 'bg-sky-50 text-sky-700 border border-sky-200'
+                                                ? 'bg-sky-50 text-sky-700 border-sky-200'
                                                 : booking.procedimento.type === 'Consulta'
-                                                ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                                                : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                                : 'bg-rose-50 text-rose-700 border-rose-200'
                                             }`}>
                                                 {booking.procedimento.type}
                                             </span>
-                                        )}
-                                    </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* DATA AGENDADA */}
@@ -2069,6 +2122,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const isGestor = gestorUserIds.includes(currentUser.id) || !!currentUser.permissions?.includes('parent_consultas_gestor') || !!currentUser.permissions?.includes('sub_consultas_gestor');
     const isGestorOrAdmin = isAdmin || isGestor;
     const isReadOnly = Boolean(isReadOnlyProp || isConsultasAcompanharReadOnly(currentUser, activeGlobalSettings));
+    const canConfirmarAtendimentos = !isReadOnly && hasConsultasAcompanharOperationalAccess(currentUser, activeGlobalSettings);
     const canPause = isGestorOrAdmin && !isReadOnly;
     const canCancel = !isReadOnly;
     const canComplete = isGestorOrAdmin && !isReadOnly;
@@ -2076,10 +2130,13 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const canDelete = isGestorOrAdmin && !isReadOnly;
     const canReport = !isReadOnly;
 
-    // Se a permissão for rebaixada para Somente Leitura em tempo real, fecha modais operacionais abertos
+    // Regra 8: Se a permissão for alterada para Somente Leitura durante a sessão, fecha modais operacionais e cancela abertura automática imediatamente
     useEffect(() => {
-        if (isReadOnly) {
+        if (isReadOnly || !canConfirmarAtendimentos) {
             setIsConfirmacaoModalOpen(false);
+            setHasAutoOpenedConfirmacaoModal(false);
+        }
+        if (isReadOnly) {
             setIsReportModalOpen(false);
             setIsCancelModalOpen(false);
             setIsPauseModalOpen(false);
@@ -2090,7 +2147,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             setIsDefinirDataModalOpen(false);
             setBlockedQueueTarget(null);
         }
-    }, [isReadOnly]);
+    }, [isReadOnly, canConfirmarAtendimentos]);
 
     const formatDateBr = (d: string) => {
         if (!d) return '';
@@ -2303,8 +2360,11 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     }, []);
 
     // 1. Verificação Automática dos Agendamentos Vencidos aguardando confirmação (America/Sao_Paulo)
-    // Regra: data do atendimento anterior à data atual, status 'Agendado' e sem confirmação prévia
+    // Regra obrigatória 3: Não executar verificações automáticas destinadas exclusivamente à abertura desse modal para usuários sem permissão (Somente Leitura)
     const pendenciasConfirmacao = useMemo(() => {
+        if (isReadOnly || !canConfirmarAtendimentos) {
+            return [];
+        }
         const hojeBr = db.getHojeBrasilDateStr();
         return allBookings.filter(a => {
             if (!a.appointment_date) return false;
@@ -2325,19 +2385,22 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             const timeB = b.appointment_time || '';
             return timeA.localeCompare(timeB);
         });
-    }, [allBookings]);
+    }, [allBookings, isReadOnly, canConfirmarAtendimentos]);
 
-    // Abertura automática ao acessar /Regulacao/Acompanhar quando houver pendências (apenas para perfis operacionais)
+    // Abertura automática ao acessar /Regulacao/Acompanhar quando houver pendências (apenas para perfis operacionais com permissão)
     useEffect(() => {
-        if (!isReadOnly && !loading && pendenciasConfirmacao.length > 0 && !hasAutoOpenedConfirmacaoModal) {
+        if (!isReadOnly && canConfirmarAtendimentos && !loading && pendenciasConfirmacao.length > 0 && !hasAutoOpenedConfirmacaoModal) {
             setIsConfirmacaoModalOpen(true);
             setHasAutoOpenedConfirmacaoModal(true);
         }
-    }, [isReadOnly, loading, pendenciasConfirmacao.length, hasAutoOpenedConfirmacaoModal]);
+    }, [isReadOnly, canConfirmarAtendimentos, loading, pendenciasConfirmacao.length, hasAutoOpenedConfirmacaoModal]);
 
     // Handler para confirmar individualmente (Realizado ou Faltou)
     const handleConfirmarComparecimento = async (id: string, situacao: 'Realizado' | 'Não Realizado') => {
-        if (isReadOnly) return;
+        if (isReadOnly || !canConfirmarAtendimentos) {
+            console.warn('[AcompanharScreen] Tentativa de confirmar atendimento bloqueada (permissão somente leitura).');
+            return;
+        }
         const updated = await db.confirmarComparecimentoAgendamento(id, situacao, currentUser);
         if (updated) {
             setAllBookings(prev => prev.map(b => b.id === id ? updated : b));
@@ -3242,44 +3305,39 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         </div>
                     </div>
 
-                    {!isReadOnly && (
-                        <div className="flex items-center gap-1.5">
-                            {/* Botão de Confirmação de Atendimentos no Mobile */}
+                    <div className="flex items-center gap-1.5">
+                        {/* Botão de Confirmação de Atendimentos no Mobile (Oculto para Somente Leitura e visível se houver pendências para quem tem permissão) */}
+                        {!isReadOnly && canConfirmarAtendimentos && pendenciasConfirmacao.length > 0 && (
                             <button
                                 type="button"
                                 onClick={() => setIsConfirmacaoModalOpen(true)}
-                                className={`p-1.5 px-2.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1 text-xs font-bold ${
-                                    pendenciasConfirmacao.length > 0
-                                        ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-500/25'
-                                        : 'bg-emerald-50 text-emerald-700 border-emerald-200/80 hover:bg-emerald-100'
-                                }`}
-                                title={pendenciasConfirmacao.length > 0 ? `Confirmar Atendimentos (${pendenciasConfirmacao.length} pendentes)` : 'Atendimentos em Dia'}
+                                className="p-1.5 px-2.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-500/25 animate-pulse"
+                                title={`Confirmar Atendimentos (${pendenciasConfirmacao.length} pendentes)`}
                             >
                                 <CheckCircle2 className="w-3.5 h-3.5" />
-                                {pendenciasConfirmacao.length > 0 && (
-                                    <span className="text-[10px] font-black px-1.5 py-0.2 bg-white text-amber-700 rounded-full">
-                                        {pendenciasConfirmacao.length}
-                                    </span>
-                                )}
+                                <span className="text-[10px] font-black px-1.5 py-0.2 bg-white text-amber-700 rounded-full">
+                                    {pendenciasConfirmacao.length}
+                                </span>
                             </button>
+                        )}
 
-                            {/* Botão de Relatório Rápido no Mobile */}
-                            {canReport && (
-                                <button
-                                    type="button"
-                                    onClick={() => setIsReportModalOpen(true)}
-                                    className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded-xl border border-slate-200/80 transition-all cursor-pointer"
-                                    title="Relatórios"
-                                >
-                                    <FileDown className="w-4 h-4" />
-                                </button>
-                            )}
+                        {/* Botão de Relatório Rápido no Mobile */}
+                        {canReport && (
+                            <button
+                                type="button"
+                                onClick={() => setIsReportModalOpen(true)}
+                                className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded-xl border border-slate-200/80 transition-all cursor-pointer"
+                                title="Relatórios"
+                            >
+                                <FileDown className="w-4 h-4" />
+                            </button>
+                        )}
 
-                            {/* Botão de Cancelamentos Pendentes no Mobile para Gestores/Admins */}
-                            {isGestorOrAdmin && Object.keys(cancelamentosPendentesMap).length > 0 && (
-                                <button
-                                    type="button"
-                                    onClick={() => setIsCancelamentoAprovacaoModalOpen(true)}
+                        {/* Botão de Cancelamentos Pendentes no Mobile para Gestores/Admins */}
+                        {isGestorOrAdmin && !isReadOnly && Object.keys(cancelamentosPendentesMap).length > 0 && (
+                            <button
+                                type="button"
+                                onClick={() => setIsCancelamentoAprovacaoModalOpen(true)}
                                     className="p-1.5 px-2 bg-gradient-to-r from-rose-500 to-amber-600 text-white rounded-xl text-xs font-black uppercase flex items-center gap-1 shrink-0 shadow-sm animate-pulse cursor-pointer"
                                     title={`${Object.keys(cancelamentosPendentesMap).length} cancelamento(s) pendente(s) de aprovação`}
                                 >
@@ -3287,8 +3345,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                     <span>{Object.keys(cancelamentosPendentesMap).length}</span>
                                 </button>
                             )}
-                        </div>
-                    )}
+                    </div>
                 </div>
 
                 {/* Barra de Busca Superior no Mobile */}
@@ -3401,20 +3458,16 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
 
                     {/* Lado Direito: Ações Principais e Botão Unificado de Seleção */}
                     <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                        {/* Confirmar Atendimentos */}
-                        {!isReadOnly && (
+                        {/* Confirmar Atendimentos: Oculto para Somente Leitura e visível exclusivamente se houver pendências para quem tem permissão */}
+                        {!isReadOnly && canConfirmarAtendimentos && pendenciasConfirmacao.length > 0 && (
                             <button
                                 onClick={() => setIsConfirmacaoModalOpen(true)}
-                                className={`px-3 py-1.5 font-extrabold rounded-2xl active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                                    pendenciasConfirmacao.length > 0
-                                        ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md shadow-amber-500/25 animate-pulse'
-                                        : 'bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/90 text-emerald-700 shadow-2xs'
-                                }`}
-                                title={pendenciasConfirmacao.length > 0 ? `Confirmar Atendimentos (${pendenciasConfirmacao.length} pendentes)` : 'Atendimentos em Dia'}
+                                className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold rounded-2xl shadow-md shadow-amber-500/25 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 animate-pulse"
+                                title={`Confirmar Atendimentos (${pendenciasConfirmacao.length} pendentes)`}
                             >
                                 <CheckCircle2 className="w-3.5 h-3.5" />
                                 <span>
-                                    {pendenciasConfirmacao.length > 0 ? `Confirmar (${pendenciasConfirmacao.length})` : 'Em Dia'}
+                                    CONFIRMAR ATENDIMENTOS ({pendenciasConfirmacao.length})
                                 </span>
                             </button>
                         )}
@@ -5231,7 +5284,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             )}
 
             {/* MODAL OPERACIONAL DE CONFIRMAÇÃO DE ATENDIMENTOS PENDENTES (VENCIDOS) */}
-            {!isReadOnly && (
+            {!isReadOnly && canConfirmarAtendimentos && (
                 <ConfirmacaoAtendimentosModal
                     isOpen={isConfirmacaoModalOpen}
                     onClose={() => setIsConfirmacaoModalOpen(false)}
