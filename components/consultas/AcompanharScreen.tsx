@@ -2387,13 +2387,48 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         });
     }, [allBookings, isReadOnly, canConfirmarAtendimentos]);
 
-    // Abertura automática ao acessar /Regulacao/Acompanhar quando houver pendências (apenas para perfis operacionais com permissão)
-    useEffect(() => {
-        if (!isReadOnly && canConfirmarAtendimentos && !loading && pendenciasConfirmacao.length > 0 && !hasAutoOpenedConfirmacaoModal) {
-            setIsConfirmacaoModalOpen(true);
-            setHasAutoOpenedConfirmacaoModal(true);
+    // Avaliação de Bloqueio Obrigatório por Pendências de Confirmação (>= 15 pendências para usuários comuns)
+    const isBloqueioConfirmacaoAtivo = useMemo(() => {
+        if (isGestorOrAdmin || isReadOnly || !canConfirmarAtendimentos) {
+            return false;
         }
-    }, [isReadOnly, canConfirmarAtendimentos, loading, pendenciasConfirmacao.length, hasAutoOpenedConfirmacaoModal]);
+        if (pendenciasConfirmacao.length >= 15) {
+            return true;
+        }
+        if (pendenciasConfirmacao.length > 0) {
+            try {
+                const raw = localStorage.getItem(`confirmacao_bloqueio_ativo_${currentUser.id}`);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (parsed && parsed.active && parsed.initialCount >= 15) {
+                        return true;
+                    }
+                }
+            } catch {}
+        }
+        return false;
+    }, [isGestorOrAdmin, isReadOnly, canConfirmarAtendimentos, pendenciasConfirmacao.length, currentUser.id]);
+
+    // Abertura automática ao acessar /Regulacao/Acompanhar quando houver pendências
+    // Se o bloqueio estiver ativo, força o modal aberto e impede fechamento mesmo após F5 ou recarregamento
+    useEffect(() => {
+        if (!isReadOnly && canConfirmarAtendimentos && !loading) {
+            if (isBloqueioConfirmacaoAtivo) {
+                setIsConfirmacaoModalOpen(true);
+            } else if (pendenciasConfirmacao.length > 0 && !hasAutoOpenedConfirmacaoModal) {
+                setIsConfirmacaoModalOpen(true);
+                setHasAutoOpenedConfirmacaoModal(true);
+            }
+        }
+    }, [isReadOnly, canConfirmarAtendimentos, loading, isBloqueioConfirmacaoAtivo, pendenciasConfirmacao.length, hasAutoOpenedConfirmacaoModal]);
+
+    // Handler de fechamento do modal de confirmação (impede fechamento se houver bloqueio obrigatório ativo)
+    const handleCloseConfirmacaoModal = () => {
+        if (isBloqueioConfirmacaoAtivo) {
+            return;
+        }
+        setIsConfirmacaoModalOpen(false);
+    };
 
     // Handler para confirmar individualmente (Realizado ou Faltou)
     const handleConfirmarComparecimento = async (id: string, situacao: 'Realizado' | 'Não Realizado') => {
@@ -5287,9 +5322,10 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             {!isReadOnly && canConfirmarAtendimentos && (
                 <ConfirmacaoAtendimentosModal
                     isOpen={isConfirmacaoModalOpen}
-                    onClose={() => setIsConfirmacaoModalOpen(false)}
+                    onClose={handleCloseConfirmacaoModal}
                     pendencias={pendenciasConfirmacao}
                     currentUser={currentUser}
+                    isGestorOrAdmin={isGestorOrAdmin}
                     onConfirmar={handleConfirmarComparecimento}
                 />
             )}

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ConsultaAgendamento, User } from '../../types';
 import { 
     Check, 
@@ -19,7 +19,9 @@ import {
     Phone,
     MessageCircle,
     Edit2,
-    Plus
+    Plus,
+    Lock,
+    ShieldAlert
 } from 'lucide-react';
 import { formatProcedimentoLabel, updatePaciente } from '../../services/consultasService';
 import { isConsultasAcompanharReadOnly, hasConsultasAcompanharOperationalAccess } from '../../services/permissionService';
@@ -56,6 +58,7 @@ interface ConfirmacaoAtendimentosModalProps {
     onClose: () => void;
     pendencias: ConsultaAgendamento[];
     currentUser: User;
+    isGestorOrAdmin?: boolean;
     onConfirmar: (id: string, situacao: 'Realizado' | 'Não Realizado') => Promise<void>;
 }
 
@@ -67,11 +70,113 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
     onClose,
     pendencias,
     currentUser,
+    isGestorOrAdmin: isGestorOrAdminProp,
     onConfirmar
 }) => {
     // Validação Dinâmica de Permissão: Usuários com acesso Somente Leitura NUNCA acessam ou executam este modal
     const isReadOnlyUser = isConsultasAcompanharReadOnly(currentUser);
     const hasOperational = hasConsultasAcompanharOperationalAccess(currentUser);
+
+    // Gestores e Administradores NUNCA são bloqueados
+    const isUserGestorOrAdmin = Boolean(
+        isGestorOrAdminProp || 
+        currentUser.role === 'admin' || 
+        currentUser.permissions?.includes('parent_consultas_gestor') || 
+        currentUser.permissions?.includes('sub_consultas_gestor')
+    );
+
+    // Chave de persistência de bloqueio no localStorage
+    const STORAGE_KEY = `confirmacao_bloqueio_ativo_${currentUser.id}`;
+
+    // Estado do total inicial do bloqueio (para exibir "X de Y")
+    const [initialBlockCount, setInitialBlockCount] = useState<number | null>(() => {
+        if (typeof window === 'undefined') return null;
+        try {
+            const raw = localStorage.getItem(`confirmacao_bloqueio_ativo_${currentUser.id}`);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && parsed.active && typeof parsed.initialCount === 'number') {
+                    return parsed.initialCount;
+                }
+            }
+        } catch {}
+        return null;
+    });
+
+    // Avaliação do Bloqueio:
+    // Para usuário comum (não gestor/admin e não somente leitura):
+    // 1. Se pendências >= 15 -> bloqueio OBRIGATÓRIO acionado!
+    // 2. Se pendências > 0 E já havia bloqueio ativo -> continua bloqueado até zerar!
+    // 3. Se pendências == 0 -> bloqueio encerrado e liberado!
+    const isBloqueado = useMemo(() => {
+        if (isUserGestorOrAdmin || isReadOnlyUser) {
+            return false;
+        }
+        if (pendencias.length >= 15) {
+            return true;
+        }
+        if (pendencias.length > 0 && initialBlockCount !== null && initialBlockCount >= 15) {
+            return true;
+        }
+        return false;
+    }, [isUserGestorOrAdmin, isReadOnlyUser, pendencias.length, initialBlockCount]);
+
+    // Total de referência para o contador dinâmico ("X de Y")
+    const totalInicialBloqueio = Math.max(initialBlockCount || pendencias.length, pendencias.length);
+
+    // Nome formatado para a mensagem personalizada
+    const userName = (currentUser.name || 'Servidor').trim().toUpperCase();
+
+    // Sincronizar e persistir o estado do bloqueio no localStorage e auto-fechar quando zerar
+    useEffect(() => {
+        if (isUserGestorOrAdmin || isReadOnlyUser) {
+            try {
+                localStorage.removeItem(STORAGE_KEY);
+            } catch {}
+            return;
+        }
+
+        if (pendencias.length >= 15) {
+            const newCount = initialBlockCount && initialBlockCount >= pendencias.length ? initialBlockCount : pendencias.length;
+            if (newCount !== initialBlockCount) {
+                setInitialBlockCount(newCount);
+            }
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                    active: true,
+                    initialCount: newCount,
+                    updatedAt: Date.now()
+                }));
+            } catch {}
+        } else if (pendencias.length === 0) {
+            // Todas as pendências foram resolvidas!
+            try {
+                localStorage.removeItem(STORAGE_KEY);
+            } catch {}
+            setInitialBlockCount(null);
+            // Fecha automaticamente o modal e libera o sistema
+            if (isOpen) {
+                onClose();
+            }
+        }
+    }, [isUserGestorOrAdmin, isReadOnlyUser, pendencias.length, initialBlockCount, STORAGE_KEY, isOpen, onClose]);
+
+    // Bloqueio de tecla Escape quando em bloqueio obrigatório
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                if (isBloqueado) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                }
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, isBloqueado, onClose]);
 
     // Estados dos Filtros
     const [searchTerm, setSearchTerm] = useState('');
@@ -353,44 +458,117 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
     if (!isOpen || isReadOnlyUser || !hasOperational) return null;
 
     return (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/70 backdrop-blur-md p-1 sm:p-2 md:p-3 overflow-hidden select-none animate-in fade-in duration-200">
+        <div 
+            onClick={(e) => {
+                if (e.target === e.currentTarget && !isBloqueado) {
+                    onClose();
+                }
+            }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/70 backdrop-blur-md p-1 sm:p-2 md:p-3 overflow-hidden select-none animate-in fade-in duration-200"
+        >
             {/* Container Responsivo com aproveitamento máximo do viewport: 96vw/94dvh no Desktop, 98vw/96dvh no Tablet, 100vw/100dvh no Mobile */}
             <div className="w-full h-full md:w-[98vw] md:h-[96dvh] lg:w-[96vw] lg:h-[94dvh] bg-white rounded-2xl md:rounded-3xl shadow-2xl border border-slate-200/90 flex flex-col overflow-hidden">
                 
                 {/* 1. CABEÇALHO COMPACTO FIXO */}
                 <header className="bg-white border-b border-slate-200/90 px-3.5 py-2.5 sm:px-5 sm:py-3 shrink-0 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0">
-                            <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                        <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl text-white flex items-center justify-center shadow-md shrink-0 ${
+                            isBloqueado 
+                                ? 'bg-gradient-to-br from-rose-500 to-amber-600 shadow-rose-500/20' 
+                                : 'bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/20'
+                        }`}>
+                            {isBloqueado ? (
+                                <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-white animate-pulse" />
+                            ) : (
+                                <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                            )}
                         </div>
                         <div className="min-w-0">
                             <h2 className="text-xs sm:text-sm md:text-base font-black text-slate-900 tracking-tight uppercase leading-tight truncate">
                                 Confirmação de Atendimentos
                             </h2>
                             <p className="text-[10px] sm:text-xs font-semibold text-slate-500 truncate leading-tight">
-                                Existem atendimentos anteriores aguardando confirmação.
+                                {isBloqueado 
+                                    ? 'Atenção: limite de pendências atingido. Confirmação compulsória para prosseguir.'
+                                    : 'Existem atendimentos anteriores aguardando confirmação.'
+                                }
                             </p>
                         </div>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
                         {/* Contador Dinâmico de Pendências */}
-                        <div className="px-2.5 py-1 sm:px-3 sm:py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-2xs">
-                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                            <span>{pendencias.length} pendentes</span>
+                        <div className={`px-2.5 py-1 sm:px-3 sm:py-1 rounded-full text-[11px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-2xs ${
+                            isBloqueado
+                                ? 'bg-rose-50 border border-rose-200 text-rose-800'
+                                : 'bg-amber-50 border border-amber-200 text-amber-800'
+                        }`}>
+                            <span className={`w-2 h-2 rounded-full animate-pulse ${isBloqueado ? 'bg-rose-500' : 'bg-amber-500'}`}></span>
+                            <span>{pendencias.length} pendente{pendencias.length !== 1 ? 's' : ''}</span>
                         </div>
 
-                        {/* Botão Fechar / Resolver Depois */}
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="p-1 sm:p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
-                            title="Fechar (Resolver Depois)"
-                        >
-                            <X className="w-4 h-4 sm:w-5 sm:h-5" />
-                        </button>
+                        {/* Botão Fechar / Resolver Depois: Oculto quando bloqueado */}
+                        {isBloqueado ? (
+                            <div 
+                                className="p-1 sm:p-1.5 text-rose-500 bg-rose-50 border border-rose-200/90 rounded-xl flex items-center gap-1"
+                                title="Bloqueio obrigatório ativo: confirme todas as pendências para liberar o sistema"
+                            >
+                                <Lock className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-rose-600" />
+                            </div>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="p-1 sm:p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                                title="Fechar (Resolver Depois)"
+                            >
+                                <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                            </button>
+                        )}
                     </div>
                 </header>
+
+                {/* BANNER DE BLOQUEIO OBRIGATÓRIO (A PARTIR DE 15 PENDÊNCIAS PARA USUÁRIOS COMUNS) */}
+                {isBloqueado && (
+                    <div className="bg-gradient-to-r from-rose-500/15 via-amber-500/10 to-rose-500/15 border-b border-rose-300/80 px-3.5 py-2.5 sm:px-5 sm:py-3 shrink-0 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                            <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+                                <div className="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-rose-600/30 animate-pulse">
+                                    <ShieldAlert className="w-4 h-4 sm:w-5 sm:h-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                                        <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black uppercase tracking-wider shadow-2xs">
+                                            BLOQUEIO OBRIGATÓRIO ATIVO
+                                        </span>
+                                        <span className="text-[10px] font-bold text-rose-800 uppercase tracking-wider">
+                                            Confirmação compulsória de agendamentos
+                                        </span>
+                                    </div>
+                                    <p className="text-xs sm:text-sm font-black text-rose-950 leading-tight">
+                                        <span className="text-rose-700 underline decoration-rose-400 font-extrabold">{userName}</span>, resolva todas as pendências dos agendamentos. Confirme se o paciente compareceu ou não à consulta para prosseguir com os trabalhos.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Contador Dinâmico em Destaque */}
+                            <div className="flex items-center gap-2.5 shrink-0 self-end md:self-auto bg-white/95 backdrop-blur-xs border border-rose-300/90 rounded-2xl px-3 py-1.5 shadow-sm">
+                                <div className="flex flex-col items-end">
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-rose-700">Contador Dinâmico</span>
+                                    <span className="text-xs sm:text-sm font-black text-rose-950">
+                                        Pendências restantes: <strong className="text-rose-600 font-black">{pendencias.length}</strong> de <strong className="text-slate-700 font-black">{totalInicialBloqueio}</strong>
+                                    </span>
+                                </div>
+                                <div className="w-12 h-2 sm:w-16 sm:h-2.5 bg-rose-100 rounded-full overflow-hidden border border-rose-200">
+                                    <div 
+                                        className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-300"
+                                        style={{ width: `${Math.min(100, Math.max(0, ((totalInicialBloqueio - pendencias.length) / (totalInicialBloqueio || 1)) * 100))}%` }}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* 2. BARRA DE FERRAMENTAS COMPACTA */}
                 <div className="bg-slate-50/80 border-b border-slate-200/90 px-3 py-2 sm:px-5 sm:py-2.5 shrink-0 flex flex-wrap items-center justify-between gap-2">
@@ -791,13 +969,21 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
                         <span>Exibidos: <strong className="text-sky-700 font-black">{filteredList.length}</strong></span>
                     </div>
 
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="px-4 py-1.5 sm:px-5 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs rounded-xl transition-all active:scale-95 cursor-pointer shadow-2xs uppercase tracking-wider"
-                    >
-                        Resolver Depois
-                    </button>
+                    {/* Botão Resolver Depois: Oculto quando bloqueado obrigatoriamente */}
+                    {isBloqueado ? (
+                        <div className="flex items-center gap-2 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-black uppercase tracking-wider shadow-2xs">
+                            <Lock className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                            <span>Bloqueio Ativo • Resolva todas as pendências</span>
+                        </div>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="px-4 py-1.5 sm:px-5 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs rounded-xl transition-all active:scale-95 cursor-pointer shadow-2xs uppercase tracking-wider"
+                        >
+                            Resolver Depois
+                        </button>
+                    )}
                 </footer>
             </div>
         </div>
