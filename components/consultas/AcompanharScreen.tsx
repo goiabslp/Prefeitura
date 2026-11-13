@@ -2832,6 +2832,20 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             return;
         }
 
+        // REGRA DE SUSPENSÃO: Procedimento de destino não pode estar suspenso
+        if (newProc.status !== 'Ativo') {
+            setTransferError(`O procedimento "${formatProcedimentoLabel(newProc)}" está suspenso e não pode receber transferências.`);
+            return;
+        }
+
+        if (newProc.parent_id) {
+            const parent = procedures.find(p => p.id === newProc.parent_id);
+            if (parent && parent.status !== 'Ativo') {
+                setTransferError(`O procedimento principal "${parent.name}" está suspenso e não pode receber transferências.`);
+                return;
+            }
+        }
+
         setIsTransferring(true);
         setTransferError('');
 
@@ -5205,6 +5219,12 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                     </label>
                                     <span className="text-[10px] font-bold text-slate-400">
                                         {procedures.filter(p => {
+                                            // REGRA DE SUSPENSÃO: Exibir somente procedimentos ativos como possíveis destinos
+                                            if (p.status !== 'Ativo') return false;
+                                            if (p.parent_id) {
+                                                const parent = procedures.find(parentProc => parentProc.id === p.parent_id);
+                                                if (parent && parent.status !== 'Ativo') return false;
+                                            }
                                             const matchesType = transferTypeFilter === 'TODOS' || p.type === transferTypeFilter;
                                             const matchesSearch = !transferSearchProc.trim() || 
                                                 formatProcedimentoLabel(p).toLowerCase().includes(transferSearchProc.toLowerCase()) || 
@@ -5263,6 +5283,12 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 <div className="max-h-56 sm:max-h-64 overflow-y-auto space-y-1.5 p-1 rounded-2xl bg-white border border-slate-200/90 custom-scrollbar">
                                     {procedures
                                         .filter(p => {
+                                            // REGRA DE SUSPENSÃO: Exibir somente procedimentos ativos como possíveis destinos
+                                            if (p.status !== 'Ativo') return false;
+                                            if (p.parent_id) {
+                                                const parent = procedures.find(parentProc => parentProc.id === p.parent_id);
+                                                if (parent && parent.status !== 'Ativo') return false;
+                                            }
                                             const matchesType = transferTypeFilter === 'TODOS' || p.type === transferTypeFilter;
                                             const matchesSearch = !transferSearchProc.trim() || 
                                                 formatProcedimentoLabel(p).toLowerCase().includes(transferSearchProc.toLowerCase()) || 

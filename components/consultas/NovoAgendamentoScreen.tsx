@@ -318,6 +318,19 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     };
 
     const handleSelectProcedure = async (proc: ConsultaProcedimento) => {
+        // REGRA DE SUSPENSÃO: Procedimentos suspensos não podem ser selecionados para novos agendamentos
+        if (proc.status !== 'Ativo') {
+            setErrorMessage(`O procedimento "${proc.name}" está suspenso e não aceita novos agendamentos.`);
+            return;
+        }
+        if (proc.parent_id) {
+            const parent = procedures.find(p => p.id === proc.parent_id);
+            if (parent && parent.status !== 'Ativo') {
+                setErrorMessage(`O procedimento principal "${parent.name}" está suspenso e não aceita novos agendamentos.`);
+                return;
+            }
+        }
+
         if (!selectedPatient) {
             setSelectedProcedure(proc);
             return;
@@ -584,13 +597,34 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
 
 
 
-    // Load active procedures on mount
+    // Load active procedures on mount & reativo a alterações em tempo real de suspensão/status
     useEffect(() => {
+        let isMounted = true;
         const fetchProcedures = async () => {
             const data = await db.getProcedimentos(true); // only active
+            if (!isMounted) return;
             setProcedures(data);
+            setSelectedProcedure(prev => {
+                if (!prev) return null;
+                const stillActive = data.find(p => p.id === prev.id && p.status === 'Ativo');
+                if (!stillActive) {
+                    setErrorMessage(`O procedimento "${prev.name}" foi suspenso e não está mais disponível para novos agendamentos.`);
+                    return null;
+                }
+                return prev;
+            });
         };
         fetchProcedures();
+
+        const handleProceduresChanged = () => {
+            fetchProcedures();
+        };
+
+        window.addEventListener('consultas-procedimentos-changed', handleProceduresChanged);
+        return () => {
+            isMounted = false;
+            window.removeEventListener('consultas-procedimentos-changed', handleProceduresChanged);
+        };
     }, []);
 
     useEffect(() => {
@@ -811,6 +845,20 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
 
     const createNewBooking = async () => {
         if (!selectedPatient || !selectedProcedure) return;
+
+        // REGRA DE SUSPENSÃO: Procedimento suspenso bloqueia novos agendamentos
+        if (selectedProcedure.status !== 'Ativo') {
+            setErrorMessage(`O procedimento "${selectedProcedure.name}" está suspenso e não aceita novos agendamentos.`);
+            return;
+        }
+        if (selectedProcedure.parent_id) {
+            const parent = procedures.find(p => p.id === selectedProcedure.parent_id);
+            if (parent && parent.status !== 'Ativo') {
+                setErrorMessage(`O procedimento principal "${parent.name}" está suspenso e não aceita novos agendamentos.`);
+                return;
+            }
+        }
+
         const targetDate = bookingDate || formatDateToYYYYMMDD(new Date());
         setLoading(true);
         
@@ -1049,9 +1097,15 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
             return false;
         }
 
-        // Procedimentos suspensos ou inativos não aparecem
+        // Procedimentos suspensos ou inativos não aparecem para novos agendamentos
         if (p.status !== 'Ativo') {
             return false;
+        }
+        if (p.parent_id) {
+            const parent = procedures.find(parentProc => parentProc.id === p.parent_id);
+            if (parent && parent.status !== 'Ativo') {
+                return false;
+            }
         }
 
         const cleanQuery = normalizeStr(procedureQuery);

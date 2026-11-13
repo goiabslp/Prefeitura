@@ -1961,16 +1961,58 @@ export const getProcedimentos = async (
             };
         });
 
-        if (hasEspecialistaFilter !== undefined) {
-            return mapped.filter(p => hasEspecialistaFilter ? (!!p.especialista_id || !!p.parent_id) : (!p.especialista_id && !p.parent_id));
+        // REGRA DE SUSPENSÃO: Quando onlyActive for solicitado, garantir que o status seja 'Ativo'
+        // e que, caso possua parent_id, o procedimento pai também esteja 'Ativo'.
+        let filtered = mapped;
+        if (onlyActive) {
+            filtered = filtered.filter(p => {
+                if (p.status !== 'Ativo') return false;
+                if (p.parent_id) {
+                    const parent = procs.find(parentProc => parentProc.id === p.parent_id);
+                    if (!parent || parent.status !== 'Ativo') return false;
+                }
+                return true;
+            });
         }
 
-        return mapped;
+        if (hasEspecialistaFilter !== undefined) {
+            return filtered.filter(p => hasEspecialistaFilter ? (!!p.especialista_id || !!p.parent_id) : (!p.especialista_id && !p.parent_id));
+        }
+
+        return filtered;
     } catch (error) {
         const appError = handleSupabaseError(error);
         console.error('[consultasService] getProcedimentos Error:', appError.message);
         return [];
     }
+};
+
+/**
+ * Regra Centralizada: Verifica se um procedimento está ativo e elegível para novos agendamentos / solicitações.
+ * Um procedimento é elegível apenas se estiver com status 'Ativo' E, caso possua pai (parent_id), o pai também estiver 'Ativo'.
+ */
+export const isProcedimentoElegivelParaNovasSolicitacoes = (
+    proc: ConsultaProcedimento | null | undefined,
+    allProcedures?: ConsultaProcedimento[]
+): boolean => {
+    if (!proc) return false;
+    if (proc.status !== 'Ativo') return false;
+    if (proc.parent_id && allProcedures && allProcedures.length > 0) {
+        const parent = allProcedures.find(p => p.id === proc.parent_id);
+        if (parent && parent.status !== 'Ativo') return false;
+    }
+    return true;
+};
+
+/**
+ * Regra Centralizada: Verifica se um procedimento está ativo e elegível como destino de transferência.
+ * Exclusivamente procedimentos com status 'Ativo' (e com pai 'Ativo' se houver) podem ser destino de transferências.
+ */
+export const isProcedimentoElegivelParaTransferenciaDestino = (
+    proc: ConsultaProcedimento | null | undefined,
+    allProcedures?: ConsultaProcedimento[]
+): boolean => {
+    return isProcedimentoElegivelParaNovasSolicitacoes(proc, allProcedures);
 };
 
 export const createProcedimento = async (procedimento: Omit<ConsultaProcedimento, 'id' | 'created_at' | 'updated_at'>): Promise<ConsultaProcedimento | null> => {
@@ -2082,6 +2124,29 @@ export const updateProcedimento = async (id: string, updates: Partial<ConsultaPr
                 }
             } catch (cascadeErr) {
                 console.warn('[consultasService] Aviso ao propagar alteração de nome para procedimentos filhos:', cascadeErr);
+            }
+        }
+
+        // Auditoria de alteração de status operacional (Suspensão / Reativação)
+        if (updates.status) {
+            try {
+                const isSuspended = updates.status === 'Inativo';
+                await auditLogService.logAction({
+                    action_type: isSuspended ? 'SUSPENDER_PROCEDIMENTO' : 'REATIVAR_PROCEDIMENTO',
+                    module: 'Regulação - Procedimentos',
+                    description: isSuspended
+                        ? `Procedimento "${data?.name || id}" suspenso. Novos agendamentos e transferências para este procedimento foram bloqueados. As solicitações existentes foram integralmente preservadas.`
+                        : `Procedimento "${data?.name || id}" reativado com sucesso. O procedimento voltou a aceitar novos agendamentos e transferências.`,
+                    details: {
+                        procedimento_id: id,
+                        procedimento_nome: data?.name,
+                        procedimento_codigo: data?.code,
+                        novo_status: updates.status,
+                        data_hora: new Date().toISOString()
+                    }
+                });
+            } catch (auditErr) {
+                console.warn('[consultasService] Aviso ao registrar auditoria de status de procedimento:', auditErr);
             }
         }
 
@@ -2952,6 +3017,31 @@ export const searchRemoteAgendamentos = async (
 export const createAgendamento = async (agendamento: Omit<ConsultaAgendamento, 'id' | 'created_at'>): Promise<ConsultaAgendamento> => {
     assertCanMutateRegulacao('Criar Solicitação/Agendamento', 'novo_agendamento');
     try {
+        // 0. Bloqueio estrito de novos agendamentos para procedimentos suspensos (Regras de Suspensão)
+        if (agendamento.procedimento_id) {
+            const { data: procCheck } = await supabase
+                .from('consultas_procedimentos')
+                .select('id, name, code, status, parent_id')
+                .eq('id', agendamento.procedimento_id)
+                .maybeSingle();
+
+            if (procCheck) {
+                if (procCheck.status !== 'Ativo') {
+                    throw new Error(`O procedimento "${procCheck.name || procCheck.code || ''}" está suspenso e não aceita novos agendamentos.`);
+                }
+                if (procCheck.parent_id) {
+                    const { data: parentProc } = await supabase
+                        .from('consultas_procedimentos')
+                        .select('id, name, code, status')
+                        .eq('id', procCheck.parent_id)
+                        .maybeSingle();
+                    if (parentProc && parentProc.status !== 'Ativo') {
+                        throw new Error(`O procedimento principal "${parentProc.name || parentProc.code || ''}" está suspenso e não aceita novos agendamentos.`);
+                    }
+                }
+            }
+        }
+
         // 1. Bloqueio rigoroso de solicitações duplicadas ativas (mesmo paciente + mesmo procedimento)
         //    Válido para todos os status ativos (Solicitado, Aguardando Data, Fila de espera, Agendado, Retorno, Pausada)
         //    e para todas as prioridades/usuários/setores.
@@ -6020,6 +6110,22 @@ export const transferAgendamentoProcedimento = async (
         throw new Error('Procedimento de destino não encontrado.');
     }
 
+    // REGRA DE SUSPENSÃO: Procedimento de destino não pode estar suspenso
+    if (targetProc.status !== 'Ativo') {
+        throw new Error(`O procedimento de destino "${formatProcedimentoLabel(targetProc)}" está suspenso e não pode receber transferências.`);
+    }
+
+    if (targetProc.parent_id) {
+        const { data: parentProc } = await supabase
+            .from('consultas_procedimentos')
+            .select('id, name, code, status')
+            .eq('id', targetProc.parent_id)
+            .maybeSingle();
+        if (parentProc && parentProc.status !== 'Ativo') {
+            throw new Error(`O procedimento principal de destino "${parentProc.name || parentProc.code || ''}" está suspenso e não pode receber transferências.`);
+        }
+    }
+
     // 3. Atualizar EXCLUSIVAMENTE o procedimento_id preservando data, hora, local, prestador, status, etc.
     const updated = await updateAgendamento(id, {
         procedimento_id: targetProcedimentoId
@@ -6148,6 +6254,18 @@ export const batchTransferAgendamentos = async (params: BatchTransferParams): Pr
         const targetProc = procs.find(p => p.id === targetProcedimentoId);
         if (!targetProc) {
             throw new Error('Procedimento de destino não encontrado.');
+        }
+
+        // REGRA DE SUSPENSÃO: Procedimento de destino não pode estar suspenso
+        if (targetProc.status !== 'Ativo') {
+            throw new Error(`O procedimento de destino "${formatProcedimentoLabel(targetProc)}" está suspenso e não pode receber transferências.`);
+        }
+
+        if (targetProc.parent_id) {
+            const parentProc = procs.find(p => p.id === targetProc.parent_id);
+            if (parentProc && parentProc.status !== 'Ativo') {
+                throw new Error(`O procedimento principal de destino "${parentProc.name || parentProc.code || ''}" está suspenso e não pode receber transferências.`);
+            }
         }
 
         // 2. Buscar agendamentos diretamente do banco para validação recente

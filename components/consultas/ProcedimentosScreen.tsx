@@ -13,6 +13,7 @@ import { formatPatientName } from '../common/PacientesTab';
 import { RevisarDuplicidadesModal } from './RevisarDuplicidadesModal';
 import { procedureMatchesSearch } from '../../services/procedimentosStandardizer';
 import { buildProcedimentosHierarchy, formatProcedimentoDisplay } from '../../utils/procedimentosHierarchy';
+import { auditLogService } from '../../services/auditLogService';
 
 interface ProcedimentosScreenProps {
     currentUser?: User | null;
@@ -82,6 +83,11 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
     const [isMedicoDropdownOpen, setIsMedicoDropdownOpen] = useState(false);
     const [addEspecialistaStatus, setAddEspecialistaStatus] = useState<'Ativo' | 'Inativo'>('Ativo');
     const [addEspecialistaError, setAddEspecialistaError] = useState('');
+
+    // Modal de Confirmação Obrigatório de Suspensão de Procedimento
+    const [isSuspendConfirmModalOpen, setIsSuspendConfirmModalOpen] = useState(false);
+    const [procToSuspend, setProcToSuspend] = useState<ConsultaProcedimento | null>(null);
+    const [suspendCallback, setSuspendCallback] = useState<(() => Promise<void>) | null>(null);
 
     // Modal de Revisão de Duplicidades e Padronização Inteligente State
     const [isRevisarDuplicidadesOpen, setIsRevisarDuplicidadesOpen] = useState(false);
@@ -465,6 +471,43 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
         setIsProcModalOpen(true);
     };
 
+    const executeSaveProcedure = async (finalCode: string) => {
+        setActionLoading('save-proc');
+        try {
+            if (editingProc) {
+                await db.updateProcedimento(editingProc.id, {
+                    name: procName.trim().toUpperCase(),
+                    code: finalCode,
+                    type: procType,
+                    status: procStatus,
+                    recurso: procRecurso || 'Não Se Aplica'
+                });
+                showToast(`Procedimento atualizado com sucesso!`);
+            } else {
+                await db.createProcedimento({
+                    name: procName.trim().toUpperCase(),
+                    code: finalCode,
+                    type: procType,
+                    total_quantity: 0,
+                    available_quantity: 0,
+                    status: procStatus,
+                    recurso: 'Não Se Aplica'
+                });
+                showToast(`Procedimento principal cadastrado com sucesso!`);
+            }
+            setIsProcModalOpen(false);
+            fetchProcedures();
+        } catch (err: any) {
+            if (err.message && (err.message.includes('unique_procedimento_nome_tipo') || err.message.includes('unique constraint') || err.message.includes('duplicate key'))) {
+                setProcError('Já existe um procedimento cadastrado com o mesmo nome e tipo.');
+            } else {
+                setProcError(err.message || 'Erro ao salvar procedimento.');
+            }
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
     const handleSaveProcedure = async (e: React.FormEvent) => {
         e.preventDefault();
         setProcError('');
@@ -501,40 +544,20 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
             return;
         }
 
-        setActionLoading('save-proc');
-        try {
-            if (editingProc) {
-                await db.updateProcedimento(editingProc.id, {
-                    name: procName.trim().toUpperCase(),
-                    code: finalCode,
-                    type: procType,
-                    status: procStatus,
-                    recurso: procRecurso || 'Não Se Aplica'
-                });
-                showToast(`Procedimento atualizado com sucesso!`);
-            } else {
-                await db.createProcedimento({
-                    name: procName.trim().toUpperCase(),
-                    code: finalCode,
-                    type: procType,
-                    total_quantity: 0,
-                    available_quantity: 0,
-                    status: procStatus,
-                    recurso: 'Não Se Aplica'
-                });
-                showToast(`Procedimento principal cadastrado com sucesso!`);
-            }
-            setIsProcModalOpen(false);
-            fetchProcedures();
-        } catch (err: any) {
-            if (err.message && (err.message.includes('unique_procedimento_nome_tipo') || err.message.includes('unique constraint') || err.message.includes('duplicate key'))) {
-                setProcError('Já existe um procedimento cadastrado com o mesmo nome e tipo.');
-            } else {
-                setProcError(err.message || 'Erro ao salvar procedimento.');
-            }
-        } finally {
-            setActionLoading(null);
+        // REGRA DE SUSPENSÃO: Se estiver alterando status de Ativo para Suspenso no formulário, exigir confirmação
+        if (editingProc && editingProc.status === 'Ativo' && procStatus === 'Inativo') {
+            setProcToSuspend({
+                ...editingProc,
+                name: procName.trim().toUpperCase()
+            });
+            setSuspendCallback(() => async () => {
+                await executeSaveProcedure(finalCode);
+            });
+            setIsSuspendConfirmModalOpen(true);
+            return;
         }
+
+        await executeSaveProcedure(finalCode);
     };
 
     // Modal Handlers: Adicionar Especialista
@@ -587,31 +610,63 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
         }
     };
 
-    // Single-click Quick Suspend / Reativar
+    // Quick Suspend / Reativar com Confirmação Obrigatória na Suspensão
     const handleToggleSuspend = async (e: React.MouseEvent, proc: ConsultaProcedimento) => {
         e.stopPropagation();
-        const nextStatus: 'Ativo' | 'Inativo' = proc.status === 'Ativo' ? 'Inativo' : 'Ativo';
-        const actionLabel = nextStatus === 'Ativo' ? 'Reativar' : 'Suspender';
+        if (proc.status === 'Ativo') {
+            // REGRA OBRIGATÓRIA: Ao suspender um procedimento, exibir modal de confirmação
+            setProcToSuspend(proc);
+            setSuspendCallback(null);
+            setIsSuspendConfirmModalOpen(true);
+            return;
+        }
 
+        // Reativar procedimento: volta automaticamente a permitir novos agendamentos e transferências
         setActionLoading(`suspend-${proc.id}`);
         try {
-            await db.updateProcedimento(proc.id, { status: nextStatus });
-            setProcedures(prev => prev.map(p => p.id === proc.id ? { ...p, status: nextStatus } : p));
+            await db.updateProcedimento(proc.id, { status: 'Ativo' });
+            setProcedures(prev => prev.map(p => p.id === proc.id ? { ...p, status: 'Ativo' } : p));
             if (selectedProc && selectedProc.id === proc.id) {
-                setSelectedProc(prev => prev ? { ...prev, status: nextStatus } : null);
+                setSelectedProc(prev => prev ? { ...prev, status: 'Ativo' } : null);
             }
-            showToast(
-                nextStatus === 'Ativo'
-                    ? `Procedimento "${proc.name}" reativado com sucesso!`
-                    : `Procedimento "${proc.name}" suspenso temporariamente.`,
-                nextStatus === 'Ativo' ? 'success' : 'info'
-            );
+            showToast(`Procedimento "${proc.name}" reativado com sucesso!`, 'success');
         } catch (err: any) {
-            console.error(`Erro ao ${actionLabel.toLowerCase()} procedimento:`, err);
-            showToast(`Erro ao ${actionLabel.toLowerCase()} procedimento.`, 'error');
+            console.error('Erro ao reativar procedimento:', err);
+            showToast(err.message || 'Erro ao reativar procedimento.', 'error');
         } finally {
             setActionLoading(null);
         }
+    };
+
+    const handleConfirmSuspendAction = async () => {
+        if (!procToSuspend) return;
+        setActionLoading(`suspend-${procToSuspend.id}`);
+        try {
+            if (suspendCallback) {
+                await suspendCallback();
+                setSuspendCallback(null);
+            } else {
+                await db.updateProcedimento(procToSuspend.id, { status: 'Inativo' });
+                setProcedures(prev => prev.map(p => p.id === procToSuspend.id ? { ...p, status: 'Inativo' } : p));
+                if (selectedProc && selectedProc.id === procToSuspend.id) {
+                    setSelectedProc(prev => prev ? { ...prev, status: 'Inativo' } : null);
+                }
+                showToast(`Procedimento "${procToSuspend.name}" suspenso com sucesso. Solicitações existentes permanecem ativas.`, 'info');
+            }
+            setIsSuspendConfirmModalOpen(false);
+            setProcToSuspend(null);
+        } catch (err: any) {
+            console.error('Erro ao suspender procedimento:', err);
+            showToast(err.message || 'Erro ao suspender procedimento.', 'error');
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleCancelSuspend = () => {
+        setIsSuspendConfirmModalOpen(false);
+        setProcToSuspend(null);
+        setSuspendCallback(null);
     };
 
     // Delete Procedure
@@ -1901,6 +1956,96 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ======================================================= */}
+            {/* MODAL: CONFIRMAÇÃO OBRIGATÓRIA DE SUSPENSÃO              */}
+            {/* ======================================================= */}
+            {isSuspendConfirmModalOpen && procToSuspend && (
+                <div className="fixed inset-0 z-[1050] flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-amber-200/90 flex flex-col animate-in zoom-in-95 duration-200">
+                        {/* Header */}
+                        <div className="p-5 border-b border-amber-100 bg-gradient-to-r from-amber-50/90 via-orange-50/50 to-white flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700 shadow-inner shrink-0">
+                                    <ShieldAlert className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm sm:text-base font-black text-slate-900 tracking-tight">
+                                        Suspender Procedimento
+                                    </h3>
+                                    <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
+                                        Confirmação Obrigatória
+                                    </span>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleCancelSuspend}
+                                disabled={actionLoading?.startsWith('suspend-')}
+                                className="p-1.5 hover:bg-slate-200/80 rounded-xl text-slate-400 hover:text-slate-700 transition-colors cursor-pointer disabled:opacity-50"
+                                title="Fechar"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="p-6 space-y-4">
+                            <div className="p-3 bg-amber-50/90 border border-amber-200/70 rounded-2xl">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 block mb-0.5">
+                                    Procedimento
+                                </span>
+                                <p className="text-xs font-black text-slate-900 leading-snug">
+                                    {procToSuspend.code && <span className="font-mono text-amber-900 mr-1.5">[{procToSuspend.code}]</span>}
+                                    {procToSuspend.name}
+                                </p>
+                            </div>
+
+                            <div className="space-y-3 text-xs leading-relaxed text-slate-700">
+                                <p className="font-bold text-slate-900">
+                                    Tem certeza de que deseja suspender o procedimento <span className="font-black text-amber-950">{procToSuspend.name}</span>?
+                                </p>
+                                <p className="text-slate-600 font-medium">
+                                    A suspensão impedirá novos agendamentos e transferências para este procedimento.
+                                </p>
+                                <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-slate-700 flex items-start gap-2">
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                                    <span className="font-bold text-[11px] leading-snug text-slate-800">
+                                        As solicitações e os agendamentos existentes permanecerão ativos e continuarão normalmente.
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={handleCancelSuspend}
+                                disabled={actionLoading?.startsWith('suspend-')}
+                                className="px-4 py-2.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-extrabold rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer disabled:opacity-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmSuspendAction}
+                                disabled={actionLoading?.startsWith('suspend-')}
+                                className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-md shadow-amber-600/25 flex items-center gap-1.5 active:scale-95 cursor-pointer disabled:opacity-50"
+                            >
+                                {actionLoading?.startsWith('suspend-') ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <span>Suspendendo...</span>
+                                    </>
+                                ) : (
+                                    <span>Confirmar Suspensão</span>
+                                )}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

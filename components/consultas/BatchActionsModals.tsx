@@ -43,6 +43,12 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
     if (!isOpen) return null;
 
     const filteredProcs = procedures.filter(p => {
+        // REGRA DE SUSPENSÃO: Apenas procedimentos ativos podem ser destinos de transferência
+        if (p.status !== 'Ativo') return false;
+        if (p.parent_id) {
+            const parent = procedures.find(parentProc => parentProc.id === p.parent_id);
+            if (parent && parent.status !== 'Ativo') return false;
+        }
         const matchesType = typeFilter === 'TODOS' || p.type === typeFilter;
         const label = formatProcedimentoLabel(p).toLowerCase();
         const code = (p.code || '').toLowerCase();
@@ -60,6 +66,20 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
         if (!targetProcId) {
             setError('Por favor, selecione o procedimento de destino para a transferência.');
             return;
+        }
+
+        // REGRA DE SUSPENSÃO: Validar se o procedimento de destino está ativo no momento da confirmação
+        if (selectedTargetProc && selectedTargetProc.status !== 'Ativo') {
+            setError(`O procedimento "${formatProcedimentoLabel(selectedTargetProc)}" está suspenso e não pode receber transferências.`);
+            return;
+        }
+
+        if (selectedTargetProc && selectedTargetProc.parent_id) {
+            const parent = procedures.find(p => p.id === selectedTargetProc.parent_id);
+            if (parent && parent.status !== 'Ativo') {
+                setError(`O procedimento principal "${parent.name}" está suspenso e não pode receber transferências.`);
+                return;
+            }
         }
 
         try {
