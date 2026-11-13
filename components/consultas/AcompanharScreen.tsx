@@ -25,6 +25,7 @@ import {
 } from './BatchActionsModals';
 import { SolicitacoesCancelamentoModal } from './SolicitacoesCancelamentoModal';
 import { TransferSuccessModal } from './TransferSuccessModal';
+import { CancelarAgendamentoModal } from './CancelarAgendamentoModal';
 
 const formatPatientName = (patient?: ConsultaPaciente | null) => {
     if (!patient) return '';
@@ -2025,10 +2026,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [gestorUserIds, setGestorUserIds] = useState<string[]>([]);
     const [cancelamentosPendentesMap, setCancelamentosPendentesMap] = useState<Record<string, ConsultaSolicitacaoCancelamento>>({});
     const [cancelTarget, setCancelTarget] = useState<ConsultaAgendamento | null>(null);
-    const [cancelReason, setCancelReason] = useState('');
-    const [cancelError, setCancelError] = useState('');
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
-    const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
     const [isCancelamentoAprovacaoModalOpen, setIsCancelamentoAprovacaoModalOpen] = useState(false);
 
     const loadCancelamentosPendentes = async () => {
@@ -2524,48 +2522,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const handleOpenCancelModal = (booking: ConsultaAgendamento) => {
         if (isReadOnly) return;
         setCancelTarget(booking);
-        setCancelReason('');
-        setCancelError('');
         setIsCancelModalOpen(true);
-    };
-
-    const handleConfirmCancelWithReason = async () => {
-        if (!cancelTarget) return;
-        if (!cancelReason.trim() || cancelReason.trim().length < 5) {
-            setCancelError('Por favor, informe a justificativa do cancelamento (mínimo de 5 caracteres).');
-            return;
-        }
-        setOperatingId(cancelTarget.id);
-        setIsSubmittingCancel(true);
-        try {
-            // Fluxo Oficial: Solicitação de cancelamento com suspensão imediata da fila e aprovação obrigatória
-            const res = await db.solicitarCancelamentoAgendamento({
-                agendamentoId: cancelTarget.id,
-                justificativa: cancelReason.trim(),
-                solicitante: {
-                    id: currentUser.id,
-                    name: currentUser.name,
-                    sector: currentUser.sector
-                },
-                bookingSnapshot: cancelTarget
-            });
-
-            if (!res.success) {
-                setCancelError(res.error || 'Erro ao solicitar cancelamento.');
-                return;
-            }
-
-            setIsCancelModalOpen(false);
-            setCancelTarget(null);
-            setCancelReason('');
-            await loadCancelamentosPendentes();
-            await loadData(true);
-        } catch (err: any) {
-            setCancelError(err.message || 'Erro ao processar o cancelamento.');
-        } finally {
-            setOperatingId(null);
-            setIsSubmittingCancel(false);
-        }
     };
 
     const handleOpenPauseModal = (booking: ConsultaAgendamento) => {
@@ -4103,176 +4060,25 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 />
             )}
 
-            {/* MODAL DE CANCELAMENTO COM FLUXO SEGURO (GESTOR VS USUÁRIO COMUM) */}
-            {!isReadOnly && isCancelModalOpen && cancelTarget && typeof document !== 'undefined' && createPortal(
-                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg max-h-[92vh] overflow-hidden border border-slate-100 flex flex-col transform transition-all animate-in zoom-in-95 duration-200">
-                        {/* Header */}
-                        <div className={`p-5 border-b flex justify-between items-center shrink-0 ${
-                            isGestorOrAdmin
-                                ? 'border-rose-100 bg-rose-50/70 text-rose-950'
-                                : 'border-amber-100 bg-amber-50/70 text-amber-950'
-                        }`}>
-                            <div className="flex items-center gap-3">
-                                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shadow-inner ${
-                                    isGestorOrAdmin ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600'
-                                }`}>
-                                    {isGestorOrAdmin ? <XCircle className="w-6 h-6" /> : <Clock className="w-6 h-6" />}
-                                </div>
-                                <div>
-                                    <h3 className="text-sm font-black uppercase tracking-wider">
-                                        {isGestorOrAdmin ? 'Cancelar Agendamento Imediatamente' : 'Solicitar Cancelamento de Agendamento'}
-                                    </h3>
-                                    <p className="text-[10px] font-bold uppercase tracking-wider mt-0.5 opacity-80">
-                                        {isGestorOrAdmin 
-                                            ? 'Ação de Gestão • Cancelamento Definitivo' 
-                                            : 'Aprovação Obrigatória pelos Gestores da Regulação'}
-                                    </p>
-                                </div>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setIsCancelModalOpen(false);
-                                    setCancelTarget(null);
-                                }}
-                                className="p-2 hover:bg-slate-200/50 rounded-xl text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        {/* Form Content */}
-                        <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar text-xs">
-                            {/* Caso já haja cancelamento pendente para este agendamento */}
-                            {Boolean(cancelTarget && cancelamentosPendentesMap[cancelTarget.id]) && (
-                                <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl text-amber-900 space-y-1.5 animate-in fade-in">
-                                    <div className="flex items-center gap-2 font-black text-xs uppercase text-amber-800">
-                                        <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
-                                        <span>Solicitação Já Enviada e em Análise</span>
-                                    </div>
-                                    <p className="text-[11px] font-medium leading-relaxed">
-                                        Este agendamento já possui uma solicitação de cancelamento aguardando a decisão dos gestores da regulação.
-                                    </p>
-                                    <div className="pt-2 border-t border-amber-200/70 text-[10px] space-y-1">
-                                        <div><span className="font-bold">Solicitante:</span> {cancelamentosPendentesMap[cancelTarget.id]?.solicitante_nome}</div>
-                                        <div><span className="font-bold">Data do Pedido:</span> {new Date(cancelamentosPendentesMap[cancelTarget.id]?.criado_em || '').toLocaleString('pt-BR')}</div>
-                                        <div><span className="font-bold">Justificativa:</span> "{cancelamentosPendentesMap[cancelTarget.id]?.justificativa_solicitacao}"</div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Summary Card */}
-                            <div className="p-4 bg-slate-50 border border-slate-200/70 rounded-2xl space-y-2 font-semibold text-slate-700">
-                                <div className="flex justify-between">
-                                    <span className="text-slate-400">Paciente:</span>
-                                    <span className="font-black text-slate-900 uppercase">{formatPatientName(cancelTarget.paciente)}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-slate-400">Procedimento:</span>
-                                    <span className="font-extrabold text-sky-600 uppercase">{formatProcedimentoLabel(cancelTarget.procedimento)}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-slate-400">Data Atual:</span>
-                                    <span className="font-bold text-slate-800">
-                                        {cancelTarget.appointment_date ? new Date(cancelTarget.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR') : 'Fila de Espera'}
-                                    </span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-slate-400">Situação:</span>
-                                    <span className="font-bold text-slate-800 uppercase">{cancelTarget.status}</span>
-                                </div>
-                            </div>
-
-                            {/* Justificativa Field */}
-                            {!Boolean(cancelTarget && cancelamentosPendentesMap[cancelTarget.id]) && (
-                                <div className="space-y-1.5">
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700">
-                                        Justificativa do Cancelamento <span className="text-rose-500">*</span>
-                                    </label>
-                                    <textarea
-                                        value={cancelReason}
-                                        onChange={(e) => {
-                                            setCancelReason(e.target.value);
-                                            if (cancelError) setCancelError('');
-                                        }}
-                                        placeholder={
-                                            isGestorOrAdmin
-                                                ? "Descreva detalhadamente o motivo para o cancelamento imediato deste agendamento..."
-                                                : "Informe detalhadamente por que este cancelamento está sendo solicitado para análise da Regulação..."
-                                        }
-                                        rows={4}
-                                        className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 transition-all resize-none shadow-2xs"
-                                        required
-                                    />
-                                    {cancelError && (
-                                        <p className="text-[11px] font-extrabold text-rose-600 mt-1 flex items-center gap-1">
-                                            ⚠️ {cancelError}
-                                        </p>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Aviso de Perfil */}
-                            <div className={`p-3 rounded-xl text-[10px] font-bold flex items-center gap-2 border ${
-                                isGestorOrAdmin
-                                    ? 'bg-rose-50/60 border-rose-200 text-rose-800'
-                                    : 'bg-amber-50/60 border-amber-200 text-amber-800'
-                            }`}>
-                                <span>
-                                    {isGestorOrAdmin
-                                        ? `🔒 Cancelamento executivo imediato registrado por: ${currentUser.name}`
-                                        : `📋 Solicitação será encaminhada para aprovação obrigatória dos Gestores. O agendamento permanecerá ativo até a decisão.`}
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Modal Footer */}
-                        <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-3 shrink-0">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setIsCancelModalOpen(false);
-                                    setCancelTarget(null);
-                                }}
-                                className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-600 font-extrabold rounded-xl border border-slate-200 text-xs uppercase tracking-wider transition-all cursor-pointer"
-                            >
-                                {Boolean(cancelTarget && cancelamentosPendentesMap[cancelTarget.id]) ? 'Fechar' : 'Manter Agendamento'}
-                            </button>
-
-                            {!Boolean(cancelTarget && cancelamentosPendentesMap[cancelTarget.id]) && (
-                                <button
-                                    type="button"
-                                    onClick={handleConfirmCancelWithReason}
-                                    disabled={operatingId === cancelTarget.id || isSubmittingCancel}
-                                    className={`px-5 py-2.5 text-white font-extrabold rounded-xl shadow-lg text-xs uppercase tracking-wider transition-all flex items-center gap-2 active:scale-95 cursor-pointer disabled:opacity-50 ${
-                                        isGestorOrAdmin
-                                            ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/20'
-                                            : 'bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-700 hover:to-rose-700 shadow-amber-600/20'
-                                    }`}
-                                >
-                                    {operatingId === cancelTarget.id || isSubmittingCancel ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            <span>Processando...</span>
-                                        </>
-                                    ) : isGestorOrAdmin ? (
-                                        <>
-                                            <XCircle className="w-4 h-4" />
-                                            <span>Confirmar Cancelamento Imediato</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Clock className="w-4 h-4" />
-                                            <span>Solicitar Cancelamento</span>
-                                        </>
-                                    )}
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                </div>,
-                document.body
+            {/* MODAL DE CANCELAMENTO REFORMULADO (COMPACTO, RESPONSIVO, SELEÇÃO DE MOTIVOS E AUDITORIA) */}
+            {!isReadOnly && isCancelModalOpen && cancelTarget && (
+                <CancelarAgendamentoModal
+                    isOpen={isCancelModalOpen}
+                    onClose={() => {
+                        setIsCancelModalOpen(false);
+                        setCancelTarget(null);
+                    }}
+                    booking={cancelTarget}
+                    currentUser={currentUser}
+                    isGestorOrAdmin={isGestorOrAdmin}
+                    pendingCancelRequest={cancelTarget ? cancelamentosPendentesMap[cancelTarget.id] || null : null}
+                    onSuccess={async () => {
+                        setIsCancelModalOpen(false);
+                        setCancelTarget(null);
+                        await loadCancelamentosPendentes();
+                        await loadData(true);
+                    }}
+                />
             )}
 
             {/* MODAL: PAUSAR SOLICITAÇÃO */}

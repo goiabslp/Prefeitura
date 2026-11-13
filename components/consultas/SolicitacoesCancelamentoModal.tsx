@@ -221,38 +221,38 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
 
     return (
         <div 
-            className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-5 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200 select-none cursor-pointer"
+            className="fixed inset-0 z-[99999] flex items-center justify-center p-2.5 sm:p-4 md:p-6 bg-slate-950/75 backdrop-blur-sm animate-in fade-in duration-200 select-none cursor-pointer"
             role="dialog"
             aria-modal="true"
             onClick={handleCloseModal}
         >
             <div 
-                className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[94vh] overflow-hidden border border-amber-200/90 flex flex-col animate-in zoom-in-95 duration-200 cursor-default"
+                className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden border border-amber-200/90 flex flex-col animate-in zoom-in-95 duration-200 cursor-default"
                 onClick={(e) => e.stopPropagation()}
             >
-                {/* Header com Identificação, Contador e Botão de Fechar */}
-                <div className="p-4 sm:p-5 border-b border-amber-200 bg-gradient-to-r from-amber-600 via-rose-600 to-rose-700 text-white flex justify-between items-center shrink-0 shadow-sm">
-                    <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-white shadow-inner">
-                            <ShieldAlert className="w-6 h-6 animate-pulse" />
+                {/* Header Compacto e Responsivo */}
+                <div className="px-4 py-3 sm:px-6 sm:py-3.5 border-b border-amber-200 bg-gradient-to-r from-amber-600 via-rose-600 to-rose-700 text-white flex justify-between items-center shrink-0 shadow-sm">
+                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-white shadow-inner shrink-0">
+                            <ShieldAlert className="w-5 h-5 animate-pulse" />
                         </div>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <h3 className="font-black uppercase text-xs sm:text-sm tracking-wide text-white">
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="font-black uppercase text-xs sm:text-sm tracking-wide text-white truncate">
                                     Aprovação Obrigatória de Cancelamento
                                 </h3>
-                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-white text-rose-700 shadow-2xs">
-                                    {currentIndex + 1} de {solicitacoes.length}
+                                <span className="px-2 py-0.5 rounded-full text-[9.5px] sm:text-[10px] font-black uppercase bg-white text-rose-700 shadow-2xs shrink-0">
+                                    {currentIndex + 1} de {solicitacoes.length} {solicitacoes.length === 1 ? 'pendente' : 'pendentes'}
                                 </span>
                             </div>
-                            <p className="text-[10px] text-amber-100 font-bold uppercase tracking-wider mt-0.5">
+                            <p className="text-[10px] text-amber-100 font-bold uppercase tracking-wider truncate mt-0.5 hidden xs:block">
                                 Regulação Municipal • Análise e Decisão Exclusiva do Gestor
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        <div className="px-3 py-1 rounded-xl bg-black/20 text-amber-100 text-[10px] font-extrabold uppercase tracking-wider border border-white/10 hidden sm:block">
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                        <div className="px-2.5 py-1 rounded-xl bg-black/20 text-amber-100 text-[9.5px] font-extrabold uppercase tracking-wider border border-white/10 hidden md:block">
                             Decisão do Gestor
                         </div>
                         <button
@@ -267,11 +267,11 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
                     </div>
                 </div>
 
-                {/* Body com Scroll Interno Limpo */}
-                <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar space-y-4 text-xs select-text">
+                {/* Body Compacto com Grid Responsivo sem Rolagem em Desktop */}
+                <div className="p-3.5 sm:p-4 md:p-5 overflow-y-auto custom-scrollbar space-y-3 text-xs select-text">
                     {/* Alerta de feedback */}
                     {feedbackMessage && (
-                        <div className={`p-3 rounded-2xl border text-xs font-bold flex items-center gap-2 animate-in fade-in ${
+                        <div className={`p-2.5 sm:p-3 rounded-2xl border text-xs font-bold flex items-center gap-2 animate-in fade-in ${
                             feedbackMessage.type === 'success'
                                 ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
                                 : 'bg-rose-50 border-rose-200 text-rose-800'
@@ -281,20 +281,20 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
                             ) : (
                                 <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
                             )}
-                            <span>{feedbackMessage.text}</span>
+                            <span className="leading-snug">{feedbackMessage.text}</span>
                         </div>
                     )}
 
                     {isOwnRequest && (
-                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-[11px] text-amber-900 font-bold flex items-center gap-2">
+                        <div className="p-2.5 sm:p-3 bg-amber-50 border border-amber-200 rounded-2xl text-[11px] text-amber-900 font-bold flex items-center gap-2">
                             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                             <span>Atenção: Você foi o solicitante deste pedido. A decisão deve ser proferida por outro gestor ou administrador.</span>
                         </div>
                     )}
 
                     {/* SEÇÃO 1: DADOS DO PACIENTE & PROCEDIMENTO */}
-                    <div className="p-4 bg-slate-50/90 rounded-2xl border border-slate-200/90 space-y-3">
-                        <div className="flex items-center justify-between border-b border-slate-200/70 pb-2">
+                    <div className="p-3 sm:p-3.5 bg-slate-50/90 rounded-2xl border border-slate-200/90 space-y-2.5">
+                        <div className="flex items-center justify-between border-b border-slate-200/70 pb-1.5">
                             <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                                 <UserIcon className="w-3.5 h-3.5 text-slate-400" />
                                 <span>Dados do Paciente & Procedimento</span>
@@ -304,128 +304,144 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
                             </span>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {/* 1. Nome do Paciente */}
-                            <div className="sm:col-span-2">
-                                <span className="text-[9px] font-bold uppercase text-slate-400 block">1. Nome do Paciente</span>
-                                <span className="font-black text-slate-900 text-sm sm:text-base uppercase block truncate">
-                                    {currentItem.paciente_nome}
-                                </span>
-                                {currentItem.paciente_cpf && (
-                                    <span className="text-[10.5px] font-mono font-semibold text-slate-500">
-                                        CPF: {currentItem.paciente_cpf}
-                                    </span>
-                                )}
-                            </div>
-
-                            {/* 2. Procedimento e Código */}
-                            <div className="sm:col-span-2 p-2.5 bg-sky-50/70 rounded-xl border border-sky-200/80">
-                                <span className="text-[9px] font-black uppercase text-sky-800 block">2. Procedimento e Código</span>
-                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                    {currentItem.procedimento_codigo && (
-                                        <span className="px-2 py-0.5 bg-sky-600 text-white rounded-md font-mono font-black text-[11px]">
-                                            CÓD. {currentItem.procedimento_codigo}
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
+                            {/* Paciente e Procedimento (Coluna Principal) */}
+                            <div className="md:col-span-7 space-y-2">
+                                {/* 1. Nome do Paciente */}
+                                <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                                    <span className="text-[9px] font-bold uppercase text-slate-400 block">1. Nome do Paciente</span>
+                                    <div className="flex items-baseline justify-between gap-2 mt-0.5">
+                                        <span className="font-black text-slate-900 text-xs sm:text-sm uppercase truncate">
+                                            {currentItem.paciente_nome}
                                         </span>
-                                    )}
-                                    <span className="font-extrabold text-sky-950 text-xs sm:text-sm uppercase">
-                                        {currentItem.procedimento_nome}
-                                    </span>
+                                        {currentItem.paciente_cpf && (
+                                            <span className="text-[10px] font-mono font-semibold text-slate-500 shrink-0">
+                                                CPF: {currentItem.paciente_cpf}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* 2. Procedimento e Código */}
+                                <div className="p-2 sm:p-2.5 bg-sky-50/70 rounded-xl border border-sky-200/80">
+                                    <span className="text-[9px] font-black uppercase text-sky-800 block">2. Procedimento e Código</span>
+                                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                        {currentItem.procedimento_codigo && (
+                                            <span className="px-1.5 py-0.5 bg-sky-600 text-white rounded font-mono font-black text-[10px]">
+                                                CÓD. {currentItem.procedimento_codigo}
+                                            </span>
+                                        )}
+                                        <span className="font-extrabold text-sky-950 text-xs sm:text-sm uppercase leading-snug">
+                                            {currentItem.procedimento_nome}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
 
-                            {/* 3. Data Original da Solicitação */}
-                            <div className="p-2.5 bg-white rounded-xl border border-slate-200">
-                                <span className="text-[9px] font-bold uppercase text-slate-400 block flex items-center gap-1">
-                                    <Calendar className="w-3 h-3 text-slate-400" />
-                                    <span>3. Data Original da Solicitação</span>
-                                </span>
-                                <span className="font-black text-slate-800 text-xs mt-0.5 block">
-                                    {formatDateBr(currentItem.data_original_solicitacao || currentItem.criado_em)}
-                                </span>
-                            </div>
+                            {/* Metadados da Solicitação: Data, Prioridade e Posição (Coluna Lateral) */}
+                            <div className="md:col-span-5 space-y-2 flex flex-col justify-between">
+                                <div className="grid grid-cols-2 gap-2">
+                                    {/* 3. Data Original da Solicitação */}
+                                    <div className="p-2 bg-white rounded-xl border border-slate-200">
+                                        <span className="text-[9px] font-bold uppercase text-slate-400 block flex items-center gap-1">
+                                            <Calendar className="w-3 h-3 text-slate-400" />
+                                            <span>Data Original</span>
+                                        </span>
+                                        <span className="font-black text-slate-800 text-xs mt-0.5 block truncate">
+                                            {formatDateBr(currentItem.data_original_solicitacao || currentItem.criado_em)}
+                                        </span>
+                                    </div>
 
-                            {/* 4. Prioridade */}
-                            <div className="p-2.5 bg-white rounded-xl border border-slate-200">
-                                <span className="text-[9px] font-bold uppercase text-slate-400 block flex items-center gap-1">
-                                    <Layers className="w-3 h-3 text-slate-400" />
-                                    <span>4. Prioridade</span>
-                                </span>
-                                <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider mt-0.5 ${
-                                    currentItem.prioridade === 'Urgência'
-                                        ? 'bg-rose-100 text-rose-700 border border-rose-200'
-                                        : currentItem.prioridade === 'Especial'
-                                        ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                                        : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                }`}>
-                                    {currentItem.prioridade || 'Normal'}
-                                </span>
-                            </div>
+                                    {/* 4. Prioridade */}
+                                    <div className="p-2 bg-white rounded-xl border border-slate-200">
+                                        <span className="text-[9px] font-bold uppercase text-slate-400 block flex items-center gap-1">
+                                            <Layers className="w-3 h-3 text-slate-400" />
+                                            <span>Prioridade</span>
+                                        </span>
+                                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[9.5px] font-black uppercase tracking-wider mt-0.5 ${
+                                            currentItem.prioridade === 'Urgência'
+                                                ? 'bg-rose-100 text-rose-700 border border-rose-200'
+                                                : currentItem.prioridade === 'Especial'
+                                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                                : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                        }`}>
+                                            {currentItem.prioridade || 'Normal'}
+                                        </span>
+                                    </div>
+                                </div>
 
-                            {/* 5. Posição Anterior na Fila */}
-                            <div className="p-2.5 bg-amber-50/70 rounded-xl border border-amber-200 sm:col-span-2">
-                                <span className="text-[9px] font-black uppercase text-amber-900 block flex items-center gap-1">
-                                    <Hash className="w-3 h-3 text-amber-700" />
-                                    <span>5. Posição Anterior na Fila</span>
-                                </span>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                    <span className="font-mono font-black text-amber-950 text-sm">
-                                        {currentItem.posicao_anterior ? `${currentItem.posicao_anterior}º Lugar na Fila` : 'Fila de Espera (Posição Suspensa)'}
+                                {/* 5. Posição Anterior na Fila */}
+                                <div className="p-2 sm:p-2.5 bg-amber-50/70 rounded-xl border border-amber-200">
+                                    <span className="text-[9px] font-black uppercase text-amber-900 block flex items-center gap-1">
+                                        <Hash className="w-3 h-3 text-amber-700" />
+                                        <span>5. Posição Anterior na Fila</span>
                                     </span>
-                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-amber-200 text-amber-900 uppercase">
-                                        Suspensa Temporariamente
-                                    </span>
+                                    <div className="flex items-center justify-between gap-1.5 mt-0.5 flex-wrap">
+                                        <span className="font-mono font-black text-amber-950 text-xs sm:text-sm">
+                                            {currentItem.posicao_anterior ? `${currentItem.posicao_anterior}º Lugar na Fila` : 'Fila de Espera (Posição Suspensa)'}
+                                        </span>
+                                        <span className="px-1.5 py-0.5 rounded text-[8.5px] font-extrabold bg-amber-200 text-amber-900 uppercase">
+                                            Suspensa
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     {/* SEÇÃO 2: DADOS DO PEDIDO DE CANCELAMENTO */}
-                    <div className="p-4 bg-amber-50/60 rounded-2xl border border-amber-200/80 space-y-3">
-                        <div className="flex items-center justify-between border-b border-amber-200/60 pb-2">
+                    <div className="p-3 sm:p-3.5 bg-amber-50/60 rounded-2xl border border-amber-200/80 space-y-2.5">
+                        <div className="flex items-center justify-between border-b border-amber-200/60 pb-1.5">
                             <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
                                 <FileText className="w-3.5 h-3.5 text-amber-700" />
                                 <span>Dados da Solicitação de Cancelamento</span>
                             </span>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* Metadados: Solicitante, Setor e Data/Horário */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                             {/* 6. Usuário que solicitou */}
-                            <div>
-                                <span className="text-[9px] font-bold uppercase text-slate-500 block">6. Usuário Solicitante</span>
-                                <span className="font-black text-slate-900 uppercase block text-xs mt-0.5">
+                            <div className="p-2 bg-white/80 rounded-xl border border-amber-200/70">
+                                <span className="text-[9px] font-bold uppercase text-slate-500 block">Usuário Solicitante</span>
+                                <span className="font-black text-slate-900 uppercase block text-xs mt-0.5 truncate" title={currentItem.solicitante_nome}>
                                     {currentItem.solicitante_nome}
                                 </span>
-                                <span className="text-[10px] font-semibold text-slate-500 block">
-                                    Setor: {currentItem.solicitante_setor || 'Unidade Básica de Saúde / PSF'}
+                            </div>
+
+                            {/* Setor Responsável */}
+                            <div className="p-2 bg-white/80 rounded-xl border border-amber-200/70">
+                                <span className="text-[9px] font-bold uppercase text-slate-500 block">Setor Responsável</span>
+                                <span className="font-bold text-slate-800 block text-xs mt-0.5 truncate" title={currentItem.solicitante_setor || 'Unidade Básica de Saúde / PSF'}>
+                                    {currentItem.solicitante_setor || 'Unidade Básica de Saúde / PSF'}
                                 </span>
                             </div>
 
                             {/* 7. Data e Horário do Pedido */}
-                            <div>
+                            <div className="p-2 bg-white/80 rounded-xl border border-amber-200/70">
                                 <span className="text-[9px] font-bold uppercase text-slate-500 block flex items-center gap-1">
                                     <Clock className="w-3 h-3 text-slate-400" />
-                                    <span>7. Data e Horário do Pedido</span>
+                                    <span>Data e Horário</span>
                                 </span>
-                                <span className="font-black text-slate-900 text-xs mt-0.5 block">
+                                <span className="font-black text-slate-900 text-xs mt-0.5 block truncate">
                                     {formatDateTimeBr(currentItem.criado_em)}
                                 </span>
                             </div>
+                        </div>
 
-                            {/* 8. Justificativa Apresentada */}
-                            <div className="sm:col-span-2 space-y-1">
-                                <span className="text-[9px] font-black uppercase tracking-wider text-amber-950 block">
-                                    8. Justificativa Apresentada pelo Solicitante:
-                                </span>
-                                <div className="p-3 bg-white rounded-xl border border-amber-300 text-slate-800 font-medium text-xs leading-relaxed italic shadow-2xs">
-                                    "{currentItem.justificativa_solicitacao}"
-                                </div>
+                        {/* 8. Justificativa Apresentada */}
+                        <div className="space-y-1">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-amber-950 block">
+                                Justificativa Apresentada pelo Solicitante:
+                            </span>
+                            <div className="p-2.5 sm:p-3 bg-white rounded-xl border border-amber-300 text-slate-800 font-medium text-xs leading-relaxed italic shadow-2xs">
+                                "{currentItem.justificativa_solicitacao}"
                             </div>
                         </div>
                     </div>
 
                     {/* SEÇÃO 3: FORMULÁRIO DE RECUSA (SE O GESTOR CLICAR EM RECUSAR) */}
                     {isRejecting && (
-                        <div className="p-4 bg-rose-50 rounded-2xl border border-rose-300 space-y-2.5 animate-in fade-in duration-200">
+                        <div className="p-3.5 bg-rose-50 rounded-2xl border border-rose-300 space-y-2.5 animate-in fade-in duration-200">
                             <div className="flex items-center justify-between">
                                 <label className="text-[10px] font-black uppercase tracking-wider text-rose-900 flex items-center gap-1">
                                     <XCircle className="w-3.5 h-3.5 text-rose-600" />
@@ -446,7 +462,7 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
                                 value={justificativaRecusa}
                                 onChange={(e) => setJustificativaRecusa(e.target.value)}
                                 placeholder="Informe detalhadamente por que este cancelamento está sendo recusado pela Regulação..."
-                                rows={3}
+                                rows={2}
                                 className="w-full p-2.5 bg-white border border-rose-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20 resize-none"
                                 required
                             />
@@ -458,7 +474,7 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
                                     type="button"
                                     onClick={handleRecusarCancelamento}
                                     disabled={isProcessing || justificativaRecusa.trim().length < 5 || isOwnRequest}
-                                    className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer active:scale-95"
+                                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer active:scale-95"
                                 >
                                     {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
                                     <span>Confirmar Recusa do Cancelamento</span>
@@ -468,40 +484,40 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
                     )}
                 </div>
 
-                {/* Footer com Navegação e Decisão */}
-                <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-                    {/* Navegação entre solicitações pendentes */}
-                    <div className="flex items-center gap-2">
+                {/* Footer com Navegação Separada e Ações de Decisão sem Sobreposição */}
+                <div className="px-4 py-3 sm:px-6 sm:py-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                    {/* Área Exclusiva de Navegação entre solicitações pendentes */}
+                    <div className="flex items-center gap-1.5 shrink-0 bg-white border border-slate-200 rounded-xl p-1 shadow-2xs w-full sm:w-auto justify-center sm:justify-start">
                         <button
                             type="button"
                             onClick={handlePrev}
                             disabled={currentIndex === 0 || isProcessing}
-                            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 transition-all cursor-pointer disabled:pointer-events-none"
+                            className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
                             title="Solicitação Anterior"
                         >
                             <ChevronLeft className="w-4 h-4" />
                         </button>
-                        <span className="text-[11px] font-black uppercase text-slate-600 font-mono">
-                            {currentIndex + 1} / {solicitacoes.length}
+                        <span className="text-[11px] font-black uppercase text-slate-700 font-mono px-2 select-none">
+                            {currentIndex + 1} de {solicitacoes.length}
                         </span>
                         <button
                             type="button"
                             onClick={handleNext}
                             disabled={currentIndex >= solicitacoes.length - 1 || isProcessing}
-                            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 transition-all cursor-pointer disabled:pointer-events-none"
+                            className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
                             title="Próxima Solicitação"
                         >
                             <ChevronRight className="w-4 h-4" />
                         </button>
                     </div>
 
-                    {/* Ações de Decisão Exigidas: Confirmar Cancelamento / Recusar Cancelamento / Fechar */}
+                    {/* Ações de Decisão: Fechar / Recusar Cancelamento / Confirmar Cancelamento */}
                     {!isRejecting && (
-                        <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                        <div className="flex items-center gap-2 sm:gap-2.5 w-full sm:w-auto justify-end flex-wrap sm:flex-nowrap shrink-0">
                             <button
                                 type="button"
                                 onClick={handleCloseModal}
-                                className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                                className="w-full xs:w-auto flex-1 sm:flex-none px-3.5 sm:px-4 py-2 sm:py-2.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shrink-0 shadow-2xs text-center"
                                 title="Fechar modal para analisar depois"
                             >
                                 Fechar
@@ -511,10 +527,10 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
                                 type="button"
                                 onClick={() => setIsRejecting(true)}
                                 disabled={isProcessing || isOwnRequest}
-                                className="flex-1 sm:flex-none px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-black text-xs uppercase tracking-wider rounded-xl transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                                className="w-full xs:w-auto flex-1 sm:flex-none px-3.5 sm:px-4 py-2 sm:py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-black text-xs uppercase tracking-wider rounded-xl transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0 shadow-2xs whitespace-nowrap"
                                 title={isOwnRequest ? 'O solicitante não pode decidir seu próprio pedido' : 'Recusar pedido de cancelamento e reativar solicitação na fila'}
                             >
-                                <XCircle className="w-4 h-4 text-rose-600" />
+                                <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
                                 <span>Recusar Cancelamento</span>
                             </button>
 
@@ -522,17 +538,17 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
                                 type="button"
                                 onClick={handleConfirmarCancelamento}
                                 disabled={isProcessing || isOwnRequest}
-                                className="flex-1 sm:flex-none px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                                className="w-full xs:w-auto flex-1 sm:flex-none px-4 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap"
                                 title={isOwnRequest ? 'O solicitante não pode decidir seu próprio pedido' : 'Confirmar cancelamento definitivo da solicitação'}
                             >
                                 {isProcessing ? (
                                     <>
-                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <Loader2 className="w-4 h-4 animate-spin shrink-0" />
                                         <span>Processando...</span>
                                     </>
                                 ) : (
                                     <>
-                                        <CheckCircle2 className="w-4 h-4 text-white" />
+                                        <CheckCircle2 className="w-4 h-4 text-white shrink-0" />
                                         <span>Confirmar Cancelamento</span>
                                     </>
                                 )}

@@ -5023,6 +5023,155 @@ export const cancelAgendamentoWithReason = async (
     }
 };
 
+/**
+ * Gestor / Admin: Cancelamento Imediato definitivo de agendamento na regulação
+ * Registra status 'Cancelado', motivo, justificativa, dados do responsável e auditoria indelével.
+ */
+export const cancelAgendamentoImediato = async (params: {
+    agendamentoId: string;
+    motivo: string;
+    justificativa: string;
+    usuario: { id: string; name: string; sector?: string; role?: string; is_admin?: boolean; access_level?: string };
+    confirmacaoVeracidade: boolean;
+    bookingSnapshot?: ConsultaAgendamento | null;
+}): Promise<{ success: boolean; data?: ConsultaAgendamento; error?: string }> => {
+    try {
+        assertCanMutateRegulacao('Cancelar Agendamento Imediatamente', 'acompanhar');
+        const { agendamentoId, motivo, justificativa, usuario, confirmacaoVeracidade, bookingSnapshot } = params;
+
+        if (!motivo || !motivo.trim()) {
+            return { success: false, error: 'O motivo do cancelamento é obrigatório.' };
+        }
+        if (!justificativa || !justificativa.trim()) {
+            return { success: false, error: 'A justificativa do cancelamento é obrigatória.' };
+        }
+        if (!confirmacaoVeracidade) {
+            return { success: false, error: 'É obrigatório confirmar que as informações descritas na justificativa foram verificadas.' };
+        }
+
+        const now = new Date().toISOString();
+        const reasonText = `[${motivo.trim()}] ${justificativa.trim()}`;
+
+        // 1. Snapshot do agendamento
+        let target = bookingSnapshot;
+        if (!target) {
+            const { data } = await supabase
+                .from('consultas_agendamentos')
+                .select('*, paciente:consultas_pacientes(*), procedimento:consultas_procedimentos(*)')
+                .eq('id', agendamentoId)
+                .single();
+            target = data;
+        }
+
+        // 2. Atualizar em consultas_agendamentos
+        let updatedBooking: ConsultaAgendamento | null = null;
+        try {
+            const { data, error } = await supabase
+                .from('consultas_agendamentos')
+                .update({
+                    status: 'Cancelado',
+                    cancellation_reason: reasonText,
+                    canceled_by: usuario.id,
+                    canceled_by_name: usuario.name,
+                    canceled_at: now,
+                    cancelamento_pendente: false,
+                    queue_position: null,
+                    special_sequence: null
+                })
+                .eq('id', agendamentoId)
+                .select('*, paciente:consultas_pacientes(*), procedimento:consultas_procedimentos(*)')
+                .single();
+
+            if (data && !error) {
+                updatedBooking = data;
+            } else if (error) {
+                const { data: fallbackData } = await supabase
+                    .from('consultas_agendamentos')
+                    .update({
+                        status: 'Cancelado',
+                        cancellation_reason: reasonText,
+                        canceled_by: usuario.id,
+                        canceled_by_name: usuario.name,
+                        canceled_at: now
+                    })
+                    .eq('id', agendamentoId)
+                    .select('*, paciente:consultas_pacientes(*), procedimento:consultas_procedimentos(*)')
+                    .single();
+                updatedBooking = fallbackData;
+            }
+        } catch (dbErr: any) {
+            console.warn('[consultasService] Erro ao atualizar cancelamento no Supabase:', dbErr.message);
+        }
+
+        // 3. Se houver solicitação pendente no histórico de cancelamentos, marcar como Aprovada / Concluída
+        try {
+            await supabase
+                .from('consultas_solicitacoes_cancelamento')
+                .update({
+                    status: 'Aprovada',
+                    aprovador_id: usuario.id,
+                    aprovador_nome: usuario.name,
+                    decidido_em: now,
+                    atualizado_em: now
+                })
+                .eq('agendamento_id', agendamentoId)
+                .eq('status', 'Aguardando Aprovação');
+        } catch (_) {}
+
+        // Atualizar lista local resiliente
+        const localList = getLocalSolicitacoesCancelamento();
+        const updatedLocal = localList.map(item => {
+            if (item.agendamento_id === agendamentoId && item.status === 'Aguardando Aprovação') {
+                return {
+                    ...item,
+                    status: 'Aprovada' as const,
+                    aprovador_id: usuario.id,
+                    aprovador_nome: usuario.name,
+                    decidido_em: now,
+                    atualizado_em: now
+                };
+            }
+            return item;
+        });
+        saveLocalSolicitacoesCancelamento(updatedLocal);
+
+        // 4. Recalcular a fila ativa
+        await recalculateAndPersistQueuePositions().catch(() => {});
+
+        // 5. Auditoria indelével no Supabase
+        const pacienteNome = target?.paciente?.name || 'Paciente';
+        const procNome = target?.procedimento?.name || 'Procedimento';
+        await auditLogService.logAction({
+            action_type: 'CANCELAMENTO_IMEDIATO',
+            module: 'Regulação - Acompanhar',
+            description: `Cancelamento Imediato executado por ${usuario.name} para o paciente ${pacienteNome} (${procNome}). Motivo: ${motivo}.`,
+            details: {
+                paciente_id: target?.patient_id || target?.paciente?.id,
+                paciente_nome: pacienteNome,
+                agendamento_id: agendamentoId,
+                motivo_cancelamento: motivo,
+                justificativa_final: justificativa.trim(),
+                usuario_responsavel_id: usuario.id,
+                usuario_responsavel_nome: usuario.name,
+                data_hora_cancelamento: now,
+                tipo_operacao: 'Cancelamento Imediato',
+                confirmacao_veracidade: true
+            }
+        }).catch(() => {});
+
+        // 6. Broadcast Realtime
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-solicitacoes-cancelamento-changed'));
+        }
+
+        return { success: true, data: updatedBooking || target || undefined };
+    } catch (error: any) {
+        console.error('[consultasService] cancelAgendamentoImediato error:', error);
+        return { success: false, error: error.message || 'Erro inesperado ao realizar cancelamento imediato.' };
+    }
+};
+
 export const reagendarAgendamento = async (id: string): Promise<ConsultaAgendamento | null> => {
     assertCanMutateRegulacao('Reagendar Agendamento', 'acompanhar');
     try {
@@ -5159,12 +5308,14 @@ export const getMapaCancelamentosPendentes = async (): Promise<Record<string, Co
 export const solicitarCancelamentoAgendamento = async (params: {
     agendamentoId: string;
     justificativa: string;
+    motivo?: string;
+    confirmacaoVeracidade?: boolean;
     solicitante: { id: string; name: string; sector?: string };
     bookingSnapshot?: ConsultaAgendamento | null;
 }): Promise<{ success: boolean; solicitacao?: ConsultaSolicitacaoCancelamento; error?: string }> => {
     try {
         assertCanMutateRegulacao('Solicitar Cancelamento', 'acompanhar');
-        const { agendamentoId, justificativa, solicitante, bookingSnapshot } = params;
+        const { agendamentoId, justificativa, motivo, confirmacaoVeracidade, solicitante, bookingSnapshot } = params;
 
         if (!justificativa || justificativa.trim().length < 5) {
             return { success: false, error: 'A justificativa do cancelamento é obrigatória (mínimo 5 caracteres).' };
@@ -5225,7 +5376,7 @@ export const solicitarCancelamentoAgendamento = async (params: {
             solicitante_id: solicitante.id,
             solicitante_nome: solicitante.name,
             solicitante_setor: solicitante.sector || 'Unidade Básica / PSF',
-            justificativa_solicitacao: justificativa.trim(),
+            justificativa_solicitacao: motivo && !justificativa.startsWith('[') ? `[${motivo.trim()}] ${justificativa.trim()}` : justificativa.trim(),
             status: 'Aguardando Aprovação',
             criado_em: now,
             atualizado_em: now
@@ -5303,7 +5454,9 @@ export const solicitarCancelamentoAgendamento = async (params: {
                 agendamento_id: agendamentoId,
                 solicitante_id: solicitante.id,
                 solicitante_nome: solicitante.name,
+                motivo_cancelamento: motivo,
                 justificativa: justificativa.trim(),
+                confirmacao_veracidade: confirmacaoVeracidade ?? true,
                 posicao_anterior: rawPosicao,
                 data_original_solicitacao: dataOriginal
             }

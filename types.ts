@@ -753,15 +753,24 @@ export interface ConsultaAgendamento {
   confirmed_by_name?: string;
   confirmation_origin?: string;
 
-  // Solicitação de Cancelamento
+  // Solicitação de Cancelamento e Exclusão
   cancelamento_pendente?: boolean;
+  exclusao_pendente?: boolean;
+  is_deleted?: boolean;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
+  deleted_by_name?: string | null;
+  deletion_reason?: string | null;
   solicitacao_cancelamento?: ConsultaSolicitacaoCancelamento;
 }
 
+export type TipoSolicitacaoGestao = 'Cancelamento' | 'Exclusão';
 export type SolicitacaoCancelamentoStatus = 'Aguardando Aprovação' | 'Aprovada' | 'Rejeitada';
 
 export interface ConsultaSolicitacaoCancelamento {
   id: string;
+  tipo?: TipoSolicitacaoGestao;
+  motivo?: string;
   agendamento_id: string;
   paciente_nome: string;
   paciente_cpf?: string;

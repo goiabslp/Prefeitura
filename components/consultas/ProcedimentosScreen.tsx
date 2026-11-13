@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga, ConsultaEspecialista } from '../../types';
 import { 
     ArrowLeft, Settings, Plus, Edit2, Search, Check, Copy, AlertTriangle, 
@@ -88,6 +88,9 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
     const [isSuspendConfirmModalOpen, setIsSuspendConfirmModalOpen] = useState(false);
     const [procToSuspend, setProcToSuspend] = useState<ConsultaProcedimento | null>(null);
     const [suspendCallback, setSuspendCallback] = useState<(() => Promise<void>) | null>(null);
+
+    // Flag de controle para sincronização silenciosa sem reload ou reset de scroll
+    const skipNextSyncRef = useRef(false);
 
     // Modal de Revisão de Duplicidades e Padronização Inteligente State
     const [isRevisarDuplicidadesOpen, setIsRevisarDuplicidadesOpen] = useState(false);
@@ -294,8 +297,12 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
     }, [vagas, procBookings]);
 
     // Load all procedures & especialistas & contagem de solicitações agregada
-    const fetchProcedures = async () => {
-        setLoading(true);
+    // Suporta carregamento silencioso em background para não desmontar a lista nem alterar scroll
+    const fetchProcedures = async (isSilent: boolean = false) => {
+        // Exibe loader apenas se for a primeira montagem e ainda não houver nenhum dado na tela
+        if (!isSilent && procedures.length === 0) {
+            setLoading(true);
+        }
         try {
             const [procsData, espsData, countsData] = await Promise.all([
                 db.getProcedimentos(),
@@ -363,10 +370,14 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
         }
     }, [selectedProc]);
 
-    // Sync with realtime events
+    // Sync with realtime events silencioso (sem desmontar a lista nem alterar scroll)
     useEffect(() => {
         const handleSync = () => {
-            fetchProcedures();
+            // Se esta própria tela acabou de realizar uma mutação local direta, ignorar evento reflexo
+            if (skipNextSyncRef.current) {
+                return;
+            }
+            fetchProcedures(true);
             if (selectedProc) {
                 reloadVagas();
             }
@@ -472,19 +483,62 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
     };
 
     const executeSaveProcedure = async (finalCode: string) => {
+        // Captura a rolagem vertical antes do salvamento para preservação absoluta
+        const scrollBefore = window.scrollY || document.documentElement.scrollTop || 0;
+        skipNextSyncRef.current = true;
         setActionLoading('save-proc');
+        setProcError('');
         try {
             if (editingProc) {
-                await db.updateProcedimento(editingProc.id, {
+                const updated = await db.updateProcedimento(editingProc.id, {
                     name: procName.trim().toUpperCase(),
                     code: finalCode,
                     type: procType,
                     status: procStatus,
                     recurso: procRecurso || 'Não Se Aplica'
                 });
+
+                // Atualização direta e silenciosa no estado local do React (sem reload, sem refetch global que desmonte lista)
+                setProcedures(prev => prev.map(p => {
+                    if (p.id === editingProc.id) {
+                        return {
+                            ...p,
+                            name: procName.trim().toUpperCase(),
+                            code: finalCode,
+                            type: procType,
+                            status: procStatus,
+                            recurso: procRecurso || 'Não Se Aplica',
+                            ...(updated || {})
+                        };
+                    }
+                    // Se este procedimento for pai e o nome mudou, atualizar o nome e parent_name dos filhos no estado local
+                    if (p.parent_id === editingProc.id) {
+                        const espNome = p.especialista?.nome ? ` — ${p.especialista.nome.trim().toUpperCase()}` : '';
+                        return {
+                            ...p,
+                            parent_name: procName.trim().toUpperCase(),
+                            name: `${procName.trim().toUpperCase()}${espNome}`
+                        };
+                    }
+                    return p;
+                }));
+
+                if (selectedProc && selectedProc.id === editingProc.id) {
+                    setSelectedProc(prev => prev ? {
+                        ...prev,
+                        name: procName.trim().toUpperCase(),
+                        code: finalCode,
+                        type: procType,
+                        status: procStatus,
+                        recurso: procRecurso || 'Não Se Aplica',
+                        ...(updated || {})
+                    } : null);
+                }
+
                 showToast(`Procedimento atualizado com sucesso!`);
+                setIsProcModalOpen(false);
             } else {
-                await db.createProcedimento({
+                const created = await db.createProcedimento({
                     name: procName.trim().toUpperCase(),
                     code: finalCode,
                     type: procType,
@@ -493,11 +547,20 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                     status: procStatus,
                     recurso: 'Não Se Aplica'
                 });
+
+                if (created) {
+                    setProcedures(prev => [created, ...prev]);
+                }
                 showToast(`Procedimento principal cadastrado com sucesso!`);
+                setIsProcModalOpen(false);
             }
-            setIsProcModalOpen(false);
-            fetchProcedures();
+
+            // Preserva com precisão milimétrica a posição da rolagem vertical
+            requestAnimationFrame(() => {
+                window.scrollTo({ top: scrollBefore, behavior: 'instant' as any });
+            });
         } catch (err: any) {
+            skipNextSyncRef.current = false;
             if (err.message && (err.message.includes('unique_procedimento_nome_tipo') || err.message.includes('unique constraint') || err.message.includes('duplicate key'))) {
                 setProcError('Já existe um procedimento cadastrado com o mesmo nome e tipo.');
             } else {
@@ -505,6 +568,9 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
             }
         } finally {
             setActionLoading(null);
+            setTimeout(() => {
+                skipNextSyncRef.current = false;
+            }, 500);
         }
     };
 
@@ -586,6 +652,8 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
             return;
         }
 
+        const scrollBefore = window.scrollY || document.documentElement.scrollTop || 0;
+        skipNextSyncRef.current = true;
         setActionLoading('save-vinculo-esp');
         try {
             const novoVinculo = await db.vincularEspecialistaProcedimento({
@@ -593,6 +661,9 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                 especialistaId: selectedAddEspecialistaId,
                 status: addEspecialistaStatus
             });
+
+            // Atualização silenciosa direta no estado local do React
+            setProcedures(prev => [...prev, novoVinculo]);
 
             // Expande automaticamente o pai na listagem para visualização imediata do novo especialista
             setExpandedParentIds(prev => ({
@@ -602,11 +673,19 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
 
             setIsAddEspecialistaModalOpen(false);
             showToast(`Especialista vinculado com sucesso! Código gerado: ${novoVinculo.code}`);
-            await fetchProcedures();
+
+            // Preserva com precisão a rolagem vertical
+            requestAnimationFrame(() => {
+                window.scrollTo({ top: scrollBefore, behavior: 'instant' as any });
+            });
         } catch (err: any) {
+            skipNextSyncRef.current = false;
             setAddEspecialistaError(err.message || 'Erro ao vincular especialista ao procedimento.');
         } finally {
             setActionLoading(null);
+            setTimeout(() => {
+                skipNextSyncRef.current = false;
+            }, 500);
         }
     };
 
@@ -621,7 +700,9 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
             return;
         }
 
-        // Reativar procedimento: volta automaticamente a permitir novos agendamentos e transferências
+        // Reativar procedimento: volta imediatamente a permitir novos agendamentos e transferências
+        const scrollBefore = window.scrollY || document.documentElement.scrollTop || 0;
+        skipNextSyncRef.current = true;
         setActionLoading(`suspend-${proc.id}`);
         try {
             await db.updateProcedimento(proc.id, { status: 'Ativo' });
@@ -630,16 +711,27 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                 setSelectedProc(prev => prev ? { ...prev, status: 'Ativo' } : null);
             }
             showToast(`Procedimento "${proc.name}" reativado com sucesso!`, 'success');
+
+            // Preserva a rolagem vertical
+            requestAnimationFrame(() => {
+                window.scrollTo({ top: scrollBefore, behavior: 'instant' as any });
+            });
         } catch (err: any) {
+            skipNextSyncRef.current = false;
             console.error('Erro ao reativar procedimento:', err);
             showToast(err.message || 'Erro ao reativar procedimento.', 'error');
         } finally {
             setActionLoading(null);
+            setTimeout(() => {
+                skipNextSyncRef.current = false;
+            }, 500);
         }
     };
 
     const handleConfirmSuspendAction = async () => {
         if (!procToSuspend) return;
+        const scrollBefore = window.scrollY || document.documentElement.scrollTop || 0;
+        skipNextSyncRef.current = true;
         setActionLoading(`suspend-${procToSuspend.id}`);
         try {
             if (suspendCallback) {
@@ -655,11 +747,20 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
             }
             setIsSuspendConfirmModalOpen(false);
             setProcToSuspend(null);
+
+            // Preserva a rolagem vertical
+            requestAnimationFrame(() => {
+                window.scrollTo({ top: scrollBefore, behavior: 'instant' as any });
+            });
         } catch (err: any) {
+            skipNextSyncRef.current = false;
             console.error('Erro ao suspender procedimento:', err);
             showToast(err.message || 'Erro ao suspender procedimento.', 'error');
         } finally {
             setActionLoading(null);
+            setTimeout(() => {
+                skipNextSyncRef.current = false;
+            }, 500);
         }
     };
 
@@ -669,25 +770,34 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
         setSuspendCallback(null);
     };
 
-    // Delete Procedure
+    // Delete Procedure com atualização silenciosa
     const handleDeleteProcedure = async (e: React.MouseEvent | null, procId: string, procName?: string) => {
         if (e) e.stopPropagation();
         const nameText = procName ? ` "${procName}"` : '';
         if (!window.confirm(`ATENÇÃO: Deseja realmente excluir o procedimento${nameText}? Esta ação não pode ser desfeita.`)) return;
 
+        const scrollBefore = window.scrollY || document.documentElement.scrollTop || 0;
+        skipNextSyncRef.current = true;
         setActionLoading(`del-${procId}`);
         try {
             await db.deleteProcedimento(procId);
+            setProcedures(prev => prev.filter(p => p.id !== procId && p.parent_id !== procId));
             showToast('Procedimento excluído com sucesso!');
             if (selectedProc && selectedProc.id === procId) {
                 setSelectedProc(null);
             }
-            fetchProcedures();
+            requestAnimationFrame(() => {
+                window.scrollTo({ top: scrollBefore, behavior: 'instant' as any });
+            });
         } catch (err: any) {
+            skipNextSyncRef.current = false;
             console.error('Erro ao excluir procedimento:', err);
             alert(err.message || 'Erro ao excluir procedimento.');
         } finally {
             setActionLoading(null);
+            setTimeout(() => {
+                skipNextSyncRef.current = false;
+            }, 500);
         }
     };
 
@@ -1372,15 +1482,15 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                     /* LISTAGEM GERAL DE PROCEDIMENTOS                         */
                     /* ======================================================= */
                     <div className="space-y-4">
-                        {/* Loading Indicator */}
-                        {loading && (
+                        {/* Loading Indicator inicial apenas se ainda não houver nenhum dado na tela */}
+                        {loading && procedures.length === 0 && (
                             <div className="flex items-center justify-center py-10">
                                 <Loader2 className="w-8 h-8 text-sky-600 animate-spin" />
                             </div>
                         )}
 
-                        {/* Hierarchical Procedure List */}
-                        {!loading && hierarchicalProcedures.parents.length > 0 ? (
+                        {/* Hierarchical Procedure List - Não desmonta se procedures já estiver carregado */}
+                        {(!loading || procedures.length > 0) && hierarchicalProcedures.parents.length > 0 ? (
                             <div className="space-y-3">
                                 {hierarchicalProcedures.parents.map(parent => {
                                     const children = hierarchicalProcedures.childrenByParent.get(parent.id) || [];
@@ -1806,7 +1916,7 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                     );
                                 })}
                             </div>
-                        ) : !loading && (
+                        ) : (!loading || procedures.length > 0) && (
                             <div className="text-center py-12 p-8 bg-white border border-dashed border-slate-200 rounded-3xl space-y-4">
                                 <Activity className="w-12 h-12 text-sky-500 mx-auto opacity-75" />
                                 <div className="space-y-1">
