@@ -747,66 +747,293 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                 </div>
             )}
 
-            {/* Header (apenas quando não embutido) */}
-            {!embedded && (
-                <div className="px-6 py-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-50/80 to-white shrink-0">
-                    <div className="flex items-center gap-3">
-                        {onBack && (
-                            <button 
-                                onClick={onBack} 
-                                className="p-2 -ml-2 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
-                                title="Voltar ao Módulo de Consultas"
-                            >
-                                <ArrowLeft className="w-5 h-5" />
-                            </button>
-                        )}
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <div className="p-1.5 bg-sky-50 text-sky-600 border border-sky-100 rounded-lg">
-                                    <Settings className="w-4 h-4" />
+            {/* Header Geral da Gestão de Procedimentos — Estrutura em 3 Linhas Modernas */}
+            {!embedded ? (
+                <div className="px-4 sm:px-6 py-4 border-b border-slate-200/80 bg-gradient-to-b from-slate-50/90 via-white to-white shrink-0 space-y-3.5 shadow-2xs">
+                    {/* LINHA 1 — Identificação e indicadores */}
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                            {onBack && (
+                                <button 
+                                    onClick={onBack} 
+                                    className="p-2 -ml-2 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all cursor-pointer shrink-0"
+                                    title="Voltar ao Módulo de Consultas"
+                                >
+                                    <ArrowLeft className="w-5 h-5" />
+                                </button>
+                            )}
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-1.5 bg-sky-50 text-sky-600 border border-sky-100 rounded-lg shrink-0 shadow-2xs">
+                                        <Settings className="w-4 h-4" />
+                                    </div>
+                                    <h3 className="font-extrabold text-slate-900 tracking-tight text-base sm:text-lg uppercase truncate">
+                                        Gestão de Procedimentos
+                                    </h3>
                                 </div>
-                                <h3 className="font-extrabold text-slate-900 tracking-tight text-lg uppercase">Gestão de Procedimentos</h3>
+                                <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
+                                    Cadastre, edite, suspenda ou configure vagas para exames, consultas e cirurgias
+                                </p>
                             </div>
-                            <p className="text-xs text-slate-500 font-medium mt-0.5">Cadastre, edite, suspenda ou configure vagas para exames, consultas e cirurgias</p>
+                        </div>
+
+                        {/* Indicadores: TOTAL, ATIVOS, SUSPENSOS, BANCO, COTAS e SOLICITAÇÕES */}
+                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 self-start lg:self-center shrink-0">
+                            <div
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200/90 rounded-xl shadow-2xs min-w-[75px] justify-center"
+                                title={`${metrics.strictParentsCount} procedimentos principais + ${metrics.orphanCount} vinculados sem pai associado`}
+                            >
+                                <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-400">Total</span>
+                                <span className="text-xs font-black text-slate-800">{metrics.total}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl shadow-2xs min-w-[75px] justify-center">
+                                <span className="text-[9.5px] font-black uppercase tracking-wider text-emerald-700">Ativos</span>
+                                <span className="text-xs font-black text-emerald-800">{metrics.ativos}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl shadow-2xs min-w-[80px] justify-center">
+                                <span className="text-[9.5px] font-black uppercase tracking-wider text-amber-700">Suspensos</span>
+                                <span className="text-xs font-black text-amber-800">{metrics.suspensos}</span>
+                            </div>
+                            {metrics.groupedChildrenCount > 0 && (
+                                <div
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 border border-violet-200 rounded-xl shadow-xs min-w-[75px] justify-center"
+                                    title={`${metrics.total} na listagem principal + ${metrics.groupedChildrenCount} vinculados dentro de procedimentos pais = ${metrics.totalRegisteredCount} registros no banco`}
+                                >
+                                    <span className="text-[9.5px] font-black uppercase tracking-wider text-violet-700">Banco</span>
+                                    <span className="text-xs font-black text-violet-800">{metrics.totalRegisteredCount}</span>
+                                </div>
+                            )}
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-xl shadow-xs min-w-[75px] justify-center">
+                                <span className="text-[9.5px] font-black uppercase tracking-wider text-indigo-700">Cotas</span>
+                                <span className="text-xs font-black text-indigo-800">{metrics.totalCotas}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-xl shadow-xs min-w-[90px] justify-center" title="Total de solicitações vinculadas em todos os procedimentos">
+                                <span className="text-[9.5px] font-black uppercase tracking-wider text-blue-700">Solicitações</span>
+                                <span className="text-xs font-black text-blue-800">{metrics.totalSolicitacoes}</span>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Quick Metrics Cards */}
-                    <div className="flex flex-wrap items-center gap-2">
-                        <div
-                            className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl shadow-xs"
-                            title={`${metrics.strictParentsCount} procedimentos principais + ${metrics.orphanCount} vinculados sem pai associado`}
-                        >
-                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total</span>
-                            <span className="text-xs font-black text-slate-800">{metrics.total}</span>
-                        </div>
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl shadow-xs">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700">Ativos</span>
-                            <span className="text-xs font-black text-emerald-800">{metrics.ativos}</span>
-                        </div>
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl shadow-xs">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-amber-700">Suspensos</span>
-                            <span className="text-xs font-black text-amber-800">{metrics.suspensos}</span>
-                        </div>
-                        {metrics.groupedChildrenCount > 0 && (
-                            <div
-                                className="flex items-center gap-2 px-3 py-1.5 bg-violet-50 border border-violet-200 rounded-xl shadow-xs"
-                                title={`${metrics.total} na listagem principal + ${metrics.groupedChildrenCount} vinculados dentro de procedimentos pais = ${metrics.totalRegisteredCount} registros no banco`}
-                            >
-                                <span className="text-[10px] font-black uppercase tracking-wider text-violet-700">Banco</span>
-                                <span className="text-xs font-black text-violet-800">{metrics.totalRegisteredCount}</span>
+                    {/* Quando não estiver no detalhe de procedimento, exibe LINHA 2 e LINHA 3 */}
+                    {!selectedProc && (
+                        <>
+                            {/* LINHA 2 — Pesquisa e filtros */}
+                            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+                                {/* Campo de pesquisa por nome ou código */}
+                                <div className="relative flex-1 min-w-[220px] max-w-full sm:max-w-xs md:max-w-sm">
+                                    <input
+                                        type="text"
+                                        placeholder="Buscar exame, consulta ou código..."
+                                        className="w-full h-9 bg-white border border-slate-300 rounded-xl pl-9 pr-4 text-xs font-semibold placeholder:text-slate-400 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-2xs"
+                                        value={procSearch}
+                                        onChange={(e) => setProcSearch(e.target.value)}
+                                    />
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                                </div>
+
+                                {/* Filtro de tipo: Todos, Exame, Consulta, Cirurgia */}
+                                <div className="flex items-center h-9 bg-slate-100 p-0.5 rounded-xl border border-slate-200/80 overflow-x-auto shrink-0 max-w-full shadow-2xs">
+                                    {(['Todos', 'Exame', 'Consulta', 'Cirurgia'] as const).map(type => (
+                                        <button
+                                            key={type}
+                                            type="button"
+                                            onClick={() => setSelectedTypeFilter(type)}
+                                            className={`h-8 px-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
+                                                selectedTypeFilter === type
+                                                    ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
+                                                    : 'text-slate-500 hover:text-slate-800'
+                                            }`}
+                                        >
+                                            {type}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Filtro de status: Todos, Ativos, Suspensos */}
+                                <div className="flex items-center h-9 bg-slate-100 p-0.5 rounded-xl border border-slate-200/80 overflow-x-auto shrink-0 max-w-full shadow-2xs">
+                                    {(['Todos', 'Ativos', 'Suspensos'] as const).map(st => (
+                                        <button
+                                            key={st}
+                                            type="button"
+                                            onClick={() => setSelectedStatusFilter(st)}
+                                            className={`h-8 px-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
+                                                selectedStatusFilter === st
+                                                    ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
+                                                    : 'text-slate-500 hover:text-slate-800'
+                                            }`}
+                                        >
+                                            {st}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Filtro de solicitações: Todas, Com Solicitações, Sem Solicitações */}
+                                <div className="flex items-center h-9 bg-slate-100 p-0.5 rounded-xl border border-slate-200/80 overflow-x-auto shrink-0 max-w-full shadow-2xs" title="Filtrar por movimentação de solicitações">
+                                    {[
+                                        { value: 'Todos', label: 'Todas' },
+                                        { value: 'Com Solicitações', label: 'Com Solicitações' },
+                                        { value: 'Sem Solicitações', label: 'Sem Solicitações' }
+                                    ].map(solicOpt => (
+                                        <button
+                                            key={solicOpt.value}
+                                            type="button"
+                                            onClick={() => setSelectedSolicitacoesFilter(solicOpt.value as any)}
+                                            className={`h-8 px-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
+                                                selectedSolicitacoesFilter === solicOpt.value
+                                                    ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
+                                                    : 'text-slate-500 hover:text-slate-800'
+                                            }`}
+                                        >
+                                            {solicOpt.label}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                        )}
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-xl shadow-xs">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700">Cotas</span>
-                            <span className="text-xs font-black text-indigo-800">{metrics.totalCotas}</span>
+
+                            {/* LINHA 3 — Ações administrativas */}
+                            <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                                {/* REVISAR DUPLICIDADES */}
+                                {isAdmin && (
+                                    <button
+                                        type="button"
+                                        onClick={handleOpenRevisarDuplicidades}
+                                        className="h-9 px-3.5 bg-gradient-to-r from-sky-600 via-indigo-600 to-indigo-700 hover:from-sky-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-xs hover:shadow-indigo-500/20 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-400/30 whitespace-nowrap"
+                                        title="Revisar procedimentos de ultrassom, padronizar nomenclaturas e analisar duplicidades ou equivalências"
+                                    >
+                                        <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                                        <span>Revisar Duplicidades</span>
+                                    </button>
+                                )}
+
+                                {/* + ADICIONAR ESPECIALISTA */}
+                                <button
+                                    type="button"
+                                    onClick={() => handleOpenAddEspecialistaModal()}
+                                    className="h-9 px-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-xs hover:shadow-indigo-500/20 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-500/30 whitespace-nowrap"
+                                    title="Vincular profissional especialista a um procedimento principal existente"
+                                >
+                                    <Stethoscope className="w-3.5 h-3.5 text-indigo-200 shrink-0" />
+                                    <span>+ Adicionar Especialista</span>
+                                </button>
+
+                                {/* + NOVO PROCEDIMENTO */}
+                                <button
+                                    type="button"
+                                    onClick={() => handleOpenProcModal()}
+                                    className="h-9 px-3.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-xs hover:shadow-sky-500/15 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                                    title="Cadastrar novo procedimento"
+                                >
+                                    <Plus className="w-3.5 h-3.5 shrink-0" />
+                                    <span>+ Novo Procedimento</span>
+                                </button>
+                            </div>
+                        </>
+                    )}
+                </div>
+            ) : (
+                /* Quando embedded={true}, renderiza Linha 2 e Linha 3 de forma compacta */
+                !selectedProc && (
+                    <div className="p-4 border-b border-slate-100 bg-white space-y-3 shrink-0">
+                        {/* Linha 2 em modo embedded */}
+                        <div className="flex flex-wrap items-center gap-2">
+                            <div className="relative flex-1 min-w-[200px] max-w-full sm:max-w-xs">
+                                <input
+                                    type="text"
+                                    placeholder="Buscar exame, consulta ou código..."
+                                    className="w-full h-9 bg-white border border-slate-300 rounded-xl pl-9 pr-4 text-xs font-semibold placeholder:text-slate-400 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-2xs"
+                                    value={procSearch}
+                                    onChange={(e) => setProcSearch(e.target.value)}
+                                />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                            </div>
+
+                            <div className="flex items-center h-9 bg-slate-100 p-0.5 rounded-xl border border-slate-200/80 overflow-x-auto shrink-0 max-w-full shadow-2xs">
+                                {(['Todos', 'Exame', 'Consulta', 'Cirurgia'] as const).map(type => (
+                                    <button
+                                        key={type}
+                                        type="button"
+                                        onClick={() => setSelectedTypeFilter(type)}
+                                        className={`h-8 px-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
+                                            selectedTypeFilter === type
+                                                ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
+                                                : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                    >
+                                        {type}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="flex items-center h-9 bg-slate-100 p-0.5 rounded-xl border border-slate-200/80 overflow-x-auto shrink-0 max-w-full shadow-2xs">
+                                {(['Todos', 'Ativos', 'Suspensos'] as const).map(st => (
+                                    <button
+                                        key={st}
+                                        type="button"
+                                        onClick={() => setSelectedStatusFilter(st)}
+                                        className={`h-8 px-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
+                                            selectedStatusFilter === st
+                                                ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
+                                                : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                    >
+                                        {st}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="flex items-center h-9 bg-slate-100 p-0.5 rounded-xl border border-slate-200/80 overflow-x-auto shrink-0 max-w-full shadow-2xs">
+                                {[
+                                    { value: 'Todos', label: 'Todas' },
+                                    { value: 'Com Solicitações', label: 'Com Solicitações' },
+                                    { value: 'Sem Solicitações', label: 'Sem Solicitações' }
+                                ].map(solicOpt => (
+                                    <button
+                                        key={solicOpt.value}
+                                        type="button"
+                                        onClick={() => setSelectedSolicitacoesFilter(solicOpt.value as any)}
+                                        className={`h-8 px-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
+                                            selectedSolicitacoesFilter === solicOpt.value
+                                                ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
+                                                : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                    >
+                                        {solicOpt.label}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-xl shadow-xs" title="Total de solicitações vinculadas em todos os procedimentos">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-blue-700">Solicitações</span>
-                            <span className="text-xs font-black text-blue-800">{metrics.totalSolicitacoes}</span>
+
+                        {/* Linha 3 em modo embedded */}
+                        <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                            {isAdmin && (
+                                <button
+                                    type="button"
+                                    onClick={handleOpenRevisarDuplicidades}
+                                    className="h-9 px-3.5 bg-gradient-to-r from-sky-600 via-indigo-600 to-indigo-700 hover:from-sky-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-xs text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-400/30 whitespace-nowrap"
+                                >
+                                    <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                                    <span>Revisar Duplicidades</span>
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => handleOpenAddEspecialistaModal()}
+                                className="h-9 px-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-xs text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-500/30 whitespace-nowrap"
+                            >
+                                <Stethoscope className="w-3.5 h-3.5 text-indigo-200 shrink-0" />
+                                <span>+ Adicionar Especialista</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleOpenProcModal()}
+                                className="h-9 px-3.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-xs text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                            >
+                                <Plus className="w-3.5 h-3.5 shrink-0" />
+                                <span>+ Novo Procedimento</span>
+                            </button>
                         </div>
                     </div>
-                </div>
+                )
             )}
 
             {/* Main Content Area */}
@@ -1095,112 +1322,6 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                     /* LISTAGEM GERAL DE PROCEDIMENTOS                         */
                     /* ======================================================= */
                     <div className="space-y-4">
-                        {/* Search & Filters Bar - Totalmente Responsiva */}
-                        <div className="flex flex-col 2xl:flex-row items-stretch 2xl:items-center justify-between gap-3 w-full max-w-full">
-                            <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0 w-full 2xl:w-auto">
-                                {/* Search input */}
-                                <div className="relative w-full sm:w-64 md:w-72 2xl:w-80 flex-1 min-w-[200px]">
-                                    <input
-                                        type="text"
-                                        placeholder="Buscar exame, consulta ou código..."
-                                        className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-4 py-2 text-xs font-semibold placeholder:text-slate-400 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-2xs"
-                                        value={procSearch}
-                                        onChange={(e) => setProcSearch(e.target.value)}
-                                    />
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                                </div>
-
-                                {/* Type selector pills */}
-                                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto shrink-0 max-w-full">
-                                    {(['Todos', 'Exame', 'Consulta', 'Cirurgia'] as const).map(type => (
-                                        <button
-                                            key={type}
-                                            onClick={() => setSelectedTypeFilter(type)}
-                                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                                                selectedTypeFilter === type
-                                                    ? 'bg-white text-slate-900 shadow-2xs'
-                                                    : 'text-slate-500 hover:text-slate-800'
-                                            }`}
-                                        >
-                                            {type}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {/* Status filter pills */}
-                                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto shrink-0 max-w-full">
-                                    {(['Todos', 'Ativos', 'Suspensos'] as const).map(st => (
-                                        <button
-                                            key={st}
-                                            onClick={() => setSelectedStatusFilter(st)}
-                                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                                                selectedStatusFilter === st
-                                                    ? 'bg-white text-slate-900 shadow-2xs'
-                                                    : 'text-slate-500 hover:text-slate-800'
-                                            }`}
-                                        >
-                                            {st}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {/* Solicitações filter pills */}
-                                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto shrink-0 max-w-full" title="Filtrar por movimentação de solicitações">
-                                    {(['Todos', 'Com Solicitações', 'Sem Solicitações'] as const).map(solicOpt => (
-                                        <button
-                                            key={solicOpt}
-                                            onClick={() => setSelectedSolicitacoesFilter(solicOpt)}
-                                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                                                selectedSolicitacoesFilter === solicOpt
-                                                    ? 'bg-white text-slate-900 shadow-2xs'
-                                                    : 'text-slate-500 hover:text-slate-800'
-                                            }`}
-                                        >
-                                            {solicOpt === 'Todos' ? 'Todas Solicitações' : solicOpt}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Action Buttons - 100% responsivos dentro do viewport */}
-                            <div className="flex flex-wrap items-center gap-2 shrink-0 justify-start sm:justify-end w-full 2xl:w-auto">
-                                {/* Botão Administrativo: REVISAR DUPLICIDADES */}
-                                {isAdmin && (
-                                    <button
-                                        type="button"
-                                        onClick={handleOpenRevisarDuplicidades}
-                                        className="px-3.5 py-2 bg-gradient-to-r from-sky-600 via-indigo-600 to-indigo-700 hover:from-sky-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-md hover:shadow-indigo-500/20 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-400/30 whitespace-nowrap"
-                                        title="Revisar procedimentos de ultrassom, padronizar nomenclaturas e analisar duplicidades ou equivalências"
-                                    >
-                                        <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
-                                        <span>Revisar Duplicidades</span>
-                                    </button>
-                                )}
-
-                                {/* Novo Botão de Destaque: Adicionar Especialista */}
-                                <button
-                                    type="button"
-                                    onClick={() => handleOpenAddEspecialistaModal()}
-                                    className="px-3.5 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-md hover:shadow-indigo-500/20 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-500/30 whitespace-nowrap"
-                                    title="Vincular profissional especialista a um procedimento principal existente"
-                                >
-                                    <Stethoscope className="w-4 h-4 text-indigo-200 shrink-0" />
-                                    <span>+ Adicionar Especialista</span>
-                                </button>
-
-                                {/* Botão Novo Procedimento */}
-                                <button
-                                    type="button"
-                                    onClick={() => handleOpenProcModal()}
-                                    className="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-md hover:shadow-sky-500/15 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
-                                    title="Cadastrar novo procedimento"
-                                >
-                                    <Plus className="w-4 h-4 shrink-0" />
-                                    <span>Novo Procedimento</span>
-                                </button>
-                            </div>
-                        </div>
-
                         {/* Loading Indicator */}
                         {loading && (
                             <div className="flex items-center justify-center py-10">

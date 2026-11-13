@@ -166,21 +166,10 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
                         </div>
                     </div>
 
-                    {/* Garantia de Preservação Individual de Agendamentos */}
-                    <div className="p-3 bg-indigo-50/70 border border-indigo-200/80 rounded-2xl flex items-start gap-2.5 text-indigo-900 text-xs shadow-2xs">
-                        <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                        <div className="space-y-0.5">
-                            <span className="font-extrabold uppercase text-[10.5px] block text-indigo-950">Preservação Individual Garantida:</span>
-                            <p className="text-[11px] leading-relaxed text-indigo-900 font-semibold">
-                                A transferência altera <strong>exclusivamente o procedimento vinculado</strong>. Cada solicitação preservará individualmente seu status (inclusive agendadas, confirmadas ou canceladas), além de data, horário, local e especialista existentes.
-                            </p>
-                        </div>
-                    </div>
-
                     {/* Procedimento de Destino */}
                     <div className="space-y-2">
                         <label className="block text-xs font-black uppercase tracking-wider text-slate-700">
-                            1. Selecione o Procedimento de Destino <span className="text-rose-500">*</span>
+                            Selecione o Procedimento de Destino <span className="text-rose-500">*</span>
                         </label>
 
                         {/* Filtros de Tipo */}
@@ -214,7 +203,7 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
                         </div>
 
                         {/* Lista de Seleção do Procedimento */}
-                        <div className="max-h-48 overflow-y-auto custom-scrollbar border border-slate-200 rounded-2xl divide-y divide-slate-100 bg-white shadow-inner">
+                        <div className="max-h-56 overflow-y-auto custom-scrollbar border border-slate-200 rounded-2xl divide-y divide-slate-100 bg-white shadow-inner">
                             {filteredProcs.length === 0 ? (
                                 <div className="p-4 text-center text-xs text-slate-400 font-bold uppercase tracking-wider">
                                     Nenhum procedimento encontrado
@@ -260,35 +249,6 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
                                 })
                             )}
                         </div>
-                    </div>
-
-                    {/* Opções de Preservação */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                        <label className="flex items-center gap-2.5 p-3 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer transition-colors">
-                            <input
-                                type="checkbox"
-                                checked={preserveDate}
-                                onChange={(e) => setPreserveDate(e.target.checked)}
-                                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                            />
-                            <div className="text-xs">
-                                <span className="font-extrabold text-slate-800 block">Preservar Data Original</span>
-                                <span className="text-[10px] text-slate-400 block">Mantém a antiguidade na fila</span>
-                            </div>
-                        </label>
-
-                        <label className="flex items-center gap-2.5 p-3 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer transition-colors">
-                            <input
-                                type="checkbox"
-                                checked={preservePriority}
-                                onChange={(e) => setPreservePriority(e.target.checked)}
-                                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                            />
-                            <div className="text-xs">
-                                <span className="font-extrabold text-slate-800 block">Preservar Prioridade</span>
-                                <span className="text-[10px] text-slate-400 block">Mantém Urgência ou Especial</span>
-                            </div>
-                        </label>
                     </div>
 
                     {/* Motivo Opcional */}

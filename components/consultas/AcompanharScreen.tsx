@@ -5149,19 +5149,6 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                         )}
                                     </div>
                                 )}
-
-                                {/* Garantia de Preservação Integral */}
-                                <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-2.5 flex items-start gap-2 text-emerald-900">
-                                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                    <div>
-                                        <span className="font-black uppercase text-[10px] block leading-tight text-emerald-950">
-                                            Preservação Integral Garantida
-                                        </span>
-                                        <p className="text-[11px] leading-relaxed font-semibold text-emerald-900 mt-0.5">
-                                            Somente o <strong>procedimento vinculado</strong> será alterado. O agendamento permanece <strong>exatamente igual</strong>: status, data, horário, prestador e histórico da solicitação são mantidos sem cancelamento ou reagendamento.
-                                        </p>
-                                    </div>
-                                </div>
                             </div>
 
                             {/* Seleção do Novo Procedimento (Destino) */}
