@@ -254,7 +254,7 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
             onClick={handleCloseModal}
         >
             <div 
-                className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden border border-amber-200/90 flex flex-col animate-in zoom-in-95 duration-200 cursor-default"
+                className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-4xl lg:max-w-5xl max-h-[92vh] overflow-hidden border border-amber-200/90 flex flex-col animate-in zoom-in-95 duration-200 cursor-default"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header Compacto e Responsivo */}
@@ -295,7 +295,7 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
                 </div>
 
                 {/* Body Compacto com Grid Responsivo sem Rolagem em Desktop */}
-                <div className="p-3.5 sm:p-4 md:p-5 overflow-y-auto custom-scrollbar space-y-3 text-xs select-text">
+                <div className="flex-1 min-h-0 p-3 sm:p-4 md:p-4.5 overflow-y-auto custom-scrollbar space-y-2.5 text-xs select-text">
                     {/* Alerta de feedback */}
                     {feedbackMessage && (
                         <div className={`p-2.5 sm:p-3 rounded-2xl border text-xs font-bold flex items-center gap-2 animate-in fade-in ${
@@ -549,50 +549,54 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
                     })()}
                 </div>
 
-                {/* Footer com Navegação Separada e Ações de Decisão sem Sobreposição */}
-                <div className="px-4 py-3 sm:px-6 sm:py-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-                    {/* Área Exclusiva de Navegação entre solicitações pendentes */}
-                    <div className="flex items-center gap-1.5 shrink-0 bg-white border border-slate-200 rounded-xl p-1 shadow-2xs w-full sm:w-auto justify-center sm:justify-start">
+                {/* Footer com Navegação Integrada e Ações de Decisão sem Sobreposição */}
+                <div className="px-3.5 py-2.5 sm:px-6 sm:py-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-3 shrink-0">
+                    {/* Bloco Integrado: Navegação e Fechar */}
+                    <div className="flex items-center gap-1.5 shrink-0 bg-white border border-slate-200 rounded-xl p-1 shadow-2xs w-full sm:w-auto justify-between sm:justify-start">
+                        <div className="flex items-center gap-1">
+                            <button
+                                type="button"
+                                onClick={handlePrev}
+                                disabled={currentIndex === 0 || isProcessing}
+                                className="p-1 rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
+                                title="Solicitação Anterior"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <span className="text-[11px] font-black uppercase text-slate-700 font-mono px-1.5 select-none whitespace-nowrap">
+                                {currentIndex + 1} / {solicitacoes.length}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={handleNext}
+                                disabled={currentIndex >= solicitacoes.length - 1 || isProcessing}
+                                className="p-1 rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
+                                title="Próxima Solicitação"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <div className="h-4 w-px bg-slate-200 mx-0.5 hidden xs:block" />
+
                         <button
                             type="button"
-                            onClick={handlePrev}
-                            disabled={currentIndex === 0 || isProcessing}
-                            className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
-                            title="Solicitação Anterior"
+                            onClick={handleCloseModal}
+                            className="px-2.5 py-1 text-slate-700 hover:text-slate-900 font-extrabold text-[11px] uppercase tracking-wider rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                            title="Fechar modal"
                         >
-                            <ChevronLeft className="w-4 h-4" />
-                        </button>
-                        <span className="text-[11px] font-black uppercase text-slate-700 font-mono px-2 select-none">
-                            {currentIndex + 1} de {solicitacoes.length}
-                        </span>
-                        <button
-                            type="button"
-                            onClick={handleNext}
-                            disabled={currentIndex >= solicitacoes.length - 1 || isProcessing}
-                            className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
-                            title="Próxima Solicitação"
-                        >
-                            <ChevronRight className="w-4 h-4" />
+                            Fechar
                         </button>
                     </div>
 
-                    {/* Ações de Decisão: Fechar / Recusar / Confirmar */}
+                    {/* Ações de Decisão: Recusar e Confirmar */}
                     {!isRejecting && (
-                        <div className="flex items-center gap-2 sm:gap-2.5 w-full sm:w-auto justify-end flex-wrap sm:flex-nowrap shrink-0">
-                            <button
-                                type="button"
-                                onClick={handleCloseModal}
-                                className="w-full xs:w-auto flex-1 sm:flex-none px-3.5 sm:px-4 py-2 sm:py-2.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shrink-0 shadow-2xs text-center"
-                                title="Fechar modal para analisar depois"
-                            >
-                                Fechar
-                            </button>
-
+                        <div className="flex items-center gap-2 sm:gap-2.5 w-full sm:w-auto justify-end shrink-0">
                             <button
                                 type="button"
                                 onClick={() => setIsRejecting(true)}
                                 disabled={isProcessing || isOwnRequest}
-                                className="w-full xs:w-auto flex-1 sm:flex-none px-3.5 sm:px-4 py-2 sm:py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-black text-xs uppercase tracking-wider rounded-xl transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0 shadow-2xs whitespace-nowrap"
+                                className="flex-1 sm:flex-none px-3.5 sm:px-4 py-2 sm:py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-black text-xs uppercase tracking-wider rounded-xl transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-2xs whitespace-nowrap"
                                 title={isOwnRequest ? 'O solicitante não pode decidir seu próprio pedido' : `Recusar pedido de ${currentItem.tipo === 'Exclusão' ? 'exclusão' : 'cancelamento'} e reativar solicitação na fila`}
                             >
                                 <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
@@ -603,7 +607,7 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
                                 type="button"
                                 onClick={handleConfirmarDecisao}
                                 disabled={isProcessing || isOwnRequest}
-                                className="w-full xs:w-auto flex-1 sm:flex-none px-4 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap"
+                                className="flex-1 sm:flex-none px-4 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 whitespace-nowrap"
                                 title={isOwnRequest ? 'O solicitante não pode decidir seu próprio pedido' : `Confirmar ${currentItem.tipo === 'Exclusão' ? 'exclusão lógica' : 'cancelamento definitivo'} da solicitação`}
                             >
                                 {isProcessing ? (
