@@ -26,6 +26,7 @@ import {
 import { SolicitacoesCancelamentoModal } from './SolicitacoesCancelamentoModal';
 import { TransferSuccessModal } from './TransferSuccessModal';
 import { CancelarAgendamentoModal } from './CancelarAgendamentoModal';
+import { SolicitarExclusaoModal } from './SolicitarExclusaoModal';
 
 const formatPatientName = (patient?: ConsultaPaciente | null) => {
     if (!patient) return '';
@@ -469,6 +470,7 @@ interface AgendamentoCardProps {
     onDownloadPdf: (b: ConsultaAgendamento) => void;
     onStatusUpdate: (id: string, status: any) => void;
     onOpenCancelModal: (b: ConsultaAgendamento) => void;
+    onOpenDeleteModal?: (b: ConsultaAgendamento) => void;
     onDelete: (id: string) => void;
     onReagendar: (id: string) => void;
     onOpenRetornoModal: (b: ConsultaAgendamento) => void;
@@ -508,6 +510,7 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
     onDownloadPdf,
     onStatusUpdate,
     onOpenCancelModal,
+    onOpenDeleteModal,
     onDelete,
     onReagendar,
     onOpenRetornoModal,
@@ -546,11 +549,19 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
         }
     };
     const isPaused = booking.is_paused || booking.status === 'Pausada';
-    const isSuspendedCancellation = Boolean(
-        isCancelamentoPendente ||
-        booking.cancelamento_pendente ||
-        booking.status === 'Cancelamento Pendente'
+    const isExclusaoPendente = Boolean(
+        solicitacaoPendente?.tipo === 'Exclusão' ||
+        booking.exclusao_pendente ||
+        booking.status === 'Suspensa — Exclusão Pendente'
     );
+    const isSuspendedCancellation = Boolean(
+        !isExclusaoPendente && (
+            isCancelamentoPendente ||
+            booking.cancelamento_pendente ||
+            booking.status === 'Cancelamento Pendente'
+        )
+    );
+    const isSuspended = isExclusaoPendente || isSuspendedCancellation;
 
     // Determina se a data da consulta já foi ultrapassada
     const isAppointmentPassed = useMemo(() => {
@@ -576,26 +587,27 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
         }
     }, [booking.appointment_date, booking.appointment_time]);
 
-    // Regras de permissões (Em modo somente leitura, nenhuma ação de alteração é liberada):
+    // Regras de permissões (Em modo somente leitura ou suspensa, ações de alteração são bloqueadas):
     // 1. Marcar como "Realizado":
-    //    - Administradores e Gestores podem sempre
-    //    - Usuários comuns ("não administradores e não gestores"): liberado após a data da consulta ser ultrapassada
-    const canCompleteThis = !isReadOnly && (canComplete || (!isGestorOrAdmin && isAppointmentPassed));
+    //    - Administradores e Gestores podem sempre (se não suspensa)
+    //    - Usuários comuns: liberado após a data da consulta ser ultrapassada (se não suspensa)
+    const canCompleteThis = !isReadOnly && !isSuspended && (canComplete || (!isGestorOrAdmin && isAppointmentPassed));
 
     // 2. Transferir Procedimento:
-    //    Permitir a transferência de qualquer solicitação para outro procedimento, independentemente do status atual
-    const canTransferThis = Boolean(!isReadOnly && onTransfer && canEdit);
+    //    Permitir a transferência de qualquer solicitação para outro procedimento, exceto se estiver suspensa
+    const canTransferThis = Boolean(!isReadOnly && !isSuspended && onTransfer && canEdit);
 
     // 3. Cancelar:
-    //    - Administradores e Gestores podem cancelar
-    //    - Usuários comuns: ocultado após a data da consulta
-    const canCancelThis = Boolean(!isReadOnly && canCancel && (
+    //    - Administradores e Gestores podem cancelar (se não suspensa)
+    //    - Usuários comuns: liberado se não ultrapassada e não suspensa
+    const canCancelThis = Boolean(!isReadOnly && !isSuspended && canCancel && (
         isGestorOrAdmin || !isAppointmentPassed
     ));
 
-    // 4. Excluir:
-    //    - Exclusivo para administradores e gestores (NÃO visível para usuários que não sejam administradores ou gestores)
-    const canDeleteThis = Boolean(!isReadOnly && canDelete && isGestorOrAdmin);
+    // 4. Excluir / Solicitar Exclusão:
+    //    - Usuários comuns: solicitam exclusão com motivo e justificativa para aprovação do gestor
+    //    - Administradores e Gestores: excluem ou aprovam/recusam exclusões
+    const canDeleteThis = Boolean(!isReadOnly && canDelete);
 
     const patientName = booking.paciente ? formatPatientName(booking.paciente) : 'Paciente não informado';
     const rawCpf = booking.paciente?.cpf || '';
@@ -624,6 +636,10 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                 className={`group bg-white rounded-2xl border transition-all duration-300 relative overflow-hidden cursor-pointer ${
                     isSelected
                     ? 'bg-gradient-to-r from-indigo-50/80 via-indigo-50/30 to-white border-indigo-400 ring-2 ring-indigo-500/40 shadow-sm'
+                    : isExclusaoPendente
+                    ? 'bg-gradient-to-r from-rose-50/70 via-rose-50/20 to-white border-rose-300 hover:border-rose-400 ring-1 ring-rose-400/30 shadow-xs'
+                    : isSuspendedCancellation
+                    ? 'bg-gradient-to-r from-amber-50/70 via-amber-50/20 to-white border-amber-300 hover:border-amber-400 ring-1 ring-amber-400/30 shadow-xs'
                     : isPaused
                     ? 'bg-gradient-to-r from-amber-50/50 via-yellow-50/20 to-white border-amber-300 hover:border-amber-400 ring-1 ring-amber-400/20 shadow-xs'
                     : isEligibleForVaga
@@ -639,6 +655,10 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                 <div className={`absolute top-0 left-0 w-1.5 h-full transition-all ${
                     isSelected
                     ? 'bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-xs shadow-indigo-500/40'
+                    : isExclusaoPendente
+                    ? 'bg-gradient-to-b from-rose-500 via-rose-600 to-rose-700 shadow-xs shadow-rose-500/40'
+                    : isSuspendedCancellation
+                    ? 'bg-gradient-to-b from-amber-500 via-amber-600 to-amber-700 shadow-xs shadow-amber-500/40'
                     : isPaused
                     ? 'bg-gradient-to-b from-amber-500 via-amber-600 to-amber-700 shadow-xs shadow-amber-500/40'
                     : isEligibleForVaga 
@@ -671,7 +691,9 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
 
                     {/* CARD DE PRIMEIRA INFORMAÇÃO - POSIÇÃO E DADOS DO PACIENTE */}
                     <div className={`border-b wide:border-b-0 wide:border-r p-2 sm:p-2.5 sm:px-4 flex items-center gap-3 shrink-0 self-stretch wide:w-[305px] transition-all relative ${
-                        isSuspendedCancellation
+                        isExclusaoPendente
+                        ? 'bg-rose-100/60 border-rose-300'
+                        : isSuspendedCancellation
                         ? 'bg-amber-100/60 border-amber-300'
                         : isPaused
                         ? 'bg-amber-100/50 border-amber-200'
@@ -684,7 +706,9 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                         {/* Bloco de Destaque: POSIÇÃO */}
                         <div 
                             className={`min-w-[72px] sm:min-w-[80px] h-14 sm:h-16 px-1.5 py-1 rounded-2xl flex flex-col items-center justify-center shrink-0 border transition-all duration-300 shadow-xs relative overflow-hidden ${
-                                isSuspendedCancellation
+                                isExclusaoPendente
+                                    ? 'bg-gradient-to-br from-rose-100 via-rose-100/90 to-rose-200 border-rose-400 text-rose-950 ring-2 ring-rose-400/50 shadow-xs'
+                                    : isSuspendedCancellation
                                     ? 'bg-gradient-to-br from-amber-100 via-orange-100/90 to-amber-200 border-amber-400 text-amber-950 ring-2 ring-amber-400/50 shadow-xs'
                                     : isPaused
                                     ? 'bg-gradient-to-br from-amber-100 via-yellow-100 to-amber-200 border-amber-400 text-amber-950 ring-1 ring-amber-400/40'
@@ -705,7 +729,9 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                     : 'bg-gradient-to-br from-slate-50 to-slate-100 border-slate-200 text-slate-800'
                             }`}
                             title={
-                                isSuspendedCancellation
+                                isExclusaoPendente
+                                    ? 'POSIÇÃO SUSPENSA: Solicitação aguardando análise de exclusão pela Regulação. Retirada temporariamente da fila ativa.'
+                                    : isSuspendedCancellation
                                     ? 'POSIÇÃO SUSPENSA: Solicitação aguardando análise de cancelamento pela Regulação. Retirada temporariamente da fila ativa.'
                                     : isPaused
                                     ? `Solicitação PAUSADA. Posição original preservada: ${queuePosition || booking.queue_position || 1}º lugar na fila.`
@@ -718,7 +744,20 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                     : `Status: ${booking.status}`
                             }
                         >
-                            {isSuspendedCancellation ? (
+                            {isExclusaoPendente ? (
+                                <>
+                                    <span className="text-[7.5px] font-black uppercase tracking-wider text-rose-800 leading-none">
+                                        POSIÇÃO
+                                    </span>
+                                    <span className="text-xs sm:text-[13px] font-black uppercase tracking-tight text-rose-950 my-0.5 text-center leading-none flex items-center justify-center gap-1 whitespace-nowrap bg-rose-200/90 px-2 py-0.5 rounded-lg border border-rose-400 shadow-2xs">
+                                        <Clock className="w-3 h-3 text-rose-800 animate-pulse shrink-0" />
+                                        SUSPENSA
+                                    </span>
+                                    <span className="text-[6.5px] font-bold uppercase tracking-wider text-rose-800 leading-none">
+                                        EXCLUSÃO PENDENTE
+                                    </span>
+                                </>
+                            ) : isSuspendedCancellation ? (
                                 <>
                                     <span className="text-[7.5px] font-black uppercase tracking-wider text-amber-800 leading-none">
                                         POSIÇÃO
@@ -817,7 +856,13 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                 <span className="text-[8.5px] font-black uppercase tracking-widest text-cyan-700 bg-cyan-100/70 px-2 py-0.5 rounded-md border border-cyan-200/50 w-fit leading-none">
                                     Paciente
                                 </span>
-                                {isCancelamentoPendente && (
+                                {isExclusaoPendente && (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[8.5px] font-black uppercase tracking-wider text-rose-950 bg-gradient-to-r from-rose-200 via-rose-100 to-rose-200 border border-rose-400 shadow-2xs leading-none animate-pulse" title="Solicitação de exclusão enviada e em análise pela Regulação">
+                                        <Clock className="w-2.5 h-2.5 text-rose-700 shrink-0" />
+                                        <span>Exclusão Pendente</span>
+                                    </span>
+                                )}
+                                {!isExclusaoPendente && isCancelamentoPendente && (
                                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[8.5px] font-black uppercase tracking-wider text-amber-950 bg-gradient-to-r from-amber-200 via-amber-100 to-amber-200 border border-amber-400 shadow-2xs leading-none animate-pulse" title="Solicitação de cancelamento enviada e em análise pela Regulação">
                                         <Clock className="w-2.5 h-2.5 text-amber-700 shrink-0" />
                                         <span>Cancelamento Pendente</span>
@@ -1587,16 +1632,44 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                             </>
                                         )}
 
-                                        {/* Excluir */}
+                                        {/* Excluir / Solicitar Exclusão */}
                                         {canDeleteThis && (
                                             <button
                                                 type="button"
-                                                onClick={(e) => { e.stopPropagation(); onDelete(booking.id); }}
-                                                className="flex items-center gap-1.5 px-3 py-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors text-xs font-bold border border-transparent hover:border-rose-100 cursor-pointer"
-                                                title="Excluir Agendamento"
+                                                disabled={isExclusaoPendente}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (isExclusaoPendente) return;
+                                                    if (onOpenDeleteModal) {
+                                                        onOpenDeleteModal(booking);
+                                                    } else {
+                                                        onDelete(booking.id);
+                                                    }
+                                                }}
+                                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors text-xs font-bold border cursor-pointer ${
+                                                    isExclusaoPendente
+                                                        ? 'text-rose-800 bg-rose-50 border-rose-300 opacity-90 cursor-not-allowed'
+                                                        : 'text-slate-500 hover:text-rose-600 hover:bg-rose-50 border-transparent hover:border-rose-100'
+                                                }`}
+                                                title={
+                                                    isExclusaoPendente
+                                                        ? 'Solicitação de exclusão em análise pela Regulação'
+                                                        : isGestorOrAdmin
+                                                        ? 'Excluir / Solicitar Exclusão'
+                                                        : 'Solicitar Exclusão à Regulação'
+                                                }
                                             >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                                Excluir
+                                                {isExclusaoPendente ? (
+                                                    <>
+                                                        <Clock className="w-3.5 h-3.5 text-rose-600 animate-pulse" />
+                                                        <span>Exclusão Pendente</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                        <span>{isGestorOrAdmin ? 'Excluir' : 'Solicitar Exclusão'}</span>
+                                                    </>
+                                                )}
                                             </button>
                                         )}
                                     </>
@@ -2029,6 +2102,16 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
     const [isCancelamentoAprovacaoModalOpen, setIsCancelamentoAprovacaoModalOpen] = useState(false);
 
+    // Delete modal states
+    const [deleteTarget, setDeleteTarget] = useState<ConsultaAgendamento | null>(null);
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+    const handleOpenDeleteModal = (b: ConsultaAgendamento) => {
+        if (isReadOnly) return;
+        setDeleteTarget(b);
+        setIsDeleteModalOpen(true);
+    };
+
     const loadCancelamentosPendentes = async () => {
         try {
             const map = await db.getMapaCancelamentosPendentes();
@@ -2128,7 +2211,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const canCancel = !isReadOnly;
     const canComplete = isGestorOrAdmin && !isReadOnly;
     const canEdit = !isReadOnly;
-    const canDelete = isGestorOrAdmin && !isReadOnly;
+    const canDelete = !isReadOnly;
     const canReport = !isReadOnly;
 
     // Regra 8: Se a permissão for alterada para Somente Leitura durante a sessão, fecha modais operacionais e cancela abertura automática imediatamente
@@ -2140,6 +2223,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         if (isReadOnly) {
             setIsReportModalOpen(false);
             setIsCancelModalOpen(false);
+            setIsDeleteModalOpen(false);
             setIsPauseModalOpen(false);
             setIsResumeModalOpen(false);
             setIsEditModalOpen(false);
@@ -2278,9 +2362,15 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             setCancelamentosPendentesMap(pendingCancelMap);
 
             // 1. Agrupar e calcular a fila de espera estritamente por PROCEDIMENTO
-            // REGRA: Solicitações com cancelamento pendente são suspensas e não recebem posição numérica na fila
+            // REGRA: Solicitações com cancelamento ou exclusão pendente são suspensas e não recebem posição numérica na fila
             const isWaitlistItem = (b: ConsultaAgendamento) => {
-                if (b.status === 'Cancelamento Pendente' || b.cancelamento_pendente || pendingCancelMap[b.id]) {
+                if (
+                    b.status === 'Cancelamento Pendente' || 
+                    b.cancelamento_pendente || 
+                    b.status === 'Suspensa — Exclusão Pendente' || 
+                    b.exclusao_pendente || 
+                    pendingCancelMap[b.id]
+                ) {
                     return false;
                 }
                 return (
@@ -3383,18 +3473,18 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                             </button>
                         )}
 
-                        {/* Botão de Cancelamentos Pendentes no Mobile para Gestores/Admins */}
+                        {/* Botão de Cancelamentos e Exclusões Pendentes no Mobile para Gestores/Admins */}
                         {isGestorOrAdmin && !isReadOnly && Object.keys(cancelamentosPendentesMap).length > 0 && (
                             <button
                                 type="button"
                                 onClick={() => setIsCancelamentoAprovacaoModalOpen(true)}
-                                    className="p-1.5 px-2 bg-gradient-to-r from-rose-500 to-amber-600 text-white rounded-xl text-xs font-black uppercase flex items-center gap-1 shrink-0 shadow-sm animate-pulse cursor-pointer"
-                                    title={`${Object.keys(cancelamentosPendentesMap).length} cancelamento(s) pendente(s) de aprovação`}
-                                >
-                                    <ShieldAlert className="w-4 h-4" />
-                                    <span>{Object.keys(cancelamentosPendentesMap).length}</span>
-                                </button>
-                            )}
+                                className="p-1.5 px-2 bg-gradient-to-r from-rose-500 to-amber-600 text-white rounded-xl text-xs font-black uppercase flex items-center gap-1 shrink-0 shadow-sm animate-pulse cursor-pointer"
+                                title={`${Object.keys(cancelamentosPendentesMap).length} solicitação(ões) de cancelamento/exclusão pendente(s) de aprovação`}
+                            >
+                                <ShieldAlert className="w-4 h-4" />
+                                <span>{Object.keys(cancelamentosPendentesMap).length}</span>
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -3534,16 +3624,16 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                             </button>
                         )}
 
-                        {/* Botão de Cancelamentos Pendentes para Gestores/Admins */}
+                        {/* Botão de Cancelamentos e Exclusões Pendentes para Gestores/Admins */}
                         {isGestorOrAdmin && Object.keys(cancelamentosPendentesMap).length > 0 && (
                             <button
                                 type="button"
                                 onClick={() => setIsCancelamentoAprovacaoModalOpen(true)}
                                 className="px-3 py-1.5 bg-gradient-to-r from-rose-500 to-amber-600 hover:from-rose-600 hover:to-amber-700 text-white font-extrabold rounded-2xl shadow-md shadow-rose-500/20 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 animate-pulse"
-                                title={`${Object.keys(cancelamentosPendentesMap).length} solicitação(ões) de cancelamento aguardando decisão do gestor`}
+                                title={`${Object.keys(cancelamentosPendentesMap).length} solicitação(ões) de cancelamento/exclusão aguardando decisão do gestor`}
                             >
                                 <ShieldAlert className="w-3.5 h-3.5" />
-                                <span>Cancelamentos ({Object.keys(cancelamentosPendentesMap).length})</span>
+                                <span>Cancelamentos & Exclusões ({Object.keys(cancelamentosPendentesMap).length})</span>
                             </button>
                         )}
 
@@ -3861,6 +3951,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                     onDownloadPdf={handleDownloadPdf}
                                     onStatusUpdate={handleStatusUpdate}
                                     onOpenCancelModal={handleOpenCancelModal}
+                                    onOpenDeleteModal={!isReadOnly ? handleOpenDeleteModal : undefined}
                                     isCancelamentoPendente={Boolean(cancelamentosPendentesMap[booking.id])}
                                     solicitacaoPendente={cancelamentosPendentesMap[booking.id] || null}
                                     onDelete={handleDelete}
@@ -4075,6 +4166,25 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     onSuccess={async () => {
                         setIsCancelModalOpen(false);
                         setCancelTarget(null);
+                        await loadCancelamentosPendentes();
+                        await loadData(true);
+                    }}
+                />
+            )}
+
+            {/* MODAL DE SOLICITAÇÃO DE EXCLUSÃO (COM MOTIVOS, JUSTIFICATIVA E APROVAÇÃO DO GESTOR) */}
+            {!isReadOnly && isDeleteModalOpen && deleteTarget && (
+                <SolicitarExclusaoModal
+                    isOpen={isDeleteModalOpen}
+                    onClose={() => {
+                        setIsDeleteModalOpen(false);
+                        setDeleteTarget(null);
+                    }}
+                    booking={deleteTarget}
+                    currentUser={currentUser}
+                    onSuccess={async () => {
+                        setIsDeleteModalOpen(false);
+                        setDeleteTarget(null);
                         await loadCancelamentosPendentes();
                         await loadData(true);
                     }}

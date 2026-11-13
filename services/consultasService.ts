@@ -2537,10 +2537,10 @@ export const recalculateAndPersistQueuePositions = async (): Promise<void> => {
 
         if (!queueItems || queueItems.length === 0) return;
 
-        // Excluir da ordenação da fila ativa itens suspensos por cancelamento pendente
+        // Excluir da ordenação da fila ativa itens suspensos por cancelamento ou exclusão pendente
         const pendingCancelMap = await getMapaCancelamentosPendentes().catch(() => ({}));
         queueItems = queueItems.filter(item => {
-            if (item.status === 'Cancelamento Pendente' || item.cancelamento_pendente) return false;
+            if (item.status === 'Cancelamento Pendente' || item.cancelamento_pendente || item.status === 'Suspensa — Exclusão Pendente' || item.exclusao_pendente) return false;
             if (pendingCancelMap[item.id]) return false;
             return true;
         });
@@ -2673,7 +2673,7 @@ export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<Con
             }
         }
 
-        let filtered = (allData || []) as unknown as ConsultaAgendamento[];
+        let filtered = ((allData || []) as unknown as ConsultaAgendamento[]).filter(item => !item.is_deleted && item.status !== 'Excluído');
 
         // Enriquecer cada procedimento com dados de especialista via mapping e cache
         const especialistas = await getEspecialistas();
@@ -5809,6 +5809,451 @@ export const rejeitarSolicitacaoCancelamento = async (params: {
     } catch (err: any) {
         console.error('[consultasService] rejeitarSolicitacaoCancelamento erro:', err);
         return { success: false, error: err.message || 'Erro inesperado ao rejeitar solicitação.' };
+    }
+};
+
+/**
+ * Solicitação de Exclusão de Agendamento por Usuário Comum
+ * Suspende o agendamento como 'Suspensa — Exclusão Pendente', preserva dados e aguarda aprovação de Gestor.
+ */
+export const solicitarExclusaoAgendamento = async (params: {
+    agendamentoId: string;
+    motivo: string;
+    justificativa: string;
+    solicitante: { id: string; name: string; sector?: string };
+    bookingSnapshot?: ConsultaAgendamento | null;
+}): Promise<{ success: boolean; solicitacao?: ConsultaSolicitacaoCancelamento; error?: string }> => {
+    try {
+        assertCanMutateRegulacao('Solicitar Exclusão', 'acompanhar');
+        const { agendamentoId, motivo, justificativa, solicitante, bookingSnapshot } = params;
+
+        if (!motivo || !motivo.trim()) {
+            return { success: false, error: 'O motivo da exclusão é obrigatório.' };
+        }
+        if (!justificativa || justificativa.trim().length < 5) {
+            return { success: false, error: 'A justificativa da exclusão é obrigatória (mínimo de 5 caracteres).' };
+        }
+
+        // 1. Verificar se já existe solicitação pendente para este agendamento (evitar duplicidades)
+        const pendentes = await getSolicitacoesCancelamentoPendentes();
+        const jaExistePendente = pendentes.some(s => s.agendamento_id === agendamentoId && s.status === 'Aguardando Aprovação');
+        if (jaExistePendente) {
+            return {
+                success: false,
+                error: 'Já existe uma solicitação pendente (cancelamento ou exclusão) para este procedimento sob análise da Regulação.'
+            };
+        }
+
+        // 2. Snapshot
+        let targetBooking = bookingSnapshot;
+        if (!targetBooking) {
+            const { data: bData } = await supabase
+                .from('consultas_agendamentos')
+                .select('*, paciente:consultas_pacientes(*), procedimento:consultas_procedimentos(*)')
+                .eq('id', agendamentoId)
+                .single();
+            targetBooking = bData;
+        }
+
+        if (!targetBooking) {
+            return { success: false, error: 'Agendamento não localizado no banco de dados.' };
+        }
+
+        if (targetBooking.status === 'Cancelado' || targetBooking.status === 'Excluído' || targetBooking.is_deleted) {
+            return { success: false, error: 'Este procedimento já se encontra cancelado ou excluído.' };
+        }
+
+        const now = new Date().toISOString();
+        const rawCpf = targetBooking.paciente?.cpf || '';
+        const formattedCpf = rawCpf ? rawCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : 'S/ CPF';
+        const rawPosicao = targetBooking.queue_position ?? null;
+        const procCodigo = targetBooking.procedimento?.code || '';
+        const procNome = targetBooking.procedimento?.name || 'Procedimento não informado';
+        const procId = targetBooking.procedimento_id || targetBooking.procedimento?.id || '';
+        const dataOriginal = targetBooking.solicitation_date || (targetBooking.created_at ? targetBooking.created_at.split('T')[0] : '');
+
+        const payload: Omit<ConsultaSolicitacaoCancelamento, 'id'> = {
+            tipo: 'Exclusão',
+            motivo: motivo.trim(),
+            agendamento_id: agendamentoId,
+            paciente_nome: targetBooking.paciente?.name || 'Paciente não informado',
+            paciente_cpf: formattedCpf,
+            procedimento_id: procId,
+            procedimento_nome: procNome,
+            procedimento_codigo: procCodigo,
+            procedimento_categoria: targetBooking.procedimento?.type || (targetBooking.procedimento as any)?.category || 'Geral',
+            protocolo: (targetBooking as any).protocolo || agendamentoId.substring(0, 8).toUpperCase(),
+            prioridade: targetBooking.priority || 'Normal',
+            posicao_anterior: rawPosicao,
+            data_original_solicitacao: dataOriginal,
+            situacao_agendamento: targetBooking.status || 'Solicitado',
+            data_agendada: targetBooking.appointment_date || null,
+            solicitante_id: solicitante.id,
+            solicitante_nome: solicitante.name,
+            solicitante_setor: solicitante.sector || 'Unidade Básica / PSF',
+            justificativa_solicitacao: `[${motivo.trim()}] ${justificativa.trim()}`,
+            status: 'Aguardando Aprovação',
+            criado_em: now,
+            atualizado_em: now
+        };
+
+        let createdSolicitacao: ConsultaSolicitacaoCancelamento | null = null;
+        try {
+            const { data, error } = await supabase
+                .from('consultas_solicitacoes_cancelamento')
+                .insert([payload])
+                .select()
+                .single();
+            if (!error && data) {
+                createdSolicitacao = data;
+            }
+        } catch (_) {}
+
+        // Fallback local
+        const localItem: ConsultaSolicitacaoCancelamento = createdSolicitacao || {
+            ...payload,
+            id: 'local-excl-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7)
+        };
+        const localList = getLocalSolicitacoesCancelamento();
+        localList.push(localItem);
+        saveLocalSolicitacoesCancelamento(localList);
+
+        // Suspender o agendamento da fila ativa: "Suspensa — Exclusão Pendente"
+        const originalStatus = targetBooking.status && !targetBooking.status.includes('Pendente')
+            ? targetBooking.status
+            : (targetBooking.original_status || 'Fila de espera');
+
+        try {
+            await supabase
+                .from('consultas_agendamentos')
+                .update({
+                    status: 'Suspensa — Exclusão Pendente',
+                    original_status: originalStatus,
+                    exclusao_pendente: true,
+                    queue_position: null,
+                    special_sequence: null
+                })
+                .eq('id', agendamentoId);
+        } catch (e: any) {
+            console.warn('[consultasService] Erro ao suspender agendamento por exclusão pendente:', e.message);
+        }
+
+        // Recalcular posições da fila
+        await recalculateAndPersistQueuePositions().catch(() => {});
+
+        // Registro de Auditoria
+        await auditLogService.logAction({
+            action_type: 'SOLICITAR_EXCLUSAO',
+            module: 'Regulação - Acompanhar',
+            description: `Solicitação de exclusão encaminhada por ${solicitante.name} para o paciente ${targetBooking.paciente?.name || 'Paciente'} (${procNome}). Motivo: ${motivo.trim()}.`,
+            details: {
+                tipo: 'Exclusão',
+                agendamento_id: agendamentoId,
+                solicitante_id: solicitante.id,
+                solicitante_nome: solicitante.name,
+                motivo_exclusao: motivo.trim(),
+                justificativa: justificativa.trim(),
+                posicao_anterior: rawPosicao,
+                data_original_solicitacao: dataOriginal
+            }
+        }).catch(() => {});
+
+        // Notificar eventos para tempo real
+        window.dispatchEvent(new CustomEvent('consultas-solicitacoes-cancelamento-changed'));
+        window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+
+        return { success: true, solicitacao: localItem };
+    } catch (err: any) {
+        console.error('[consultasService] solicitarExclusaoAgendamento erro:', err);
+        return { success: false, error: err.message || 'Erro inesperado ao solicitar exclusão.' };
+    }
+};
+
+/**
+ * Gestor / Admin: Aprova a solicitação e executa a exclusão lógica (soft delete) da solicitação
+ */
+export const aprovarSolicitacaoExclusao = async (params: {
+    solicitacaoId: string;
+    aprovador: { id: string; name: string; role?: string; is_admin?: boolean; access_level?: string };
+}): Promise<{ success: boolean; error?: string }> => {
+    try {
+        assertCanMutateRegulacao('Aprovar Solicitação de Exclusão', 'acompanhar');
+        const { solicitacaoId, aprovador } = params;
+        const now = new Date().toISOString();
+
+        // 1. Buscar a solicitação
+        let solicitacao: ConsultaSolicitacaoCancelamento | null = null;
+        try {
+            const { data } = await supabase
+                .from('consultas_solicitacoes_cancelamento')
+                .select('*')
+                .eq('id', solicitacaoId)
+                .single();
+            if (data) solicitacao = data;
+        } catch (_) {}
+
+        if (!solicitacao) {
+            const localList = getLocalSolicitacoesCancelamento();
+            solicitacao = localList.find(s => s.id === solicitacaoId) || null;
+        }
+
+        if (!solicitacao) {
+            return { success: false, error: 'Solicitação de exclusão não localizada.' };
+        }
+
+        if (solicitacao.status !== 'Aguardando Aprovação') {
+            return {
+                success: false,
+                error: `Esta solicitação já foi decidida anteriormente por outro gestor (Status atual: ${solicitacao.status}).`
+            };
+        }
+
+        // Regra de segurança: O solicitante não pode aprovar sua própria solicitação, salvo se admin
+        const isApproverAdmin = Boolean(
+            aprovador.role === 'admin' ||
+            aprovador.is_admin ||
+            aprovador.access_level === 'ADMIN'
+        );
+        if (solicitacao.solicitante_id === aprovador.id && !isApproverAdmin) {
+            return {
+                success: false,
+                error: 'O usuário solicitante não pode aprovar sua própria exclusão. A análise deve ser realizada por outro gestor ou administrador.'
+            };
+        }
+
+        const agendamentoId = solicitacao.agendamento_id;
+
+        // 2. Executar EXCLUSÃO LÓGICA (Soft Delete) no Supabase
+        const deletionReason = `[Exclusão Aprovada por ${aprovador.name}] Motivo: ${solicitacao.motivo || ''} - ${solicitacao.justificativa_solicitacao}`;
+        const { error: delErr } = await supabase
+            .from('consultas_agendamentos')
+            .update({
+                status: 'Excluído',
+                is_deleted: true,
+                deleted_at: now,
+                deleted_by: aprovador.id,
+                deleted_by_name: aprovador.name,
+                deletion_reason: deletionReason,
+                exclusao_pendente: false,
+                queue_position: null,
+                special_sequence: null
+            })
+            .eq('id', agendamentoId);
+
+        if (delErr) {
+            await supabase
+                .from('consultas_agendamentos')
+                .update({
+                    status: 'Excluído',
+                    is_deleted: true
+                })
+                .eq('id', agendamentoId);
+        }
+
+        // 3. Atualizar a solicitação para 'Aprovada'
+        try {
+            await supabase
+                .from('consultas_solicitacoes_cancelamento')
+                .update({
+                    status: 'Aprovada',
+                    aprovador_id: aprovador.id,
+                    aprovador_nome: aprovador.name,
+                    decidido_em: now,
+                    atualizado_em: now
+                })
+                .eq('id', solicitacaoId);
+        } catch (_) {}
+
+        const localList = getLocalSolicitacoesCancelamento();
+        const updatedLocal = localList.map(s => {
+            if (s.id === solicitacaoId) {
+                return {
+                    ...s,
+                    status: 'Aprovada' as const,
+                    aprovador_id: aprovador.id,
+                    aprovador_nome: aprovador.name,
+                    decidido_em: now,
+                    atualizado_em: now
+                };
+            }
+            return s;
+        });
+        saveLocalSolicitacoesCancelamento(updatedLocal);
+
+        // 4. Recalcular posições da fila após retirada definitiva
+        await recalculateAndPersistQueuePositions().catch(() => {});
+
+        // 5. Auditoria indelével
+        await auditLogService.logAction({
+            action_type: 'APROVAR_EXCLUSAO',
+            module: 'Regulação - Acompanhar',
+            description: `Exclusão aprovada por ${aprovador.name} para o paciente ${solicitacao.paciente_nome}. Registro retirado das listas operacionais com preservação lógica integral do histórico.`,
+            details: {
+                tipo: 'Exclusão',
+                solicitacao_id: solicitacaoId,
+                agendamento_id: agendamentoId,
+                aprovador_id: aprovador.id,
+                aprovador_nome: aprovador.name,
+                motivo: solicitacao.motivo,
+                justificativa_original: solicitacao.justificativa_solicitacao
+            }
+        }).catch(() => {});
+
+        // 6. Broadcast Realtime
+        window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+        window.dispatchEvent(new CustomEvent('consultas-solicitacoes-cancelamento-changed'));
+
+        return { success: true };
+    } catch (err: any) {
+        console.error('[consultasService] aprovarSolicitacaoExclusao erro:', err);
+        return { success: false, error: err.message || 'Erro inesperado ao aprovar exclusão.' };
+    }
+};
+
+/**
+ * Gestor / Admin: Recusa a solicitação de exclusão e restaura o estado anterior do procedimento na fila
+ */
+export const recusarSolicitacaoExclusao = async (params: {
+    solicitacaoId: string;
+    justificativaRecusa: string;
+    rejeitador: { id: string; name: string; role?: string; is_admin?: boolean; access_level?: string };
+}): Promise<{ success: boolean; error?: string }> => {
+    try {
+        assertCanMutateRegulacao('Recusar Solicitação de Exclusão', 'acompanhar');
+        const { solicitacaoId, justificativaRecusa, rejeitador } = params;
+
+        if (!justificativaRecusa || justificativaRecusa.trim().length < 5) {
+            return {
+                success: false,
+                error: 'A justificativa para a recusa da exclusão é obrigatória (mínimo de 5 caracteres).'
+            };
+        }
+
+        const now = new Date().toISOString();
+
+        // 1. Buscar solicitação
+        let solicitacao: ConsultaSolicitacaoCancelamento | null = null;
+        try {
+            const { data } = await supabase
+                .from('consultas_solicitacoes_cancelamento')
+                .select('*')
+                .eq('id', solicitacaoId)
+                .single();
+            if (data) solicitacao = data;
+        } catch (_) {}
+
+        if (!solicitacao) {
+            const localList = getLocalSolicitacoesCancelamento();
+            solicitacao = localList.find(s => s.id === solicitacaoId) || null;
+        }
+
+        if (!solicitacao) {
+            return { success: false, error: 'Solicitação de exclusão não localizada.' };
+        }
+
+        if (solicitacao.status !== 'Aguardando Aprovação') {
+            return {
+                success: false,
+                error: `Esta solicitação já foi decidida anteriormente (Status: ${solicitacao.status}).`
+            };
+        }
+
+        const isRejectionAdmin = Boolean(
+            rejeitador.role === 'admin' ||
+            rejeitador.is_admin ||
+            rejeitador.access_level === 'ADMIN'
+        );
+        if (solicitacao.solicitante_id === rejeitador.id && !isRejectionAdmin) {
+            return {
+                success: false,
+                error: 'O usuário solicitante não pode recusar sua própria solicitação de exclusão. A análise deve ser realizada por outro gestor ou administrador.'
+            };
+        }
+
+        // 2. Atualizar a solicitação para Rejeitada
+        try {
+            await supabase
+                .from('consultas_solicitacoes_cancelamento')
+                .update({
+                    status: 'Rejeitada',
+                    aprovador_id: rejeitador.id,
+                    aprovador_nome: rejeitador.name,
+                    decisao_justificativa: justificativaRecusa.trim(),
+                    decidido_em: now,
+                    atualizado_em: now
+                })
+                .eq('id', solicitacaoId);
+        } catch (_) {}
+
+        const localList = getLocalSolicitacoesCancelamento();
+        const updatedLocal = localList.map(s => {
+            if (s.id === solicitacaoId) {
+                return {
+                    ...s,
+                    status: 'Rejeitada' as const,
+                    aprovador_id: rejeitador.id,
+                    aprovador_nome: rejeitador.name,
+                    decisao_justificativa: justificativaRecusa.trim(),
+                    decidido_em: now,
+                    atualizado_em: now
+                };
+            }
+            return s;
+        });
+        saveLocalSolicitacoesCancelamento(updatedLocal);
+
+        // 3. Restaurar o agendamento para o estado anterior na fila
+        let restoredStatus = solicitacao.situacao_agendamento || 'Fila de espera';
+        try {
+            const { data: bData } = await supabase
+                .from('consultas_agendamentos')
+                .select('original_status, status')
+                .eq('id', solicitacao.agendamento_id)
+                .single();
+            if (bData?.original_status && !bData.original_status.includes('Pendente')) {
+                restoredStatus = bData.original_status;
+            }
+        } catch (_) {}
+
+        try {
+            await supabase
+                .from('consultas_agendamentos')
+                .update({
+                    status: restoredStatus,
+                    exclusao_pendente: false,
+                    is_deleted: false
+                })
+                .eq('id', solicitacao.agendamento_id);
+        } catch (upErr: any) {
+            console.warn('[consultasService] Erro ao restaurar agendamento após recusa de exclusão:', upErr.message);
+        }
+
+        // 4. Recalcular as posições da fila
+        await recalculateAndPersistQueuePositions().catch(() => {});
+
+        // 5. Auditoria indelével
+        await auditLogService.logAction({
+            action_type: 'RECUSAR_EXCLUSAO',
+            module: 'Regulação - Acompanhar',
+            description: `Exclusão recusada por ${rejeitador.name} para o paciente ${solicitacao.paciente_nome}. Procedimento restaurado na fila na posição original. Justificativa: ${justificativaRecusa.trim()}`,
+            details: {
+                tipo: 'Exclusão',
+                solicitacao_id: solicitacaoId,
+                agendamento_id: solicitacao.agendamento_id,
+                rejeitador_id: rejeitador.id,
+                rejeitador_nome: rejeitador.name,
+                justificativa_recusa: justificativaRecusa.trim()
+            }
+        }).catch(() => {});
+
+        // 6. Broadcast Realtime
+        window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+        window.dispatchEvent(new CustomEvent('consultas-solicitacoes-cancelamento-changed'));
+
+        return { success: true };
+    } catch (err: any) {
+        console.error('[consultasService] recusarSolicitacaoExclusao erro:', err);
+        return { success: false, error: err.message || 'Erro inesperado ao recusar exclusão.' };
     }
 };
 

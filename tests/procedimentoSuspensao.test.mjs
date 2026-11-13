@@ -70,3 +70,4 @@ test('7. Transferência cujo destino está suspenso é BLOQUEADA', () => {
     const canTransfer = isProcedimentoElegivelParaTransferenciaDestino(targetProc);
     assert.equal(canTransfer, false);
 });
+

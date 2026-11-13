@@ -112,44 +112,57 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
         }
     };
 
-    // Ação: Confirmar cancelamento
-    const handleConfirmarCancelamento = async () => {
-        if (!currentItem || isProcessing) return;
+    // Ação: Confirmar decisão (Aprovar cancelamento ou exclusão)
+    const handleConfirmarDecisao = async () => {
+        if (!currentItem || isProcessing || isOwnRequest) return;
         setIsProcessing(true);
         setFeedbackMessage(null);
 
         try {
-            const res = await db.aprovarSolicitacaoCancelamento({
-                solicitacaoId: currentItem.id,
-                aprovador: { 
-                    id: currentUser.id, 
-                    name: currentUser.name,
-                    role: (currentUser as any).role,
-                    is_admin: (currentUser as any).is_admin,
-                    access_level: (currentUser as any).access_level
-                }
-            });
+            const isExclusao = currentItem.tipo === 'Exclusão';
+            const aprovador = { 
+                id: currentUser.id, 
+                name: currentUser.name,
+                role: (currentUser as any).role,
+                is_admin: (currentUser as any).is_admin,
+                access_level: (currentUser as any).access_level
+            };
+
+            const res = isExclusao
+                ? await db.aprovarSolicitacaoExclusao({
+                    solicitacaoId: currentItem.id,
+                    aprovador
+                })
+                : await db.aprovarSolicitacaoCancelamento({
+                    solicitacaoId: currentItem.id,
+                    aprovador
+                });
 
             if (!res.success) {
-                setFeedbackMessage({ type: 'error', text: res.error || 'Erro ao aprovar cancelamento.' });
+                setFeedbackMessage({ type: 'error', text: res.error || `Erro ao aprovar ${isExclusao ? 'exclusão' : 'cancelamento'}.` });
                 setIsProcessing(false);
                 return;
             }
 
-            setFeedbackMessage({ type: 'success', text: 'Cancelamento confirmado com sucesso! A solicitação foi cancelada definitivamente e a fila foi reorganizada.' });
+            setFeedbackMessage({
+                type: 'success',
+                text: isExclusao
+                    ? 'Exclusão confirmada com sucesso! O registro foi retirado das listas operacionais com preservação lógica do histórico.'
+                    : 'Cancelamento confirmado com sucesso! A solicitação foi cancelada definitivamente e a fila foi reorganizada.'
+            });
             if (onChanged) onChanged();
 
             // Atualiza lista do banco
             await carregarSolicitacoes();
         } catch (err: any) {
-            setFeedbackMessage({ type: 'error', text: err.message || 'Erro inesperado ao aprovar cancelamento.' });
+            setFeedbackMessage({ type: 'error', text: err.message || 'Erro inesperado ao aprovar decisão.' });
         } finally {
             setIsProcessing(false);
         }
     };
 
-    // Ação: Recusar cancelamento com justificativa obrigatória
-    const handleRecusarCancelamento = async () => {
+    // Ação: Recusar solicitação (Cancelamento ou Exclusão) com justificativa obrigatória
+    const handleRecusarDecisao = async () => {
         if (!currentItem || isProcessing) return;
         if (!justificativaRecusa.trim() || justificativaRecusa.trim().length < 5) {
             setFeedbackMessage({ type: 'error', text: 'Informe a justificativa da recusa (mínimo de 5 caracteres).' });
@@ -160,25 +173,39 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
         setFeedbackMessage(null);
 
         try {
-            const res = await db.rejeitarSolicitacaoCancelamento({
-                solicitacaoId: currentItem.id,
-                justificativaRecusa: justificativaRecusa.trim(),
-                rejeitador: { 
-                    id: currentUser.id, 
-                    name: currentUser.name,
-                    role: (currentUser as any).role,
-                    is_admin: (currentUser as any).is_admin,
-                    access_level: (currentUser as any).access_level
-                }
-            });
+            const isExclusao = currentItem.tipo === 'Exclusão';
+            const rejeitador = { 
+                id: currentUser.id, 
+                name: currentUser.name,
+                role: (currentUser as any).role,
+                is_admin: (currentUser as any).is_admin,
+                access_level: (currentUser as any).access_level
+            };
+
+            const res = isExclusao
+                ? await db.recusarSolicitacaoExclusao({
+                    solicitacaoId: currentItem.id,
+                    justificativaRecusa: justificativaRecusa.trim(),
+                    rejeitador
+                })
+                : await db.rejeitarSolicitacaoCancelamento({
+                    solicitacaoId: currentItem.id,
+                    justificativaRecusa: justificativaRecusa.trim(),
+                    rejeitador
+                });
 
             if (!res.success) {
-                setFeedbackMessage({ type: 'error', text: res.error || 'Erro ao recusar solicitação.' });
+                setFeedbackMessage({ type: 'error', text: res.error || `Erro ao recusar ${isExclusao ? 'exclusão' : 'solicitação'}.` });
                 setIsProcessing(false);
                 return;
             }
 
-            setFeedbackMessage({ type: 'success', text: 'Cancelamento recusado! A solicitação foi reativada na fila em sua posição original por antiguidade.' });
+            setFeedbackMessage({
+                type: 'success',
+                text: isExclusao
+                    ? 'Exclusão recusada! O procedimento foi reativado na fila em sua posição original por antiguidade.'
+                    : 'Cancelamento recusado! A solicitação foi reativada na fila em sua posição original por antiguidade.'
+            });
             setIsRejecting(false);
             setJustificativaRecusa('');
             if (onChanged) onChanged();
@@ -239,7 +266,7 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
                         <div className="min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                                 <h3 className="font-black uppercase text-xs sm:text-sm tracking-wide text-white truncate">
-                                    Aprovação Obrigatória de Cancelamento
+                                    Análise de Solicitações — Cancelamento e Exclusão
                                 </h3>
                                 <span className="px-2 py-0.5 rounded-full text-[9.5px] sm:text-[10px] font-black uppercase bg-white text-rose-700 shadow-2xs shrink-0">
                                     {currentIndex + 1} de {solicitacoes.length} {solicitacoes.length === 1 ? 'pendente' : 'pendentes'}
@@ -389,99 +416,137 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
                         </div>
                     </div>
 
-                    {/* SEÇÃO 2: DADOS DO PEDIDO DE CANCELAMENTO */}
-                    <div className="p-3 sm:p-3.5 bg-amber-50/60 rounded-2xl border border-amber-200/80 space-y-2.5">
-                        <div className="flex items-center justify-between border-b border-amber-200/60 pb-1.5">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
-                                <FileText className="w-3.5 h-3.5 text-amber-700" />
-                                <span>Dados da Solicitação de Cancelamento</span>
-                            </span>
-                        </div>
+                    {/* SEÇÃO 2: DADOS DO PEDIDO (CANCELAMENTO OU EXCLUSÃO) */}
+                    {(() => {
+                        const isExclusao = currentItem.tipo === 'Exclusão';
+                        const tipoLabel = isExclusao ? 'Exclusão' : 'Cancelamento';
 
-                        {/* Metadados: Solicitante, Setor e Data/Horário */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            {/* 6. Usuário que solicitou */}
-                            <div className="p-2 bg-white/80 rounded-xl border border-amber-200/70">
-                                <span className="text-[9px] font-bold uppercase text-slate-500 block">Usuário Solicitante</span>
-                                <span className="font-black text-slate-900 uppercase block text-xs mt-0.5 truncate" title={currentItem.solicitante_nome}>
-                                    {currentItem.solicitante_nome}
-                                </span>
-                            </div>
+                        let motivoText = currentItem.motivo || '';
+                        let justificativaText = currentItem.justificativa_solicitacao || '';
+                        if (!motivoText && justificativaText.startsWith('[')) {
+                            const closeIdx = justificativaText.indexOf(']');
+                            if (closeIdx > 1) {
+                                motivoText = justificativaText.slice(1, closeIdx).trim();
+                                justificativaText = justificativaText.slice(closeIdx + 1).trim();
+                            }
+                        }
 
-                            {/* Setor Responsável */}
-                            <div className="p-2 bg-white/80 rounded-xl border border-amber-200/70">
-                                <span className="text-[9px] font-bold uppercase text-slate-500 block">Setor Responsável</span>
-                                <span className="font-bold text-slate-800 block text-xs mt-0.5 truncate" title={currentItem.solicitante_setor || 'Unidade Básica de Saúde / PSF'}>
-                                    {currentItem.solicitante_setor || 'Unidade Básica de Saúde / PSF'}
-                                </span>
-                            </div>
+                        return (
+                            <>
+                                <div className={`p-3 sm:p-3.5 rounded-2xl border space-y-2.5 ${
+                                    isExclusao 
+                                        ? 'bg-purple-50/60 border-purple-200/80' 
+                                        : 'bg-amber-50/60 border-amber-200/80'
+                                }`}>
+                                    <div className="flex items-center justify-between border-b pb-1.5 border-slate-200/80">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                                            <FileText className={`w-3.5 h-3.5 ${isExclusao ? 'text-purple-700' : 'text-amber-700'}`} />
+                                            <span>Dados da Solicitação de {tipoLabel}</span>
+                                        </span>
+                                        <span className={`px-2 py-0.5 rounded text-[9.5px] font-black uppercase tracking-wider font-mono ${
+                                            isExclusao 
+                                                ? 'bg-purple-100 text-purple-900 border border-purple-300' 
+                                                : 'bg-amber-100 text-amber-900 border border-amber-300'
+                                        }`}>
+                                            Tipo: {tipoLabel}
+                                        </span>
+                                    </div>
 
-                            {/* 7. Data e Horário do Pedido */}
-                            <div className="p-2 bg-white/80 rounded-xl border border-amber-200/70">
-                                <span className="text-[9px] font-bold uppercase text-slate-500 block flex items-center gap-1">
-                                    <Clock className="w-3 h-3 text-slate-400" />
-                                    <span>Data e Horário</span>
-                                </span>
-                                <span className="font-black text-slate-900 text-xs mt-0.5 block truncate">
-                                    {formatDateTimeBr(currentItem.criado_em)}
-                                </span>
-                            </div>
-                        </div>
+                                    {/* Metadados: Solicitante, Setor, Data/Horário e Motivo */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                                        {/* Usuário Solicitante */}
+                                        <div className="p-2 bg-white/80 rounded-xl border border-slate-200">
+                                            <span className="text-[9px] font-bold uppercase text-slate-500 block">Usuário Solicitante</span>
+                                            <span className="font-black text-slate-900 uppercase block text-xs mt-0.5 truncate" title={currentItem.solicitante_nome}>
+                                                {currentItem.solicitante_nome}
+                                            </span>
+                                        </div>
 
-                        {/* 8. Justificativa Apresentada */}
-                        <div className="space-y-1">
-                            <span className="text-[9px] font-black uppercase tracking-wider text-amber-950 block">
-                                Justificativa Apresentada pelo Solicitante:
-                            </span>
-                            <div className="p-2.5 sm:p-3 bg-white rounded-xl border border-amber-300 text-slate-800 font-medium text-xs leading-relaxed italic shadow-2xs">
-                                "{currentItem.justificativa_solicitacao}"
-                            </div>
-                        </div>
-                    </div>
+                                        {/* Setor Responsável */}
+                                        <div className="p-2 bg-white/80 rounded-xl border border-slate-200">
+                                            <span className="text-[9px] font-bold uppercase text-slate-500 block">Setor Responsável</span>
+                                            <span className="font-bold text-slate-800 block text-xs mt-0.5 truncate" title={currentItem.solicitante_setor || 'Unidade Básica de Saúde / PSF'}>
+                                                {currentItem.solicitante_setor || 'Unidade Básica de Saúde / PSF'}
+                                            </span>
+                                        </div>
 
-                    {/* SEÇÃO 3: FORMULÁRIO DE RECUSA (SE O GESTOR CLICAR EM RECUSAR) */}
-                    {isRejecting && (
-                        <div className="p-3.5 bg-rose-50 rounded-2xl border border-rose-300 space-y-2.5 animate-in fade-in duration-200">
-                            <div className="flex items-center justify-between">
-                                <label className="text-[10px] font-black uppercase tracking-wider text-rose-900 flex items-center gap-1">
-                                    <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                                    <span>Justificativa da Recusa * (Obrigatória — Mínimo 5 caracteres)</span>
-                                </label>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setIsRejecting(false);
-                                        setJustificativaRecusa('');
-                                    }}
-                                    className="text-[9px] font-extrabold uppercase text-slate-500 hover:text-slate-800 cursor-pointer"
-                                >
-                                    Voltar
-                                </button>
-                            </div>
-                            <textarea
-                                value={justificativaRecusa}
-                                onChange={(e) => setJustificativaRecusa(e.target.value)}
-                                placeholder="Informe detalhadamente por que este cancelamento está sendo recusado pela Regulação..."
-                                rows={2}
-                                className="w-full p-2.5 bg-white border border-rose-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20 resize-none"
-                                required
-                            />
-                            <p className="text-[10px] text-rose-700 font-semibold leading-relaxed">
-                                ℹ️ Ao recusar o cancelamento, a solicitação será <strong>reativada imediatamente na fila</strong> na posição correspondente à sua prioridade e <strong>data original de solicitação</strong>.
-                            </p>
-                            <div className="flex justify-end gap-2 pt-1">
-                                <button
-                                    type="button"
-                                    onClick={handleRecusarCancelamento}
-                                    disabled={isProcessing || justificativaRecusa.trim().length < 5 || isOwnRequest}
-                                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer active:scale-95"
-                                >
-                                    {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
-                                    <span>Confirmar Recusa do Cancelamento</span>
-                                </button>
-                            </div>
-                        </div>
-                    )}
+                                        {/* Data e Horário do Pedido */}
+                                        <div className="p-2 bg-white/80 rounded-xl border border-slate-200">
+                                            <span className="text-[9px] font-bold uppercase text-slate-500 block flex items-center gap-1">
+                                                <Clock className="w-3 h-3 text-slate-400" />
+                                                <span>Data e Horário</span>
+                                            </span>
+                                            <span className="font-black text-slate-900 text-xs mt-0.5 block truncate">
+                                                {formatDateTimeBr(currentItem.criado_em)}
+                                            </span>
+                                        </div>
+
+                                        {/* Motivo Selecionado */}
+                                        <div className="p-2 bg-white/80 rounded-xl border border-slate-200">
+                                            <span className="text-[9px] font-bold uppercase text-slate-500 block">Motivo</span>
+                                            <span className="font-black text-rose-700 uppercase block text-xs mt-0.5 truncate" title={motivoText || 'Não especificado'}>
+                                                {motivoText || 'Geral'}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Justificativa Apresentada */}
+                                    <div className="space-y-1">
+                                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-900 block">
+                                            Justificativa Apresentada pelo Solicitante:
+                                        </span>
+                                        <div className="p-2.5 sm:p-3 bg-white rounded-xl border border-slate-200 text-slate-800 font-medium text-xs leading-relaxed italic shadow-2xs">
+                                            "{justificativaText}"
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* SEÇÃO 3: FORMULÁRIO DE RECUSA (SE O GESTOR CLICAR EM RECUSAR) */}
+                                {isRejecting && (
+                                    <div className="p-3.5 bg-rose-50 rounded-2xl border border-rose-300 space-y-2.5 animate-in fade-in duration-200">
+                                        <div className="flex items-center justify-between">
+                                            <label className="text-[10px] font-black uppercase tracking-wider text-rose-900 flex items-center gap-1">
+                                                <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                                                <span>Justificativa da Recusa * (Obrigatória — Mínimo 5 caracteres)</span>
+                                            </label>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setIsRejecting(false);
+                                                    setJustificativaRecusa('');
+                                                }}
+                                                className="text-[9px] font-extrabold uppercase text-slate-500 hover:text-slate-800 cursor-pointer"
+                                            >
+                                                Voltar
+                                            </button>
+                                        </div>
+                                        <textarea
+                                            value={justificativaRecusa}
+                                            onChange={(e) => setJustificativaRecusa(e.target.value)}
+                                            placeholder={`Informe detalhadamente por que esta ${isExclusao ? 'exclusão' : 'solicitação'} está sendo recusada pela Regulação...`}
+                                            rows={2}
+                                            className="w-full p-2.5 bg-white border border-rose-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20 resize-none"
+                                            required
+                                        />
+                                        <p className="text-[10px] text-rose-700 font-semibold leading-relaxed">
+                                            ℹ️ Ao recusar a {isExclusao ? 'exclusão' : 'solicitação'}, o procedimento será <strong>reativado imediatamente na fila</strong> na posição correspondente à sua prioridade e <strong>data original de solicitação</strong>.
+                                        </p>
+                                        <div className="flex justify-end gap-2 pt-1">
+                                            <button
+                                                type="button"
+                                                onClick={handleRecusarDecisao}
+                                                disabled={isProcessing || justificativaRecusa.trim().length < 5 || isOwnRequest}
+                                                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer active:scale-95"
+                                            >
+                                                {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
+                                                <span>Confirmar Recusa da {tipoLabel}</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        );
+                    })()}
                 </div>
 
                 {/* Footer com Navegação Separada e Ações de Decisão sem Sobreposição */}
@@ -511,7 +576,7 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
                         </button>
                     </div>
 
-                    {/* Ações de Decisão: Fechar / Recusar Cancelamento / Confirmar Cancelamento */}
+                    {/* Ações de Decisão: Fechar / Recusar / Confirmar */}
                     {!isRejecting && (
                         <div className="flex items-center gap-2 sm:gap-2.5 w-full sm:w-auto justify-end flex-wrap sm:flex-nowrap shrink-0">
                             <button
@@ -528,18 +593,18 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
                                 onClick={() => setIsRejecting(true)}
                                 disabled={isProcessing || isOwnRequest}
                                 className="w-full xs:w-auto flex-1 sm:flex-none px-3.5 sm:px-4 py-2 sm:py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-black text-xs uppercase tracking-wider rounded-xl transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0 shadow-2xs whitespace-nowrap"
-                                title={isOwnRequest ? 'O solicitante não pode decidir seu próprio pedido' : 'Recusar pedido de cancelamento e reativar solicitação na fila'}
+                                title={isOwnRequest ? 'O solicitante não pode decidir seu próprio pedido' : `Recusar pedido de ${currentItem.tipo === 'Exclusão' ? 'exclusão' : 'cancelamento'} e reativar solicitação na fila`}
                             >
                                 <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                                <span>Recusar Cancelamento</span>
+                                <span>{currentItem.tipo === 'Exclusão' ? 'Recusar Exclusão' : 'Recusar Cancelamento'}</span>
                             </button>
 
                             <button
                                 type="button"
-                                onClick={handleConfirmarCancelamento}
+                                onClick={handleConfirmarDecisao}
                                 disabled={isProcessing || isOwnRequest}
                                 className="w-full xs:w-auto flex-1 sm:flex-none px-4 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap"
-                                title={isOwnRequest ? 'O solicitante não pode decidir seu próprio pedido' : 'Confirmar cancelamento definitivo da solicitação'}
+                                title={isOwnRequest ? 'O solicitante não pode decidir seu próprio pedido' : `Confirmar ${currentItem.tipo === 'Exclusão' ? 'exclusão lógica' : 'cancelamento definitivo'} da solicitação`}
                             >
                                 {isProcessing ? (
                                     <>
@@ -549,7 +614,7 @@ export const SolicitacoesCancelamentoModal: React.FC<SolicitacoesCancelamentoMod
                                 ) : (
                                     <>
                                         <CheckCircle2 className="w-4 h-4 text-white shrink-0" />
-                                        <span>Confirmar Cancelamento</span>
+                                        <span>{currentItem.tipo === 'Exclusão' ? 'Confirmar Exclusão' : 'Confirmar Cancelamento'}</span>
                                     </>
                                 )}
                             </button>

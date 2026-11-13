@@ -716,7 +716,7 @@ export interface ConsultaAgendamento {
   priority: 'Normal' | 'Urgência' | 'Especial';
   queue_position?: number;
   special_sequence?: number;
-  status: 'Solicitado' | 'Agendado' | 'Realizado' | 'Cancelado' | 'Não Realizado' | 'Fila de espera' | 'Aguardando Data' | 'Retorno' | 'Pausada' | 'Cancelamento Pendente';
+  status: 'Solicitado' | 'Agendado' | 'Realizado' | 'Cancelado' | 'Não Realizado' | 'Fila de espera' | 'Aguardando Data' | 'Retorno' | 'Pausada' | 'Cancelamento Pendente' | 'Suspensa — Exclusão Pendente' | 'Excluído';
   created_by: string;
   created_at?: string;
   is_retorno?: boolean;

@@ -83,3 +83,4 @@ test('3. validateExclusaoForm valida o formulário completo', () => {
     const padrao = MOTIVOS_EXCLUSAO[0];
     assert.equal(validateExclusaoForm({ motivo: padrao.label, justificativa: padrao.defaultJustificativa }).isValid, true);
 });
+

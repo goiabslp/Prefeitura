@@ -8,3 +8,4 @@ COMMENT ON COLUMN public.consultas_pacientes.phone_fixed IS 'Telefone fixo do pa
 
 -- Recarregar o schema cache do PostgREST para o Supabase reconhecer a nova coluna imediatamente
 NOTIFY pgrst, 'reload schema';
+

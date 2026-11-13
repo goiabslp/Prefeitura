@@ -150,3 +150,4 @@ export const validateExclusaoForm = (params: {
 
     return { isValid: true, normalizedLength };
 };
+
