@@ -894,7 +894,7 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
     };
 
     return (
-        <div className={`w-full flex flex-col flex-1 h-full max-h-full min-h-0 bg-white rounded-3xl border border-slate-200/80 shadow-xl overflow-hidden relative ${embedded ? 'border-none shadow-none rounded-none' : 'max-w-[98%] 2xl:max-w-[1536px] mx-auto'}`}>
+        <div className={`w-full flex flex-col flex-1 h-full max-h-full min-h-0 bg-white rounded-3xl border border-slate-200/80 shadow-xl overflow-hidden relative ${embedded ? 'border-none shadow-none rounded-none' : 'w-full max-w-[99%] 2xl:max-w-[1536px] mx-auto'}`}>
             
             {/* Top Toast Alert */}
             {toastMessage && (
@@ -912,180 +912,180 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                 </div>
             )}
 
-            {/* Header Geral da Gestão de Procedimentos — Estrutura em 3 Linhas Modernas */}
+            {/* Header Geral da Gestão de Procedimentos — Layout Otimizado 100% Responsivo em 2 Linhas */}
             {!embedded ? (
-                <div className="px-4 sm:px-6 py-4 border-b border-slate-200/80 bg-gradient-to-b from-slate-50/90 via-white to-white shrink-0 space-y-3.5 shadow-2xs">
-                    {/* LINHA 1 — Identificação e indicadores */}
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
+                <div className="w-full px-3 sm:px-4 lg:px-5 py-2.5 sm:py-3.5 border-b border-slate-200/80 bg-white shrink-0 space-y-2.5 sm:space-y-3 shadow-2xs min-w-0">
+                    {/* LINHA 1 — Identificação, Indicadores e Ações 100% Contidos no Viewport */}
+                    <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-2 sm:gap-2.5 w-full min-w-0">
+                        {/* À Esquerda: Botão Voltar, Ícone e Título/Subtítulo */}
+                        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 shrink-0 max-w-[240px] sm:max-w-[280px] md:max-w-xs xl:max-w-sm">
                             {onBack && (
                                 <button 
+                                    type="button"
                                     onClick={onBack} 
-                                    className="p-2 -ml-2 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all cursor-pointer shrink-0"
-                                    title="Voltar ao Módulo de Consultas"
+                                    className="p-1 -ml-1 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all cursor-pointer shrink-0"
+                                    title="Voltar ao Módulo de Regulação"
                                 >
-                                    <ArrowLeft className="w-5 h-5" />
+                                    <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
                                 </button>
                             )}
+                            <div className="p-1.5 sm:p-2 bg-sky-50 text-sky-600 border border-sky-100 rounded-xl shrink-0 shadow-2xs flex items-center justify-center">
+                                <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                            </div>
                             <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                    <div className="p-1.5 bg-sky-50 text-sky-600 border border-sky-100 rounded-lg shrink-0 shadow-2xs">
-                                        <Settings className="w-4 h-4" />
-                                    </div>
-                                    <h3 className="font-extrabold text-slate-900 tracking-tight text-base sm:text-lg uppercase truncate">
-                                        Gestão de Procedimentos
-                                    </h3>
-                                </div>
-                                <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
+                                <h3 className="font-black text-slate-900 tracking-tight text-sm sm:text-base lg:text-lg uppercase truncate">
+                                    Gestão de Procedimentos
+                                </h3>
+                                <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium truncate mt-0.5" title="Cadastre, edite, suspenda ou configure vagas para exames, consultas e cirurgias">
                                     Cadastre, edite, suspenda ou configure vagas para exames, consultas e cirurgias
                                 </p>
                             </div>
                         </div>
 
-                        {/* Indicadores: TOTAL, ATIVOS, SUSPENSOS, BANCO, COTAS e SOLICITAÇÕES */}
-                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 self-start lg:self-center shrink-0">
+                        {/* Na Região Central: Indicadores TOTAL, ATIVOS, SUSPENSOS, BANCO, COTAS e SOLICITAÇÕES (Compactos, Alinhados e Fluidos) */}
+                        <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-1.5 flex-1 min-w-0 px-1">
                             <div
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200/90 rounded-xl shadow-2xs min-w-[75px] justify-center"
+                                className="flex items-center gap-1 px-2 sm:px-2.5 py-0.5 sm:py-1 bg-slate-100/90 border border-slate-200/80 rounded-full shadow-2xs justify-center shrink-0"
                                 title={`${metrics.strictParentsCount} procedimentos principais + ${metrics.orphanCount} vinculados sem pai associado`}
                             >
-                                <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-400">Total</span>
-                                <span className="text-xs font-black text-slate-800">{metrics.total}</span>
+                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Total</span>
+                                <span className="text-[11px] sm:text-xs font-black text-slate-800">{metrics.total}</span>
                             </div>
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl shadow-2xs min-w-[75px] justify-center">
-                                <span className="text-[9.5px] font-black uppercase tracking-wider text-emerald-700">Ativos</span>
-                                <span className="text-xs font-black text-emerald-800">{metrics.ativos}</span>
+
+                            <div className="flex items-center gap-1 px-2 sm:px-2.5 py-0.5 sm:py-1 bg-emerald-50 border border-emerald-200 rounded-full shadow-2xs justify-center shrink-0">
+                                <span className="text-[9px] font-black uppercase tracking-wider text-emerald-700">Ativos</span>
+                                <span className="text-[11px] sm:text-xs font-black text-emerald-800">{metrics.ativos}</span>
                             </div>
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl shadow-2xs min-w-[80px] justify-center">
-                                <span className="text-[9.5px] font-black uppercase tracking-wider text-amber-700">Suspensos</span>
-                                <span className="text-xs font-black text-amber-800">{metrics.suspensos}</span>
+
+                            <div className="flex items-center gap-1 px-2 sm:px-2.5 py-0.5 sm:py-1 bg-amber-50 border border-amber-200 rounded-full shadow-2xs justify-center shrink-0">
+                                <span className="text-[9px] font-black uppercase tracking-wider text-amber-700">Suspensos</span>
+                                <span className="text-[11px] sm:text-xs font-black text-amber-800">{metrics.suspensos}</span>
                             </div>
-                            {metrics.groupedChildrenCount > 0 && (
-                                <div
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 border border-violet-200 rounded-xl shadow-xs min-w-[75px] justify-center"
-                                    title={`${metrics.total} na listagem principal + ${metrics.groupedChildrenCount} vinculados dentro de procedimentos pais = ${metrics.totalRegisteredCount} registros no banco`}
-                                >
-                                    <span className="text-[9.5px] font-black uppercase tracking-wider text-violet-700">Banco</span>
-                                    <span className="text-xs font-black text-violet-800">{metrics.totalRegisteredCount}</span>
-                                </div>
-                            )}
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-xl shadow-xs min-w-[75px] justify-center">
-                                <span className="text-[9.5px] font-black uppercase tracking-wider text-indigo-700">Cotas</span>
-                                <span className="text-xs font-black text-indigo-800">{metrics.totalCotas.toLocaleString('pt-BR')}</span>
+
+                            <div
+                                className="flex items-center gap-1 px-2 sm:px-2.5 py-0.5 sm:py-1 bg-violet-50 border border-violet-200 rounded-full shadow-2xs justify-center shrink-0"
+                                title={`${metrics.total} na listagem principal + ${metrics.groupedChildrenCount || 0} vinculados = ${metrics.totalRegisteredCount || metrics.total} registros no banco`}
+                            >
+                                <span className="text-[9px] font-black uppercase tracking-wider text-violet-700">Banco</span>
+                                <span className="text-[11px] sm:text-xs font-black text-violet-800">{metrics.totalRegisteredCount || metrics.total}</span>
                             </div>
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-xl shadow-xs min-w-[90px] justify-center" title="Total de solicitações vinculadas em todos os procedimentos">
-                                <span className="text-[9.5px] font-black uppercase tracking-wider text-blue-700">Solicitações</span>
-                                <span className="text-xs font-black text-blue-800">{metrics.totalSolicitacoes.toLocaleString('pt-BR')}</span>
+
+                            <div className="flex items-center gap-1 px-2 sm:px-2.5 py-0.5 sm:py-1 bg-indigo-50 border border-indigo-200 rounded-full shadow-2xs justify-center shrink-0">
+                                <span className="text-[9px] font-black uppercase tracking-wider text-indigo-700">Cotas</span>
+                                <span className="text-[11px] sm:text-xs font-black text-indigo-800">{metrics.totalCotas.toLocaleString('pt-BR')}</span>
                             </div>
+
+                            <div className="flex items-center gap-1 px-2 sm:px-2.5 py-0.5 sm:py-1 bg-blue-50 border border-blue-200 rounded-full shadow-2xs justify-center shrink-0" title="Total de solicitações vinculadas em todos os procedimentos">
+                                <span className="text-[9px] font-black uppercase tracking-wider text-blue-700">Solicitações</span>
+                                <span className="text-[11px] sm:text-xs font-black text-blue-800">{metrics.totalSolicitacoes.toLocaleString('pt-BR')}</span>
+                            </div>
+                        </div>
+
+                        {/* À Direita: Botões de Ação (+ Adicionar Especialista e + Novo Procedimento) 100% Contidos no Viewport */}
+                        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => handleOpenAddEspecialistaModal()}
+                                className="h-8.5 sm:h-9 px-2.5 sm:px-3 lg:px-3.5 bg-gradient-to-r from-indigo-600 via-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-black rounded-xl shadow-xs hover:shadow-indigo-500/20 active:scale-95 transition-all text-[10.5px] sm:text-xs uppercase tracking-wider flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer border border-indigo-500/30 whitespace-nowrap shrink-0"
+                                title="Vincular profissional especialista a um procedimento principal existente"
+                            >
+                                <Stethoscope className="w-3.5 h-3.5 text-indigo-200 shrink-0" />
+                                <span>+ Adicionar Especialista</span>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => handleOpenProcModal()}
+                                className="h-8.5 sm:h-9 px-2.5 sm:px-3 lg:px-3.5 bg-gradient-to-r from-sky-600 to-sky-700 hover:from-sky-700 hover:to-sky-800 text-white font-black rounded-xl shadow-xs hover:shadow-sky-500/15 active:scale-95 transition-all text-[10.5px] sm:text-xs uppercase tracking-wider flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+                                title="Cadastrar novo procedimento"
+                            >
+                                <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                                <span>+ Novo Procedimento</span>
+                            </button>
                         </div>
                     </div>
 
-                    {/* Quando não estiver no detalhe de procedimento, exibe LINHA 2 (Busca, Filtros e Ações Alinhadas) */}
+                    {/* LINHA 2 — Pesquisa e Filtros na mesma linha horizontal 100% responsiva */}
                     {!selectedProc && (
-                        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-3 border-t border-slate-100">
-                            {/* Lado Esquerdo: Campo de Pesquisa e Filtros */}
-                            <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
-                                {/* Campo de pesquisa por nome ou código */}
-                                <div className="relative w-64 sm:w-72 md:w-80 shrink-0">
-                                    <input
-                                        type="text"
-                                        placeholder="Buscar exame, consulta ou código..."
-                                        className="w-full h-9 bg-white border border-slate-300 rounded-xl pl-9 pr-8 text-xs font-semibold placeholder:text-slate-400 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-2xs"
-                                        value={procSearch}
-                                        onChange={(e) => setProcSearch(e.target.value)}
-                                    />
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
-                                    {procSearch && (
-                                        <button
-                                            type="button"
-                                            onClick={() => setProcSearch('')}
-                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-100 cursor-pointer"
-                                            title="Limpar busca"
-                                        >
-                                            <X className="w-3.5 h-3.5" />
-                                        </button>
-                                    )}
-                                </div>
-
-                                {/* Filtro de tipo: Todos, Exame, Consulta, Cirurgia */}
-                                <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 shrink-0 shadow-2xs">
-                                    {(['Todos', 'Exame', 'Consulta', 'Cirurgia'] as const).map(type => (
-                                        <button
-                                            key={type}
-                                            type="button"
-                                            onClick={() => setSelectedTypeFilter(type)}
-                                            className={`h-7 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
-                                                selectedTypeFilter === type
-                                                    ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
-                                                    : 'text-slate-500 hover:text-slate-800'
-                                            }`}
-                                        >
-                                            {type}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {/* Filtro de status: Todos, Ativos, Suspensos */}
-                                <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 shrink-0 shadow-2xs">
-                                    {(['Todos', 'Ativos', 'Suspensos'] as const).map(st => (
-                                        <button
-                                            key={st}
-                                            type="button"
-                                            onClick={() => setSelectedStatusFilter(st)}
-                                            className={`h-7 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
-                                                selectedStatusFilter === st
-                                                    ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
-                                                    : 'text-slate-500 hover:text-slate-800'
-                                            }`}
-                                        >
-                                            {st}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {/* Filtro de solicitações: Todas, Com Solicitações, Sem Solicitações */}
-                                <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 shrink-0 shadow-2xs" title="Filtrar por movimentação de solicitações">
-                                    {[
-                                        { value: 'Todos', label: 'Todas' },
-                                        { value: 'Com Solicitações', label: 'Com Solicitações' },
-                                        { value: 'Sem Solicitações', label: 'Sem Solicitações' }
-                                    ].map(solicOpt => (
-                                        <button
-                                            key={solicOpt.value}
-                                            type="button"
-                                            onClick={() => setSelectedSolicitacoesFilter(solicOpt.value as any)}
-                                            className={`h-7 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
-                                                selectedSolicitacoesFilter === solicOpt.value
-                                                    ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
-                                                    : 'text-slate-500 hover:text-slate-800'
-                                            }`}
-                                        >
-                                            {solicOpt.label}
-                                        </button>
-                                    ))}
-                                </div>
+                        <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap xl:flex-nowrap pt-0.5 w-full min-w-0">
+                            {/* Campo de pesquisa por nome ou código */}
+                            <div className="relative w-full sm:w-60 md:w-64 lg:w-72 shrink-0">
+                                <input
+                                    type="text"
+                                    placeholder="Buscar exame, consulta ou código..."
+                                    className="w-full h-8.5 sm:h-9 bg-white border border-slate-300/80 rounded-2xl pl-8 sm:pl-9 pr-7 sm:pr-8 text-xs font-semibold placeholder:text-slate-400 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-2xs"
+                                    value={procSearch}
+                                    onChange={(e) => setProcSearch(e.target.value)}
+                                />
+                                <Search className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                                {procSearch && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setProcSearch('')}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-100 cursor-pointer"
+                                        title="Limpar busca"
+                                    >
+                                        <X className="w-3 h-3 text-slate-500" />
+                                    </button>
+                                )}
                             </div>
 
-                            {/* Lado Direito: Ações Administrativas */}
-                            <div className="flex items-center gap-2 shrink-0">
-                                <button
-                                    type="button"
-                                    onClick={() => handleOpenAddEspecialistaModal()}
-                                    className="h-9 px-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-xs hover:shadow-indigo-500/20 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-500/30 whitespace-nowrap"
-                                    title="Vincular profissional especialista a um procedimento principal existente"
-                                >
-                                    <Stethoscope className="w-3.5 h-3.5 text-indigo-200 shrink-0" />
-                                    <span>+ Adicionar Especialista</span>
-                                </button>
+                            {/* Filtro 1 — Tipo de procedimento: Todos, Exame, Consulta, Cirurgia */}
+                            <div className="inline-flex items-center bg-slate-100/90 p-0.5 sm:p-1 rounded-2xl border border-slate-200/80 shrink-0 shadow-2xs">
+                                {(['Todos', 'Exame', 'Consulta', 'Cirurgia'] as const).map(type => (
+                                    <button
+                                        key={type}
+                                        type="button"
+                                        onClick={() => setSelectedTypeFilter(type)}
+                                        className={`h-6.5 sm:h-7 px-2.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
+                                            selectedTypeFilter === type
+                                                ? 'bg-white text-slate-900 shadow-xs font-black'
+                                                : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                    >
+                                        {type}
+                                    </button>
+                                ))}
+                            </div>
 
-                                <button
-                                    type="button"
-                                    onClick={() => handleOpenProcModal()}
-                                    className="h-9 px-4 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-xs hover:shadow-sky-500/15 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
-                                    title="Cadastrar novo procedimento"
-                                >
-                                    <Plus className="w-4 h-4 shrink-0" />
-                                    <span>+ Novo Procedimento</span>
-                                </button>
+                            {/* Filtro 2 — Status: Todos, Ativos, Suspensos */}
+                            <div className="inline-flex items-center bg-slate-100/90 p-0.5 sm:p-1 rounded-2xl border border-slate-200/80 shrink-0 shadow-2xs">
+                                {(['Todos', 'Ativos', 'Suspensos'] as const).map(st => (
+                                    <button
+                                        key={st}
+                                        type="button"
+                                        onClick={() => setSelectedStatusFilter(st)}
+                                        className={`h-6.5 sm:h-7 px-2.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
+                                            selectedStatusFilter === st
+                                                ? 'bg-white text-slate-900 shadow-xs font-black'
+                                                : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                    >
+                                        {st}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Filtro 3 — Solicitações: Todas, Com Solicitações, Sem Solicitações */}
+                            <div className="inline-flex items-center bg-slate-100/90 p-0.5 sm:p-1 rounded-2xl border border-slate-200/80 shrink-0 shadow-2xs" title="Filtrar por movimentação de solicitações">
+                                {[
+                                    { value: 'Todos', label: 'Todas' },
+                                    { value: 'Com Solicitações', label: 'Com Solicitações' },
+                                    { value: 'Sem Solicitações', label: 'Sem Solicitações' }
+                                ].map(solicOpt => (
+                                    <button
+                                        key={solicOpt.value}
+                                        type="button"
+                                        onClick={() => setSelectedSolicitacoesFilter(solicOpt.value as any)}
+                                        className={`h-6.5 sm:h-7 px-2.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
+                                            selectedSolicitacoesFilter === solicOpt.value
+                                                ? 'bg-white text-slate-900 shadow-xs font-black'
+                                                : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                    >
+                                        {solicOpt.label}
+                                    </button>
+                                ))}
                             </div>
                         </div>
                     )}
@@ -1094,90 +1094,88 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                 /* Quando embedded={true}, renderiza Linha 2 de forma compacta e alinhada */
                 !selectedProc && (
                     <div className="p-4 border-b border-slate-100 bg-white shrink-0">
-                        <div className="flex flex-wrap items-center justify-between gap-2.5">
-                            <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
-                                <div className="relative w-60 sm:w-64 md:w-72 shrink-0">
-                                    <input
-                                        type="text"
-                                        placeholder="Buscar exame, consulta ou código..."
-                                        className="w-full h-9 bg-white border border-slate-300 rounded-xl pl-9 pr-8 text-xs font-semibold placeholder:text-slate-400 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-2xs"
-                                        value={procSearch}
-                                        onChange={(e) => setProcSearch(e.target.value)}
-                                    />
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
-                                    {procSearch && (
-                                        <button
-                                            type="button"
-                                            onClick={() => setProcSearch('')}
-                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-100 cursor-pointer"
-                                            title="Limpar busca"
-                                        >
-                                            <X className="w-3.5 h-3.5" />
-                                        </button>
-                                    )}
-                                </div>
-
-                                <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 shrink-0 shadow-2xs">
-                                    {(['Todos', 'Exame', 'Consulta', 'Cirurgia'] as const).map(type => (
-                                        <button
-                                            key={type}
-                                            type="button"
-                                            onClick={() => setSelectedTypeFilter(type)}
-                                            className={`h-7 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
-                                                selectedTypeFilter === type
-                                                    ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
-                                                    : 'text-slate-500 hover:text-slate-800'
-                                            }`}
-                                        >
-                                            {type}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 shrink-0 shadow-2xs">
-                                    {(['Todos', 'Ativos', 'Suspensos'] as const).map(st => (
-                                        <button
-                                            key={st}
-                                            type="button"
-                                            onClick={() => setSelectedStatusFilter(st)}
-                                            className={`h-7 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
-                                                selectedStatusFilter === st
-                                                    ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
-                                                    : 'text-slate-500 hover:text-slate-800'
-                                            }`}
-                                        >
-                                            {st}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 shrink-0 shadow-2xs">
-                                    {[
-                                        { value: 'Todos', label: 'Todas' },
-                                        { value: 'Com Solicitações', label: 'Com Solicitações' },
-                                        { value: 'Sem Solicitações', label: 'Sem Solicitações' }
-                                    ].map(solicOpt => (
-                                        <button
-                                            key={solicOpt.value}
-                                            type="button"
-                                            onClick={() => setSelectedSolicitacoesFilter(solicOpt.value as any)}
-                                            className={`h-7 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
-                                                selectedSolicitacoesFilter === solicOpt.value
-                                                    ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
-                                                    : 'text-slate-500 hover:text-slate-800'
-                                            }`}
-                                        >
-                                            {solicOpt.label}
-                                        </button>
-                                    ))}
-                                </div>
+                        <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap 2xl:flex-nowrap">
+                            <div className="relative w-full sm:w-64 md:w-72 shrink-0">
+                                <input
+                                    type="text"
+                                    placeholder="Buscar exame, consulta ou código..."
+                                    className="w-full h-9 bg-white border border-slate-300/80 rounded-2xl pl-9 pr-8 text-xs font-semibold placeholder:text-slate-400 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-2xs"
+                                    value={procSearch}
+                                    onChange={(e) => setProcSearch(e.target.value)}
+                                />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                                {procSearch && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setProcSearch('')}
+                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-100 cursor-pointer"
+                                        title="Limpar busca"
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
                             </div>
 
-                            <div className="flex items-center gap-2 shrink-0">
+                            <div className="inline-flex items-center bg-slate-100/90 p-1 rounded-2xl border border-slate-200/80 shrink-0 shadow-2xs">
+                                {(['Todos', 'Exame', 'Consulta', 'Cirurgia'] as const).map(type => (
+                                    <button
+                                        key={type}
+                                        type="button"
+                                        onClick={() => setSelectedTypeFilter(type)}
+                                        className={`h-7 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
+                                            selectedTypeFilter === type
+                                                ? 'bg-white text-slate-900 shadow-xs font-black'
+                                                : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                    >
+                                        {type}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="inline-flex items-center bg-slate-100/90 p-1 rounded-2xl border border-slate-200/80 shrink-0 shadow-2xs">
+                                {(['Todos', 'Ativos', 'Suspensos'] as const).map(st => (
+                                    <button
+                                        key={st}
+                                        type="button"
+                                        onClick={() => setSelectedStatusFilter(st)}
+                                        className={`h-7 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
+                                            selectedStatusFilter === st
+                                                ? 'bg-white text-slate-900 shadow-xs font-black'
+                                                : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                    >
+                                        {st}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="inline-flex items-center bg-slate-100/90 p-1 rounded-2xl border border-slate-200/80 shrink-0 shadow-2xs">
+                                {[
+                                    { value: 'Todos', label: 'Todas' },
+                                    { value: 'Com Solicitações', label: 'Com Solicitações' },
+                                    { value: 'Sem Solicitações', label: 'Sem Solicitações' }
+                                ].map(solicOpt => (
+                                    <button
+                                        key={solicOpt.value}
+                                        type="button"
+                                        onClick={() => setSelectedSolicitacoesFilter(solicOpt.value as any)}
+                                        className={`h-7 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
+                                            selectedSolicitacoesFilter === solicOpt.value
+                                                ? 'bg-white text-slate-900 shadow-xs font-black'
+                                                : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                    >
+                                        {solicOpt.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0 ml-auto">
                                 <button
                                     type="button"
                                     onClick={() => handleOpenAddEspecialistaModal()}
-                                    className="h-9 px-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-xs text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-500/30 whitespace-nowrap"
+                                    className="h-9 px-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-black rounded-xl shadow-xs text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-500/30 whitespace-nowrap"
                                 >
                                     <Stethoscope className="w-3.5 h-3.5 text-indigo-200 shrink-0" />
                                     <span>+ Adicionar Especialista</span>
@@ -1185,7 +1183,7 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => handleOpenProcModal()}
-                                    className="h-9 px-4 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-xs text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                                    className="h-9 px-4 bg-sky-600 hover:bg-sky-700 text-white font-black rounded-xl shadow-xs text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                                 >
                                     <Plus className="w-4 h-4 shrink-0" />
                                     <span>+ Novo Procedimento</span>

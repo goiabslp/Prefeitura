@@ -43,6 +43,7 @@ import {
     DUPLICATE_AGENDAMENTO_MESSAGE
 } from '../../services/consultasService';
 import { CadastroIncompletoModal, isPatientComplete } from '../common/CadastroIncompletoModal';
+import { procedureMatchesSearch, sortProcedimentosByRelevance } from '../../utils/procedimentoSearchMatcher';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { ConsultaPdfGenerator } from './ConsultaPdfGenerator';
@@ -1081,65 +1082,47 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         );
     };
 
-    // Filtragem de procedimentos: pesquisa por início de qualquer palavra na descrição ou no código (case-insensitive & accent-insensitive)
-    const normalizeStr = (str: string) => 
-        str ? str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() : '';
-
-    const filteredProcedures = procedures.filter(p => {
-        // Regra Hierárquica de Retorno vs Especialista:
-        // Retorno: SOMENTE procedimentos vinculados a especialistas (procedimento filho com parent_id ou especialista_id)
-        // Não Retorno (Novo Agendamento): SOMENTE procedimentos principais (sem parent_id e sem especialista_id)
-        const isEspecialistaVinculado = !!p.parent_id || !!p.especialista_id;
-        if (atendimentoTipo === 'retorno' && !isEspecialistaVinculado) {
-            return false;
-        }
-        if (atendimentoTipo === 'nao_retorno' && isEspecialistaVinculado) {
-            return false;
-        }
-
-        // Procedimentos suspensos ou inativos não aparecem para novos agendamentos
-        if (p.status !== 'Ativo') {
-            return false;
-        }
-        if (p.parent_id) {
-            const parent = procedures.find(parentProc => parentProc.id === p.parent_id);
-            if (parent && parent.status !== 'Ativo') {
+    // Filtragem e pesquisa inteligente de procedimentos com equivalência entre hífens e preposições (de, do, da, dos, das, com, em)
+    const filteredProcedures = useMemo(() => {
+        const filtered = procedures.filter(p => {
+            // Regra Hierárquica de Retorno vs Especialista:
+            // Retorno: SOMENTE procedimentos vinculados a especialistas (procedimento filho com parent_id ou especialista_id)
+            // Não Retorno (Novo Agendamento): SOMENTE procedimentos principais (sem parent_id e sem especialista_id)
+            const isEspecialistaVinculado = !!p.parent_id || !!p.especialista_id;
+            if (atendimentoTipo === 'retorno' && !isEspecialistaVinculado) {
                 return false;
             }
+            if (atendimentoTipo === 'nao_retorno' && isEspecialistaVinculado) {
+                return false;
+            }
+
+            // Procedimentos suspensos ou inativos não aparecem para novos agendamentos
+            if (p.status !== 'Ativo') {
+                return false;
+            }
+            if (p.parent_id) {
+                const parent = procedures.find(parentProc => parentProc.id === p.parent_id);
+                if (parent && parent.status !== 'Ativo') {
+                    return false;
+                }
+            }
+
+            if (!procedureQuery || !procedureQuery.trim()) return true;
+
+            const formattedLabel = formatProcedimentoLabel(p);
+            return (
+                procedureMatchesSearch(formattedLabel, procedureQuery, p.code) ||
+                procedureMatchesSearch(p.name, procedureQuery, p.code)
+            );
+        });
+
+        if (!procedureQuery || !procedureQuery.trim()) {
+            return filtered;
         }
 
-        const cleanQuery = normalizeStr(procedureQuery);
-        if (!cleanQuery) return true;
-
-        // Separar a busca por termos/palavras
-        const queryTerms = cleanQuery.split(/\s+/).filter(Boolean);
-        if (queryTerms.length === 0) return true;
-
-        // Palavras da descrição do procedimento formatado com especialista
-        const formattedLabel = formatProcedimentoLabel(p);
-        const procNameWords = normalizeStr(formattedLabel).split(/[^a-z0-9]+/).filter(Boolean);
-
-        // Código do procedimento normalizado
-        const rawCode = p.code ? normalizeStr(p.code) : '';
-        const cleanCode = p.code ? p.code.replace(/\D/g, '') : '';
-        const procCodeWords = rawCode ? rawCode.split(/[^a-z0-9]+/).filter(Boolean) : [];
-
-        // Cada termo digitado deve bater com o início de alguma palavra do nome ou do código
-        return queryTerms.every(rawTerm => {
-            let term = rawTerm;
-            if (term.startsWith('ultrassonografi') || term.startsWith('ultrasonografi') || term.startsWith('ultrasom')) {
-                term = 'ultrassom';
-            }
-            const matchesName = procNameWords.some(word => 
-                word.startsWith(term) || 
-                (term === 'ultrassom' && (word.startsWith('ultrasson') || word.startsWith('ultrason') || word.startsWith('ultrasom')))
-            );
-            const matchesCode = rawCode.startsWith(term) || 
-                                cleanCode.startsWith(term) || 
-                                procCodeWords.some(w => w.startsWith(term));
-            return matchesName || matchesCode;
-        });
-    });
+        // Ordenação inteligente por relevância (correspondências exatas e equivalências de preposição no topo)
+        return sortProcedimentosByRelevance(filtered, procedureQuery, p => formatProcedimentoLabel(p));
+    }, [procedures, atendimentoTipo, procedureQuery]);
 
     // Handlers de agendamento e submissão
 

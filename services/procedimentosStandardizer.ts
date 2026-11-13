@@ -245,38 +245,22 @@ export function normalizeProcedureSearchQuery(input: string): string {
     return q;
 }
 
+import { 
+    procedureMatchesSearch as matchInteligente,
+    scoreProcedimentoMatch,
+    normalizeSearchString,
+    tokenizeProcedimento
+} from '../utils/procedimentoSearchMatcher';
+
+export { scoreProcedimentoMatch, normalizeSearchString, tokenizeProcedimento };
+
 /**
  * Verifica se o nome ou código de um procedimento corresponde ao termo pesquisado,
- * aplicando reconhecimento fonético/lexical inteligente de Ultrassom sem fuzzy indiscriminado.
+ * aplicando equivalência de hífens e preposições (de, do, da, dos, das, com, em),
+ * pesquisa por código e preservação da ordem sem confundir procedimentos distintos.
  */
 export function procedureMatchesSearch(procLabelOrName: string, searchQuery: string, procCode?: string): boolean {
-    if (!searchQuery || !searchQuery.trim()) return true;
-
-    const rawTarget = (procLabelOrName || '').toLowerCase();
-    const rawSearch = searchQuery.toLowerCase().trim();
-
-    // Correspondência direta
-    if (rawTarget.includes(rawSearch)) return true;
-    if (procCode && procCode.toLowerCase().includes(rawSearch)) return true;
-
-    // Correspondência via query normalizada
-    const normTarget = normalizeProcedureSearchQuery(rawTarget);
-    const normSearch = normalizeProcedureSearchQuery(rawSearch);
-
-    if (normTarget.includes(normSearch)) return true;
-
-    // Correspondência termo a termo preservando ordem
-    const searchTerms = normSearch.split(/\s+/).filter(Boolean);
-    let lastIdx = 0;
-    for (const term of searchTerms) {
-        const foundIdx = normTarget.indexOf(term, lastIdx);
-        if (foundIdx === -1) {
-            return false;
-        }
-        lastIdx = foundIdx + term.length;
-    }
-
-    return true;
+    return matchInteligente(procLabelOrName, searchQuery, procCode);
 }
 
 /**

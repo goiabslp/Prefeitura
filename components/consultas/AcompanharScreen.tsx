@@ -27,6 +27,7 @@ import { SolicitacoesCancelamentoModal } from './SolicitacoesCancelamentoModal';
 import { TransferSuccessModal } from './TransferSuccessModal';
 import { CancelarAgendamentoModal } from './CancelarAgendamentoModal';
 import { SolicitarExclusaoModal } from './SolicitarExclusaoModal';
+import { procedureMatchesSearch, scoreProcedimentoMatch } from '../../utils/procedimentoSearchMatcher';
 
 const formatPatientName = (patient?: ConsultaPaciente | null) => {
     if (!patient) return '';
@@ -1925,25 +1926,12 @@ function evaluateBookingSearch(
     // CASO 4: Busca Textual (Nome de Procedimento, Paciente, Especialidade, Prestador)
     // =========================================================================
 
-    // A) Procedimento / Exame / Especialidade (ex: "ressonância", "neurologia", "ultrassom", "artro")
-    if (procLabelNorm) {
-        let targetQuery = queryNorm;
-        if (targetQuery.startsWith('ultrassonografi') || targetQuery.startsWith('ultrasonografi') || targetQuery.startsWith('ultrasom')) {
-            targetQuery = 'ultrassom';
-        }
-        if (procLabelNorm === targetQuery) return 0.01;
-        if (procLabelNorm.startsWith(targetQuery)) return 0.05;
-        if (procLabelNorm.includes(targetQuery)) return 0.1;
-
-        const words = queryNorm.split(/\s+/).filter(Boolean);
-        if (words.length > 1 && words.every(w => {
-            let nw = w;
-            if (nw.startsWith('ultrassonografi') || nw.startsWith('ultrasonografi') || nw.startsWith('ultrasom')) {
-                nw = 'ultrassom';
-            }
-            return procLabelNorm.includes(nw);
-        })) {
-            return 0.15;
+    // A) Procedimento / Exame / Especialidade (com equivalência de hífens e preposições de, do, da, dos, das, com)
+    if (procLabel || procName) {
+        const pScore = scoreProcedimentoMatch(procLabel || procName, rawQuery, procCode);
+        if (pScore > 0) {
+            // Mapeia score alto (500 a 1000) para prioridade de exibição (0.005 a 0.15)
+            return Math.max(0.005, (1050 - pScore) / 4000);
         }
     }
 
@@ -5147,8 +5135,8 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                             }
                                             const matchesType = transferTypeFilter === 'TODOS' || p.type === transferTypeFilter;
                                             const matchesSearch = !transferSearchProc.trim() || 
-                                                formatProcedimentoLabel(p).toLowerCase().includes(transferSearchProc.toLowerCase()) || 
-                                                (p.code && p.code.toLowerCase().includes(transferSearchProc.toLowerCase()));
+                                                procedureMatchesSearch(formatProcedimentoLabel(p), transferSearchProc, p.code) || 
+                                                procedureMatchesSearch(p.name, transferSearchProc, p.code);
                                             return matchesType && matchesSearch;
                                         }).length} procedimentos disponíveis
                                     </span>
@@ -5211,8 +5199,8 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                             }
                                             const matchesType = transferTypeFilter === 'TODOS' || p.type === transferTypeFilter;
                                             const matchesSearch = !transferSearchProc.trim() || 
-                                                formatProcedimentoLabel(p).toLowerCase().includes(transferSearchProc.toLowerCase()) || 
-                                                (p.code && p.code.toLowerCase().includes(transferSearchProc.toLowerCase()));
+                                                procedureMatchesSearch(formatProcedimentoLabel(p), transferSearchProc, p.code) || 
+                                                procedureMatchesSearch(p.name, transferSearchProc, p.code);
                                             return matchesType && matchesSearch;
                                         })
                                         .map(proc => {

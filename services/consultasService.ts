@@ -21,6 +21,7 @@ import {
     isSuspiciousPhone,
     getPhoneInconsistencyReason
 } from '../utils/phoneValidation';
+import { generateSupabaseProcedureSearchPatterns } from '../utils/procedimentoSearchMatcher';
 import {
     getActiveGlobalModuleSettings,
     getActivePermissionUser,
@@ -2934,16 +2935,20 @@ export const searchRemoteAgendamentos = async (
         const queryClean = raw.replace(/[%_]/g, '');
         const queryNoAccent = queryClean.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-        // A) Busca em Procedimentos (por código ou nome, com e sem acentos)
-        let procOr = [`name.ilike.%${queryClean}%`, `code.ilike.%${queryClean}%`];
+        // A) Busca em Procedimentos (por código ou nome, com equivalência inteligente de hífen e preposições)
+        const sqlPatterns = generateSupabaseProcedureSearchPatterns(raw);
+        let procOr: string[] = [`code.ilike.%${queryClean}%`];
+        for (const pat of sqlPatterns) {
+            procOr.push(`name.ilike.${pat}`);
+        }
         if (queryNoAccent.toLowerCase() !== queryClean.toLowerCase()) {
-            procOr.push(`name.ilike.%${queryNoAccent}%`, `code.ilike.%${queryNoAccent}%`);
+            procOr.push(`code.ilike.%${queryNoAccent}%`);
         }
         let procQuery = supabase
             .from('consultas_procedimentos')
             .select('id')
             .or(procOr.join(','))
-            .limit(40);
+            .limit(50);
         if (options?.signal) procQuery = procQuery.abortSignal(options.signal);
         const { data: procs } = await procQuery;
         const procIds = procs && procs.length > 0 ? procs.map(p => p.id) : [];
