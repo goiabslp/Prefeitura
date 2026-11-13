@@ -39,7 +39,8 @@ export const ConfirmarAcaoAtendimentoModal: React.FC<ConfirmarAcaoAtendimentoMod
     if (!isOpen || !booking) return null;
 
     const isRealizado = situacao === 'Realizado';
-    const userName = (currentUser.name || 'Servidor').trim();
+    const rawName = (currentUser.name || 'Servidor').trim();
+    const firstName = rawName.split(/\s+/)[0] || 'Servidor';
     const pacienteNome = booking.paciente?.name || 'Paciente';
     const procedimentoNome = formatProcedimentoLabel(booking.procedimento) || booking.procedimento?.name || 'Procedimento';
 
@@ -66,8 +67,8 @@ export const ConfirmarAcaoAtendimentoModal: React.FC<ConfirmarAcaoAtendimentoMod
         setErrorMessage(null);
 
         const declaracaoContato = isRealizado
-            ? `Olá, ${userName}! Você entrou em contato com o paciente ${pacienteNome} e confirmou que ele realmente realizou o procedimento ${procedimentoNome}? [CONFIRMADO PELO OPERADOR EM ${new Date().toLocaleString('pt-BR')}]`
-            : `Olá, ${userName}! Você entrou em contato com o paciente ${pacienteNome} e confirmou que ele realmente não compareceu ao procedimento ${procedimentoNome}? [CONFIRMADO PELO OPERADOR EM ${new Date().toLocaleString('pt-BR')}]`;
+            ? `Olá, ${firstName}! Você entrou em contato com o paciente ${pacienteNome} e confirmou que ele realmente realizou o procedimento ${procedimentoNome}? [CONFIRMADO PELO OPERADOR ${rawName} EM ${new Date().toLocaleString('pt-BR')}]`
+            : `Olá, ${firstName}! Você entrou em contato com o paciente ${pacienteNome} e confirmou que ele realmente não compareceu ao procedimento ${procedimentoNome}? [CONFIRMADO PELO OPERADOR ${rawName} EM ${new Date().toLocaleString('pt-BR')}]`;
 
         try {
             await onConfirm({
@@ -138,21 +139,23 @@ export const ConfirmarAcaoAtendimentoModal: React.FC<ConfirmarAcaoAtendimentoMod
 
                 {/* 2. Corpo do Modal (Compacto, sem rolagem interna em telas normais) */}
                 <div className="p-5 sm:p-6 flex flex-col gap-4">
-                    {/* Mensagem Personalizada Obrigatória */}
+                    {/* Mensagem Personalizada com Primeiro Nome e Quebra de Linha */}
                     <div className={`p-4 rounded-2xl border ${
                         isRealizado 
                             ? 'bg-emerald-50/70 border-emerald-200/80 text-emerald-950' 
                             : 'bg-rose-50/70 border-rose-200/80 text-rose-950'
                     }`}>
+                        <p className="text-xs sm:text-sm font-semibold leading-relaxed mb-2.5">
+                            Olá, <strong className="font-black text-slate-950">{firstName}</strong>!
+                        </p>
                         <p className="text-xs sm:text-sm font-semibold leading-relaxed">
-                            Olá, <strong className="font-black underline decoration-2">{userName}</strong>!<br />
                             {isRealizado ? (
                                 <>
-                                    Você entrou em contato com o paciente <strong className="font-black">{pacienteNome}</strong> e confirmou que ele realmente realizou o procedimento <strong className="font-black">{procedimentoNome}</strong>?
+                                    Você entrou em contato com o paciente <strong className="font-black text-slate-950">{pacienteNome}</strong> e confirmou que ele realmente realizou o procedimento <strong className="font-black text-slate-950">{procedimentoNome}</strong>?
                                 </>
                             ) : (
                                 <>
-                                    Você entrou em contato com o paciente <strong className="font-black">{pacienteNome}</strong> e confirmou que ele realmente não compareceu ao procedimento <strong className="font-black">{procedimentoNome}</strong>?
+                                    Você entrou em contato com o paciente <strong className="font-black text-slate-950">{pacienteNome}</strong> e confirmou que ele realmente não compareceu ao procedimento <strong className="font-black text-slate-950">{procedimentoNome}</strong>?
                                 </>
                             )}
                         </p>
