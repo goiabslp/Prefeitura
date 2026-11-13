@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { User, ConsultaPaciente, ConsultaAgendamento, ConsultaProcedimento, AppState, ConsultaVaga, ConsultaSolicitacaoCancelamento } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Copy, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users, UserCheck, Building2, ShieldCheck, ShieldAlert, FileText, Phone, MapPin, Lock, ArrowRightLeft, PauseCircle, PlayCircle, Pause, Play, Eye, CheckSquare, CheckCheck, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Copy, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users, UserCheck, Building2, ShieldCheck, ShieldAlert, FileText, Phone, MapPin, Lock, ArrowRightLeft, PauseCircle, PlayCircle, Pause, Play, Eye, CheckSquare, CheckCheck, AlertTriangle, Undo2 } from 'lucide-react';
 import * as db from '../../services/consultasService';
-import { formatProcedimentoLabel, BatchOperationResult } from '../../services/consultasService';
+import { formatProcedimentoLabel, BatchOperationResult, TransferRecord } from '../../services/consultasService';
 import { isConsultasAcompanharReadOnly, hasConsultasAcompanharOperationalAccess } from '../../services/permissionService';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { useAgentesSaude } from '../../services/agentesSaudeService';
@@ -24,6 +24,7 @@ import {
     BatchResultSummaryModal
 } from './BatchActionsModals';
 import { SolicitacoesCancelamentoModal } from './SolicitacoesCancelamentoModal';
+import { UndoTransferModal } from './UndoTransferModal';
 
 const formatPatientName = (patient?: ConsultaPaciente | null) => {
     if (!patient) return '';
@@ -479,6 +480,8 @@ interface AgendamentoCardProps {
     isSelectionMode?: boolean;
     isSelected?: boolean;
     onToggleSelect?: (bookingId: string) => void;
+    transferRecord?: TransferRecord | null;
+    onOpenUndoModal?: (record: TransferRecord, bookingId: string) => void;
 }
 
 const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
@@ -517,7 +520,9 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
     solicitacaoPendente = null,
     isSelectionMode = false,
     isSelected = false,
-    onToggleSelect
+    onToggleSelect,
+    transferRecord = null,
+    onOpenUndoModal
 }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const [isCopiedCode, setIsCopiedCode] = useState(false);
@@ -1079,6 +1084,16 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                             <ArrowRightLeft className="w-3.5 h-3.5" />
                                         </button>
                                     )}
+                                    {transferRecord && !isReadOnly && onOpenUndoModal && (
+                                        <button
+                                            type="button"
+                                            onClick={() => onOpenUndoModal(transferRecord, booking.id)}
+                                            className="w-8 h-8 rounded-xl bg-amber-50 hover:bg-amber-500 border border-amber-300 text-amber-700 hover:text-white flex items-center justify-center transition-all shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer"
+                                            title={`Desfazer Transferência (Restaurar para ${transferRecord.sourceProcedimento.code ? transferRecord.sourceProcedimento.code + ' - ' : ''}${transferRecord.sourceProcedimento.name})`}
+                                        >
+                                            <Undo2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
                                     <button
                                         type="button"
                                         onClick={() => onAgentInfo(booking)}
@@ -1315,6 +1330,53 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                             </div>
                                         ))}
                                     </div>
+                                </div>
+                            )}
+
+                            {/* Histórico Permanente de Transferência de Procedimento e Ação Desfazer */}
+                            {transferRecord && (
+                                <div className="col-span-2 wide:w-full bg-gradient-to-r from-blue-50/90 via-indigo-50/50 to-white p-3.5 sm:p-4 rounded-2xl border border-blue-200 text-blue-950 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                                    <div className="flex items-start sm:items-center gap-3">
+                                        <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                                            <ArrowRightLeft className="w-4 h-4" />
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="text-[10px] font-black uppercase tracking-wider text-blue-700">
+                                                    Histórico de Transferência de Procedimento
+                                                </span>
+                                                <span className="text-[9.5px] px-2 py-0.5 rounded-md font-extrabold bg-blue-100 text-blue-900 border border-blue-200">
+                                                    Agendamento Preservado
+                                                </span>
+                                            </div>
+                                            <div className="text-xs sm:text-sm font-black text-slate-800 mt-1 flex items-center gap-1.5 flex-wrap">
+                                                <span>Origem:</span>
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-100/80 text-blue-900 text-xs font-black border border-blue-300">
+                                                    {transferRecord.sourceProcedimento.code ? `${transferRecord.sourceProcedimento.code} - ` : ''}{transferRecord.sourceProcedimento.name}
+                                                </span>
+                                                <span className="text-blue-500 font-bold">➔</span>
+                                                <span>Destino Atual:</span>
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-800 text-xs font-black border border-slate-300">
+                                                    {transferRecord.targetProcedimento.code ? `${transferRecord.targetProcedimento.code} - ` : ''}{transferRecord.targetProcedimento.name}
+                                                </span>
+                                            </div>
+                                            <span className="text-[11px] text-slate-500 block mt-1">
+                                                Transferido em {new Date(transferRecord.timestamp).toLocaleString('pt-BR')} por <strong>{transferRecord.userName}</strong>
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {!isReadOnly && onOpenUndoModal && (
+                                        <button
+                                            type="button"
+                                            onClick={() => onOpenUndoModal(transferRecord, booking.id)}
+                                            className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-amber-500 text-amber-800 hover:text-white font-black text-xs uppercase tracking-wider border border-amber-300 transition-all shadow-xs active:scale-95 cursor-pointer"
+                                            title="Desfazer e Restaurar Procedimento Original"
+                                        >
+                                            <Undo2 className="w-3.5 h-3.5" />
+                                            Desfazer Transferência
+                                        </button>
+                                    )}
                                 </div>
                             )}
 
@@ -2083,6 +2145,52 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [isTransferring, setIsTransferring] = useState(false);
     const [transferSuccessToast, setTransferSuccessToast] = useState<string | null>(null);
 
+    // ==================== HISTÓRICO E DESFAZER TRANSFERÊNCIAS ====================
+    const [transferHistory, setTransferHistory] = useState<TransferRecord[]>([]);
+    const [activeTransferBanner, setActiveTransferBanner] = useState<TransferRecord | null>(null);
+    const [undoModalRecord, setUndoModalRecord] = useState<TransferRecord | null>(null);
+    const [undoModalBookingId, setUndoModalBookingId] = useState<string | undefined>(undefined);
+    const [isUndoModalOpen, setIsUndoModalOpen] = useState(false);
+    const [isRevertingTransfer, setIsRevertingTransfer] = useState(false);
+
+    const loadTransferHistory = () => {
+        try {
+            const hist = db.getTransferHistory();
+            setTransferHistory(hist);
+            // Se ainda não houver banner ativo, e existir transferência ativa recente não revertida, exibe-a
+            const latestActive = hist.find(r => !r.reverted);
+            if (latestActive) {
+                setActiveTransferBanner(latestActive);
+            }
+        } catch (e) {
+            console.warn('Erro ao carregar histórico de transferências:', e);
+        }
+    };
+
+    useEffect(() => {
+        loadTransferHistory();
+        const handleTransferRecorded = () => {
+            loadTransferHistory();
+        };
+        window.addEventListener('consultas-transfer-recorded', handleTransferRecorded);
+        return () => {
+            window.removeEventListener('consultas-transfer-recorded', handleTransferRecorded);
+        };
+    }, []);
+
+    const transferRecordByBookingId = useMemo(() => {
+        const map = new Map<string, TransferRecord>();
+        for (const record of transferHistory) {
+            if (record.reverted) continue;
+            for (const b of record.bookings) {
+                if (!b.reverted && !map.has(b.bookingId)) {
+                    map.set(b.bookingId, record);
+                }
+            }
+        }
+        return map;
+    }, [transferHistory]);
+
     // ==================== ESTADOS DE SELEÇÃO MÚLTIPLA E AÇÕES EM LOTE ====================
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [selectedBookingIds, setSelectedBookingIds] = useState<Set<string>>(new Set());
@@ -2832,23 +2940,68 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         try {
             // REGRA OBRIGATÓRIA: A transferência altera EXCLUSIVAMENTE o procedimento vinculado,
             // preservando integralmente todas as demais informações (data, horário, local, prestador, status, prioridade e histórico).
-            await db.transferAgendamentoProcedimento(transferTarget.id, transferSelectedProcId, currentUser);
+            const updated = await db.transferAgendamentoProcedimento(transferTarget.id, transferSelectedProcId, currentUser);
 
-            // Toast de sucesso
+            // Toast de sucesso e ativação do Banner pós-transferência com botão DESFAZER
             const patientName = transferTarget.paciente?.name || 'Paciente';
             setTransferSuccessToast(`Solicitação de ${patientName} transferida com sucesso para ${formatProcedimentoLabel(newProc)}! Todos os dados do agendamento foram preservados.`);
             setTimeout(() => {
                 setTransferSuccessToast(null);
-            }, 4500);
+            }, 6000);
+
+            const rec = (updated as any)?.transferRecord || db.getTransferRecordForBooking(transferTarget.id);
+            if (rec) {
+                setActiveTransferBanner(rec);
+            }
 
             setIsTransferModalOpen(false);
             setTransferTarget(null);
+            loadTransferHistory();
             await loadData(true);
         } catch (err: any) {
             console.error('Erro ao transferir procedimento:', err);
             setTransferError(err.message || 'Ocorreu um erro ao transferir a solicitação.');
         } finally {
             setIsTransferring(false);
+        }
+    };
+
+    // ==================== CONTROLES DE REVERSÃO / DESFAZER TRANSFERÊNCIA ====================
+    const handleOpenUndoModal = (record: TransferRecord, bookingId?: string) => {
+        if (isReadOnly) return;
+        setUndoModalRecord(record);
+        setUndoModalBookingId(bookingId);
+        setIsUndoModalOpen(true);
+    };
+
+    const handleConfirmUndoTransfer = async (record: TransferRecord, bookingId?: string) => {
+        setIsRevertingTransfer(true);
+        try {
+            const res = await db.revertTransfer({
+                transferRecord: record,
+                bookingId,
+                currentUser
+            });
+
+            if (res.success) {
+                setTransferSuccessToast(res.message);
+                setTimeout(() => setTransferSuccessToast(null), 5000);
+                setIsUndoModalOpen(false);
+                setUndoModalRecord(null);
+                setUndoModalBookingId(undefined);
+                if (activeTransferBanner?.id === record.id) {
+                    setActiveTransferBanner(null);
+                }
+                loadTransferHistory();
+                await loadData(true);
+            } else {
+                alert(res.message);
+            }
+        } catch (err: any) {
+            console.error('Erro ao desfazer transferência:', err);
+            alert(err.message || 'Erro ao desfazer transferência.');
+        } finally {
+            setIsRevertingTransfer(false);
         }
     };
 
@@ -3153,7 +3306,11 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 title: 'Transferência em Lote Concluída',
                 result
             });
+            if (result.transferRecord) {
+                setActiveTransferBanner(result.transferRecord);
+            }
             setSelectedBookingIds(new Set());
+            loadTransferHistory();
             await loadData(true);
         } catch (err: any) {
             console.error('Erro na transferência em lote:', err);
@@ -3782,6 +3939,64 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     </div>
                 ) : filteredAndSortedBookings.length > 0 ? (
                     <div className="space-y-3 w-full pb-6">
+                        {/* Banner Pós-Transferência com Botão DESFAZER TRANSFERÊNCIA */}
+                        {activeTransferBanner && !activeTransferBanner.reverted && (
+                            <div className="p-4 sm:p-5 bg-gradient-to-r from-emerald-500/10 via-teal-50/60 to-white border-2 border-emerald-300 rounded-3xl shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                <div className="flex items-start sm:items-center gap-3.5">
+                                    <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-600/25">
+                                        <CheckCircle2 className="w-6 h-6" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <h4 className="text-sm sm:text-base font-black text-emerald-950 uppercase tracking-tight">
+                                                Transferência realizada com sucesso!
+                                            </h4>
+                                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-black uppercase tracking-wider">
+                                                Agendamento Preservado
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-slate-700 font-medium">
+                                            Procedimento alterado de{' '}
+                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-100/80 text-blue-900 font-black border border-blue-200">
+                                                {activeTransferBanner.sourceProcedimento.code ? `${activeTransferBanner.sourceProcedimento.code} - ` : ''}{activeTransferBanner.sourceProcedimento.name}
+                                            </span>{' '}
+                                            para{' '}
+                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-indigo-100/80 text-indigo-900 font-black border border-indigo-200">
+                                                {activeTransferBanner.targetProcedimento.code ? `${activeTransferBanner.targetProcedimento.code} - ` : ''}{activeTransferBanner.targetProcedimento.name}
+                                            </span>.
+                                            {activeTransferBanner.bookings.length > 1 && (
+                                                <span className="ml-1 text-slate-500 font-bold">
+                                                    ({activeTransferBanner.bookings.length} solicitações)
+                                                </span>
+                                            )}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-2.5 w-full md:w-auto justify-end shrink-0">
+                                    {!isReadOnly && (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleOpenUndoModal(activeTransferBanner)}
+                                            className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-amber-500/25 cursor-pointer"
+                                            title="Desfazer Transferência e Restaurar ao Procedimento de Origem"
+                                        >
+                                            <Undo2 className="w-4 h-4" />
+                                            Desfazer Transferência
+                                        </button>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveTransferBanner(null)}
+                                        className="p-2 hover:bg-slate-200/80 text-slate-400 hover:text-slate-700 rounded-xl transition-colors cursor-pointer"
+                                        title="Dispensar aviso"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Banner Informativo do Modo de Seleção Ativo */}
                         {isSelectionMode && (
                             <div className="p-3 sm:px-4 sm:py-2.5 bg-gradient-to-r from-indigo-50/95 via-purple-50/40 to-white border border-indigo-200/90 rounded-2xl flex flex-wrap items-center justify-between gap-2.5 shadow-2xs text-xs animate-in fade-in duration-200">
@@ -3865,6 +4080,8 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                     isSelectionMode={isSelectionMode}
                                     isSelected={selectedBookingIds.has(booking.id)}
                                     onToggleSelect={handleToggleSelect}
+                                    transferRecord={transferRecordByBookingId.get(booking.id) || null}
+                                    onOpenUndoModal={!isReadOnly ? handleOpenUndoModal : undefined}
                                 />
                             );
                         })}
@@ -5509,6 +5726,22 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     }}
                 />
             )}
+
+            {/* Modal de Confirmação para Desfazer Transferência */}
+            <UndoTransferModal
+                isOpen={isUndoModalOpen}
+                onClose={() => {
+                    if (!isRevertingTransfer) {
+                        setIsUndoModalOpen(false);
+                        setUndoModalRecord(null);
+                        setUndoModalBookingId(undefined);
+                    }
+                }}
+                transferRecord={undoModalRecord}
+                targetBookingId={undoModalBookingId}
+                onConfirmUndo={handleConfirmUndoTransfer}
+                isReverting={isRevertingTransfer}
+            />
         </div>
     );
 };

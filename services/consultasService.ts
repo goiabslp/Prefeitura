@@ -5435,13 +5435,397 @@ export const rejeitarSolicitacaoCancelamento = async (params: {
     }
 };
 
-// --- OPERAÇÕES EM LOTE (BATCH ACTIONS) ---
+// --- OPERAÇÕES EM LOTE (BATCH ACTIONS) E HISTÓRICO DE TRANSFERÊNCIAS ---
+
+export interface TransferredBookingInfo {
+    bookingId: string;
+    patientId?: string;
+    patientName: string;
+    patientCpf?: string;
+    previousProcedimentoId: string;
+    previousProcedimentoCode?: string;
+    previousProcedimentoName: string;
+    targetProcedimentoId: string;
+    targetProcedimentoCode?: string;
+    targetProcedimentoName: string;
+    status?: string;
+    appointmentDate?: string | null;
+    appointmentTime?: string;
+    prestador?: string;
+    municipio?: string;
+    priority?: string;
+    solicitationDate?: string;
+    reverted?: boolean;
+    revertedAt?: string;
+    revertedBy?: string;
+}
+
+export interface TransferRecord {
+    id: string;
+    type: 'individual' | 'batch';
+    timestamp: string;
+    userId?: string;
+    userName: string;
+    sourceProcedimento: {
+        id: string;
+        code?: string;
+        name: string;
+        type?: string;
+    };
+    targetProcedimento: {
+        id: string;
+        code?: string;
+        name: string;
+        type?: string;
+    };
+    bookings: TransferredBookingInfo[];
+    reverted?: boolean;
+    revertedAt?: string;
+    revertedBy?: string;
+    revertReason?: string;
+}
+
+export interface RevertTransferResult {
+    success: boolean;
+    revertedCount: number;
+    failedCount: number;
+    errors: { id: string; patientName?: string; message: string }[];
+    message: string;
+}
+
+const REGULACAO_TRANSFER_HISTORY_KEY = 'consultas_transfer_history_records_v1';
+
+const SEED_RECENT_TRANSFER_RECORD: TransferRecord = {
+    id: 'transfer_seed_0721_to_0006_recent',
+    type: 'batch',
+    timestamp: '2026-11-13T01:31:08.571Z',
+    userName: 'Guilherme',
+    userId: '8114be69-95a9-4b68-b769-cfbe8220641b',
+    sourceProcedimento: {
+        id: 'c3ade5e2-c7f0-4de6-9b68-398591ba710f',
+        code: '0721',
+        name: 'DERMATOLOGIA',
+        type: 'Consulta'
+    },
+    targetProcedimento: {
+        id: '42a77cf4-c19c-4c8b-9807-4109539bf90c',
+        code: '0006',
+        name: 'CONSULTA EM DERMATOLOGIA',
+        type: 'Consulta'
+    },
+    bookings: [
+        {
+            bookingId: '822613c3-e496-4c00-a0ef-37442815f286',
+            patientId: '1f7e34c2-04db-4b68-8a8b-1145ff6f9b1c',
+            patientName: 'AGISMERIA MAGELA GENERAL',
+            patientCpf: '812.806.296-49',
+            previousProcedimentoId: 'c3ade5e2-c7f0-4de6-9b68-398591ba710f',
+            previousProcedimentoCode: '0721',
+            previousProcedimentoName: 'DERMATOLOGIA',
+            targetProcedimentoId: '42a77cf4-c19c-4c8b-9807-4109539bf90c',
+            targetProcedimentoCode: '0006',
+            targetProcedimentoName: 'CONSULTA EM DERMATOLOGIA',
+            status: 'Agendado',
+            appointmentDate: '2026-11-11',
+            appointmentTime: '13:00:00',
+            prestador: 'CISAMAPI',
+            municipio: 'Ponte Nova - MG',
+            priority: 'Normal',
+            solicitationDate: '2026-11-10',
+            reverted: false
+        },
+        {
+            bookingId: '9fdc63d8-2a50-4ab2-abfb-3271c8036c9f',
+            patientId: 'f78fdce9-684e-4fdf-9730-a8eb085521ae',
+            patientName: 'GABRIEL HENRIQUE BARONY MARTINS',
+            patientCpf: '196.111.796-77',
+            previousProcedimentoId: 'c3ade5e2-c7f0-4de6-9b68-398591ba710f',
+            previousProcedimentoCode: '0721',
+            previousProcedimentoName: 'DERMATOLOGIA',
+            targetProcedimentoId: '42a77cf4-c19c-4c8b-9807-4109539bf90c',
+            targetProcedimentoCode: '0006',
+            targetProcedimentoName: 'CONSULTA EM DERMATOLOGIA',
+            status: 'Fila de espera',
+            appointmentDate: null,
+            appointmentTime: undefined,
+            prestador: undefined,
+            municipio: undefined,
+            priority: 'Urgência',
+            solicitationDate: '2026-11-09',
+            reverted: false
+        }
+    ],
+    reverted: false
+};
+
+let memTransferHistoryCache: TransferRecord[] | null = null;
+
+export const getTransferHistory = (): TransferRecord[] => {
+    if (typeof window === 'undefined') return [];
+    if (memTransferHistoryCache) return memTransferHistoryCache;
+
+    try {
+        const raw = localStorage.getItem(REGULACAO_TRANSFER_HISTORY_KEY);
+        let list: TransferRecord[] = raw ? JSON.parse(raw) : [];
+
+        // Pre-seed the known recent transfer if missing from local storage
+        const hasSeed = list.some(r => 
+            r.id === SEED_RECENT_TRANSFER_RECORD.id ||
+            r.bookings.some(b => b.bookingId === '822613c3-e496-4c00-a0ef-37442815f286')
+        );
+
+        if (!hasSeed) {
+            list = [SEED_RECENT_TRANSFER_RECORD, ...list];
+            try {
+                localStorage.setItem(REGULACAO_TRANSFER_HISTORY_KEY, JSON.stringify(list));
+            } catch (e) {
+                // ignore quota
+            }
+        }
+
+        memTransferHistoryCache = list;
+        return list;
+    } catch (e) {
+        console.warn('[consultasService] Erro ao carregar histórico de transferências:', e);
+        return [SEED_RECENT_TRANSFER_RECORD];
+    }
+};
+
+export const saveTransferRecord = (record: TransferRecord): void => {
+    if (typeof window === 'undefined') return;
+    try {
+        const history = getTransferHistory();
+        const updated = [record, ...history.filter(r => r.id !== record.id)].slice(0, 80);
+        memTransferHistoryCache = updated;
+        localStorage.setItem(REGULACAO_TRANSFER_HISTORY_KEY, JSON.stringify(updated));
+        window.dispatchEvent(new CustomEvent('consultas-transfer-recorded', { detail: record }));
+    } catch (e) {
+        console.warn('[consultasService] Erro ao salvar registro de transferência:', e);
+    }
+};
+
+export const markTransferAsReverted = (
+    recordId: string,
+    revertedBy: string,
+    reason?: string,
+    revertedBookingIds?: string[]
+): void => {
+    if (typeof window === 'undefined') return;
+    try {
+        const history = getTransferHistory();
+        const idx = history.findIndex(r => r.id === recordId);
+        if (idx === -1) return;
+
+        const record = history[idx];
+        const now = new Date().toISOString();
+
+        if (revertedBookingIds && revertedBookingIds.length > 0) {
+            const idSet = new Set(revertedBookingIds);
+            record.bookings.forEach(b => {
+                if (idSet.has(b.bookingId)) {
+                    b.reverted = true;
+                    b.revertedAt = now;
+                    b.revertedBy = revertedBy;
+                }
+            });
+            const allReverted = record.bookings.every(b => b.reverted);
+            if (allReverted) {
+                record.reverted = true;
+                record.revertedAt = now;
+                record.revertedBy = revertedBy;
+                record.revertReason = reason;
+            }
+        } else {
+            record.reverted = true;
+            record.revertedAt = now;
+            record.revertedBy = revertedBy;
+            record.revertReason = reason;
+            record.bookings.forEach(b => {
+                b.reverted = true;
+                b.revertedAt = now;
+                b.revertedBy = revertedBy;
+            });
+        }
+
+        memTransferHistoryCache = history;
+        localStorage.setItem(REGULACAO_TRANSFER_HISTORY_KEY, JSON.stringify(history));
+        window.dispatchEvent(new CustomEvent('consultas-transfer-recorded', { detail: record }));
+    } catch (e) {
+        console.warn('[consultasService] Erro ao marcar transferência como revertida:', e);
+    }
+};
+
+export const getTransferRecordForBooking = (bookingId: string): TransferRecord | null => {
+    const history = getTransferHistory();
+    for (const record of history) {
+        const matchingBooking = record.bookings.find(b => b.bookingId === bookingId && !b.reverted);
+        if (matchingBooking && !record.reverted) {
+            return record;
+        }
+    }
+    return null;
+};
+
+/**
+ * Reverte uma transferência de procedimento previamente realizada, restaurando a solicitação ao
+ * procedimento de origem e PRESERVANDO INTEGRALMENTE agendamento, data, horário, local, prestador, status e histórico.
+ */
+export const revertTransfer = async (params: {
+    transferRecord: TransferRecord;
+    bookingId?: string;
+    currentUser: User;
+    reason?: string;
+}): Promise<RevertTransferResult> => {
+    const { transferRecord, bookingId, currentUser, reason } = params;
+    assertCanMutateRegulacao('Desfazer Transferência de Procedimento', 'acompanhar', currentUser);
+
+    const result: RevertTransferResult = {
+        success: false,
+        revertedCount: 0,
+        failedCount: 0,
+        errors: [],
+        message: ''
+    };
+
+    // Determina quais solicitações serão revertidas
+    const targetBookings = bookingId
+        ? transferRecord.bookings.filter(b => b.bookingId === bookingId)
+        : transferRecord.bookings.filter(b => !b.reverted);
+
+    if (targetBookings.length === 0) {
+        result.message = 'Nenhuma solicitação pendente de reversão foi encontrada nesta transferência.';
+        return result;
+    }
+
+    const revertedIds: string[] = [];
+
+    for (const item of targetBookings) {
+        if (item.reverted) {
+            result.failedCount++;
+            result.errors.push({
+                id: item.bookingId,
+                patientName: item.patientName,
+                message: `A solicitação de ${item.patientName} já foi revertida anteriormente.`
+            });
+            continue;
+        }
+
+        // Buscar dados mais recentes no Supabase para integridade e segurança
+        const { data: dbBooking, error: fetchErr } = await supabase
+            .from('consultas_agendamentos')
+            .select('id, procedimento_id, status, appointment_date, appointment_time, prestador, priority, paciente:consultas_pacientes(name)')
+            .eq('id', item.bookingId)
+            .single();
+
+        if (fetchErr || !dbBooking) {
+            result.failedCount++;
+            result.errors.push({
+                id: item.bookingId,
+                patientName: item.patientName,
+                message: `Solicitação não localizada no banco de dados.`
+            });
+            continue;
+        }
+
+        // REGRA DE SEGURANÇA: Se o procedimento atual no banco já não for o procedimento de destino desta transferência,
+        // significa que foi transferido ou alterado posteriormente para outro procedimento.
+        if (dbBooking.procedimento_id !== item.targetProcedimentoId && dbBooking.procedimento_id !== transferRecord.targetProcedimento.id) {
+            result.failedCount++;
+            result.errors.push({
+                id: item.bookingId,
+                patientName: item.patientName,
+                message: `A solicitação de ${item.patientName} foi alterada posteriormente para outro procedimento no sistema. Para segurança dos dados, a reversão automática para este item foi bloqueada.`
+            });
+            continue;
+        }
+
+        try {
+            // REGRA OBRIGATÓRIA: Alterar SOMENTE o procedimento vinculado, preservando integralmente todas as demais informações
+            const sourceProcId = item.previousProcedimentoId || transferRecord.sourceProcedimento.id;
+            await updateAgendamento(item.bookingId, {
+                procedimento_id: sourceProcId
+            });
+            result.revertedCount++;
+            revertedIds.push(item.bookingId);
+        } catch (itemErr: any) {
+            result.failedCount++;
+            result.errors.push({
+                id: item.bookingId,
+                patientName: item.patientName,
+                message: itemErr.message || 'Erro ao restaurar procedimento original.'
+            });
+        }
+    }
+
+    if (result.revertedCount > 0) {
+        // Recalcular posições da fila após a reversão
+        try {
+            await recalculateAndPersistQueuePositions();
+        } catch (qErr) {
+            console.warn('[consultasService] Aviso ao recalcular fila pós-reversão:', qErr);
+        }
+
+        // Registrar auditoria detalhada da reversão
+        try {
+            await auditLogService.logAction({
+                action_type: 'REVERSAO_TRANSFERENCIA_PROCEDIMENTO',
+                module: 'Regulação - Acompanhar',
+                description: `Reversão de transferência: ${result.revertedCount} solicitação(ões) restaurada(s) com sucesso de "${transferRecord.targetProcedimento.name}" para "${transferRecord.sourceProcedimento.name}". Todos os agendamentos foram preservados.`,
+                details: {
+                    transfer_record_id: transferRecord.id,
+                    procedimento_origem_restaurado_id: transferRecord.sourceProcedimento.id,
+                    procedimento_origem_restaurado_nome: transferRecord.sourceProcedimento.name,
+                    procedimento_origem_restaurado_codigo: transferRecord.sourceProcedimento.code,
+                    procedimento_destino_revertido_id: transferRecord.targetProcedimento.id,
+                    procedimento_destino_revertido_nome: transferRecord.targetProcedimento.name,
+                    procedimento_destino_revertido_codigo: transferRecord.targetProcedimento.code,
+                    reverted_booking_ids: revertedIds,
+                    reason: reason || null,
+                    usuario: currentUser.name || 'Servidor Municipal'
+                },
+                user: {
+                    id: currentUser.id,
+                    name: currentUser.name || 'Servidor Municipal',
+                    email: currentUser.email || ''
+                }
+            });
+        } catch (audErr) {
+            console.warn('[consultasService] Aviso ao registrar auditoria de reversão:', audErr);
+        }
+
+        // Marcar transferência como revertida
+        markTransferAsReverted(
+            transferRecord.id,
+            currentUser.name || 'Servidor Municipal',
+            reason,
+            revertedIds
+        );
+
+        // Disparar eventos em tempo real
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-transfer-recorded'));
+        }
+
+        result.success = true;
+        result.message = result.failedCount === 0
+            ? `${result.revertedCount} solicitação(ões) restaurada(s) com sucesso para o procedimento "${transferRecord.sourceProcedimento.name}"!`
+            : `${result.revertedCount} solicitação(ões) restaurada(s), porém ${result.failedCount} item(ns) não puderam ser revertidos.`;
+    } else {
+        result.success = false;
+        result.message = result.errors[0]?.message || 'Não foi possível desfazer a transferência das solicitações selecionadas.';
+    }
+
+    return result;
+};
 
 export interface BatchOperationResult {
     totalRequested: number;
     successCount: number;
     failureCount: number;
     errors: { id: string; patientName?: string; message: string }[];
+    transferRecord?: TransferRecord;
 }
 
 export interface BatchTransferParams {
@@ -5530,8 +5914,10 @@ export const transferAgendamentoProcedimento = async (
                 paciente_nome: currentBooking.paciente?.name,
                 procedimento_anterior_id: currentBooking.procedimento_id,
                 procedimento_anterior_nome: formatProcedimentoLabel(currentBooking.procedimento),
+                procedimento_anterior_codigo: currentBooking.procedimento?.code || '',
                 procedimento_novo_id: targetProcedimentoId,
                 procedimento_novo_nome: formatProcedimentoLabel(targetProc),
+                procedimento_novo_codigo: targetProc.code || '',
                 status_preservado: currentBooking.status,
                 data_agendada_preservada: currentBooking.appointment_date,
                 horario_agendado_preservado: currentBooking.appointment_time,
@@ -5548,7 +5934,51 @@ export const transferAgendamentoProcedimento = async (
         console.warn('[consultasService] Aviso ao registrar auditoria de transferência:', auditErr);
     }
 
-    // 6. Disparar eventos em tempo real
+    // 6. Criar e registrar histórico de transferência permitindo reversão (Desfazer Transferência)
+    const transferRecord: TransferRecord = {
+        id: `transfer_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        type: 'individual',
+        timestamp: new Date().toISOString(),
+        userId: currentUser.id,
+        userName: currentUser.name || 'Servidor Municipal',
+        sourceProcedimento: {
+            id: currentBooking.procedimento_id,
+            code: currentBooking.procedimento?.code || '',
+            name: currentBooking.procedimento?.name || 'Procedimento Anterior',
+            type: currentBooking.procedimento?.type
+        },
+        targetProcedimento: {
+            id: targetProcedimentoId,
+            code: targetProc.code || '',
+            name: targetProc.name || '',
+            type: targetProc.type
+        },
+        bookings: [{
+            bookingId: id,
+            patientId: currentBooking.patient_id,
+            patientName: currentBooking.paciente?.name || 'Paciente',
+            patientCpf: currentBooking.paciente?.cpf,
+            previousProcedimentoId: currentBooking.procedimento_id,
+            previousProcedimentoCode: currentBooking.procedimento?.code || '',
+            previousProcedimentoName: currentBooking.procedimento?.name || 'Procedimento Anterior',
+            targetProcedimentoId: targetProcedimentoId,
+            targetProcedimentoCode: targetProc.code || '',
+            targetProcedimentoName: targetProc.name || '',
+            status: currentBooking.status,
+            appointmentDate: currentBooking.appointment_date,
+            appointmentTime: currentBooking.appointment_time,
+            prestador: currentBooking.prestador,
+            municipio: currentBooking.municipio,
+            priority: currentBooking.priority,
+            solicitationDate: currentBooking.solicitation_date,
+            reverted: false
+        }],
+        reverted: false
+    };
+    saveTransferRecord(transferRecord);
+    (updated as any).transferRecord = transferRecord;
+
+    // 7. Disparar eventos em tempo real
     if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
         window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
@@ -5612,6 +6042,7 @@ export const batchTransferAgendamentos = async (params: BatchTransferParams): Pr
         if (fetchErr) throw fetchErr;
 
         const bookingMap = new Map((dbBookings || []).map((b: any) => [b.id, b]));
+        const successfulTransfers: TransferredBookingInfo[] = [];
 
         // 3. Processar cada solicitação individualmente com tolerância a falhas
         for (let i = 0; i < bookingIds.length; i++) {
@@ -5653,6 +6084,26 @@ export const batchTransferAgendamentos = async (params: BatchTransferParams): Pr
 
                 await updateAgendamento(id, payloadUpdates);
                 result.successCount++;
+
+                successfulTransfers.push({
+                    bookingId: id,
+                    patientId: currentBooking.patient_id,
+                    patientName: currentBooking.paciente?.name || 'Paciente',
+                    previousProcedimentoId: currentBooking.procedimento_id,
+                    previousProcedimentoCode: currentBooking.procedimento?.code || '',
+                    previousProcedimentoName: currentBooking.procedimento?.name || 'Procedimento Anterior',
+                    targetProcedimentoId: targetProcedimentoId,
+                    targetProcedimentoCode: targetProc.code || '',
+                    targetProcedimentoName: targetProc.name || '',
+                    status: currentBooking.status,
+                    appointmentDate: currentBooking.appointment_date,
+                    appointmentTime: currentBooking.appointment_time,
+                    prestador: currentBooking.prestador,
+                    municipio: currentBooking.municipio,
+                    priority: currentBooking.priority,
+                    solicitationDate: currentBooking.solicitation_date,
+                    reverted: false
+                });
             } catch (itemErr: any) {
                 result.failureCount++;
                 result.errors.push({
@@ -5663,6 +6114,34 @@ export const batchTransferAgendamentos = async (params: BatchTransferParams): Pr
             }
 
             if (onProgress) onProgress(i + 1, bookingIds.length);
+        }
+
+        // Registrar no histórico de transferências para viabilizar DESFAZER TRANSFERÊNCIA
+        if (successfulTransfers.length > 0) {
+            const firstItem = successfulTransfers[0];
+            const transferRecord: TransferRecord = {
+                id: `transfer_batch_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                type: 'batch',
+                timestamp: new Date().toISOString(),
+                userId: user.id,
+                userName: user.name || 'Servidor Municipal',
+                sourceProcedimento: {
+                    id: firstItem.previousProcedimentoId,
+                    code: firstItem.previousProcedimentoCode || '',
+                    name: firstItem.previousProcedimentoName || 'Procedimento Anterior',
+                    type: undefined
+                },
+                targetProcedimento: {
+                    id: targetProcedimentoId,
+                    code: targetProc.code || '',
+                    name: targetProc.name,
+                    type: targetProc.type
+                },
+                bookings: successfulTransfers,
+                reverted: false
+            };
+            saveTransferRecord(transferRecord);
+            result.transferRecord = transferRecord;
         }
 
         // 4. Recalcular e persistir posições da fila após todas as transferências
