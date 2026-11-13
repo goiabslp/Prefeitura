@@ -5,6 +5,8 @@ export interface ProcedimentosHierarchyFilters {
     search: string;
     typeFilter: 'Todos' | 'Exame' | 'Consulta' | 'Cirurgia';
     statusFilter: 'Todos' | 'Ativos' | 'Suspensos';
+    solicitacoesFilter?: 'Todos' | 'Com Solicitações' | 'Sem Solicitações';
+    solicitacoesCounts?: Record<string, number>;
 }
 
 export interface ProcedimentosHierarchyResult {
@@ -25,6 +27,7 @@ export interface ProcedimentosHierarchyResult {
         visibleRootsCount: number;
         groupedChildrenCount: number;
         totalRegisteredCount: number;
+        totalSolicitacoesCount: number;
     };
 }
 
@@ -266,6 +269,23 @@ export const buildProcedimentosHierarchy = (
             return false;
         }
 
+        // Filtro Adicional: Com Solicitações vs. Sem Solicitações
+        if (filters.solicitacoesFilter && filters.solicitacoesFilter !== 'Todos' && filters.solicitacoesCounts) {
+            const rootDirect = (filters.solicitacoesCounts[root.id] || 0) + (root.code && root.code !== root.id ? (filters.solicitacoesCounts[root.code] || 0) : 0);
+            const childrenTotal = children.reduce((sum, c) => {
+                const cCount = (filters.solicitacoesCounts?.[c.id] || 0) + (c.code && c.code !== c.id ? (filters.solicitacoesCounts?.[c.code] || 0) : 0);
+                return sum + cCount;
+            }, 0);
+            const groupTotal = rootDirect + childrenTotal;
+
+            if (filters.solicitacoesFilter === 'Com Solicitações' && groupTotal === 0) {
+                return false;
+            }
+            if (filters.solicitacoesFilter === 'Sem Solicitações' && groupTotal > 0) {
+                return false;
+            }
+        }
+
         if (cleanSearch) {
             const rootEspNome = resolveEspecialistaNome(root, especialistasMap);
             const rootMatches =
@@ -294,6 +314,17 @@ export const buildProcedimentosHierarchy = (
         groupedChildrenCount += list.length;
     });
 
+    let totalSolicitacoesCount = 0;
+    if (filters.solicitacoesCounts) {
+        const countedIds = new Set<string>();
+        procedures.forEach(p => {
+            if (!countedIds.has(p.id)) {
+                countedIds.add(p.id);
+                totalSolicitacoesCount += (filters.solicitacoesCounts?.[p.id] || 0);
+            }
+        });
+    }
+
     return {
         parents: filteredParents,
         allParents: strictParents,
@@ -305,7 +336,8 @@ export const buildProcedimentosHierarchy = (
             orphanCount: orphanRootIds.size,
             visibleRootsCount: allVisibleRoots.length,
             groupedChildrenCount,
-            totalRegisteredCount: procedures.length
+            totalRegisteredCount: procedures.length,
+            totalSolicitacoesCount
         }
     };
 };

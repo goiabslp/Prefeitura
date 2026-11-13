@@ -5454,6 +5454,109 @@ export interface BatchTransferParams {
     onProgress?: (current: number, total: number) => void;
 }
 
+/**
+ * Transfere uma solicitação para outro procedimento, alterando EXCLUSIVAMENTE o procedimento vinculado,
+ * preservando integralmente todas as demais informações do agendamento (data, horário, local, prestador, status, etc.).
+ * Funciona para qualquer status (Fila de espera, Agendado, Confirmado, Realizado, Cancelado, etc.).
+ */
+export const transferAgendamentoProcedimento = async (
+    id: string,
+    targetProcedimentoId: string,
+    currentUser: User
+): Promise<ConsultaAgendamento> => {
+    assertCanMutateRegulacao('Transferir Procedimento da Solicitação', 'acompanhar', currentUser);
+
+    // 1. Buscar dados atuais da solicitação
+    const { data: currentBooking, error: fetchErr } = await supabase
+        .from('consultas_agendamentos')
+        .select(`
+            *,
+            paciente:consultas_pacientes(*),
+            procedimento:consultas_procedimentos(
+                *,
+                especialista:consultas_especialistas(*)
+            )
+        `)
+        .eq('id', id)
+        .single();
+
+    if (fetchErr || !currentBooking) {
+        throw new Error('Solicitação de agendamento não encontrada.');
+    }
+
+    if (currentBooking.procedimento_id === targetProcedimentoId) {
+        throw new Error('O procedimento selecionado é o mesmo atual. Escolha um procedimento diferente.');
+    }
+
+    // 2. Buscar procedimento de destino
+    const { data: targetProc, error: procErr } = await supabase
+        .from('consultas_procedimentos')
+        .select(`
+            *,
+            especialista:consultas_especialistas(*)
+        `)
+        .eq('id', targetProcedimentoId)
+        .single();
+
+    if (procErr || !targetProc) {
+        throw new Error('Procedimento de destino não encontrado.');
+    }
+
+    // 3. Atualizar EXCLUSIVAMENTE o procedimento_id preservando data, hora, local, prestador, status, etc.
+    const updated = await updateAgendamento(id, {
+        procedimento_id: targetProcedimentoId
+    });
+
+    if (!updated) {
+        throw new Error('Falha ao atualizar o procedimento da solicitação.');
+    }
+
+    // 4. Recalcular e persistir posições da fila
+    try {
+        await recalculateAndPersistQueuePositions();
+    } catch (queueErr) {
+        console.warn('[consultasService] Aviso ao recalcular fila após transferência:', queueErr);
+    }
+
+    // 5. Registrar log de auditoria detalhado
+    try {
+        await auditLogService.logAction({
+            action_type: 'TRANSFERENCIA_PROCEDIMENTO',
+            module: 'Regulação - Acompanhar',
+            description: `Procedimento da solicitação do paciente ${currentBooking.paciente?.name || 'N/A'} transferido de "${formatProcedimentoLabel(currentBooking.procedimento)}" para "${formatProcedimentoLabel(targetProc)}". Todos os dados de agendamento foram integralmente preservados.`,
+            details: {
+                agendamento_id: id,
+                paciente_id: currentBooking.patient_id,
+                paciente_nome: currentBooking.paciente?.name,
+                procedimento_anterior_id: currentBooking.procedimento_id,
+                procedimento_anterior_nome: formatProcedimentoLabel(currentBooking.procedimento),
+                procedimento_novo_id: targetProcedimentoId,
+                procedimento_novo_nome: formatProcedimentoLabel(targetProc),
+                status_preservado: currentBooking.status,
+                data_agendada_preservada: currentBooking.appointment_date,
+                horario_agendado_preservado: currentBooking.appointment_time,
+                prestador_preservado: currentBooking.prestador,
+                municipio_preservado: currentBooking.municipio
+            },
+            user: {
+                id: currentUser.id,
+                name: currentUser.name || 'Servidor Municipal',
+                email: currentUser.email || ''
+            }
+        });
+    } catch (auditErr) {
+        console.warn('[consultasService] Aviso ao registrar auditoria de transferência:', auditErr);
+    }
+
+    // 6. Disparar eventos em tempo real
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+        window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+    }
+
+    return updated;
+};
+
 export const batchTransferAgendamentos = async (params: BatchTransferParams): Promise<BatchOperationResult> => {
     assertCanMutateRegulacao('Transferir Agendamentos em Lote', 'acompanhar');
     const {
@@ -5534,36 +5637,19 @@ export const batchTransferAgendamentos = async (params: BatchTransferParams): Pr
                 continue;
             }
 
-            if (currentBooking.status === 'Cancelado') {
-                result.failureCount++;
-                result.errors.push({
-                    id,
-                    patientName: currentBooking.paciente?.name,
-                    message: 'Solicitações canceladas não podem ser transferidas.'
-                });
-                if (onProgress) onProgress(i + 1, bookingIds.length);
-                continue;
-            }
-
             try {
-                const willResetToWaitlist = currentBooking.status === 'Agendado' || currentBooking.status === 'Realizado';
-                const newStatus: ConsultaAgendamento['status'] = willResetToWaitlist ? 'Fila de espera' : (currentBooking.status || 'Fila de espera');
-
+                // REGRA ATUALIZADA: A transferência altera EXCLUSIVAMENTE o procedimento vinculado,
+                // mantendo integralmente data, horário, local, prestador, status e histórico do agendamento.
                 const payloadUpdates: Partial<ConsultaAgendamento> = {
-                    procedimento_id: targetProcedimentoId,
-                    status: newStatus,
-                    appointment_date: willResetToWaitlist ? null : (currentBooking.appointment_date || null),
-                    appointment_time: willResetToWaitlist ? null : (currentBooking.appointment_time || null),
-                    tipo_atendimento: willResetToWaitlist ? null : (currentBooking.tipo_atendimento || null),
-                    prestador: willResetToWaitlist ? null : (currentBooking.prestador || null),
-                    municipio: willResetToWaitlist ? null : (currentBooking.municipio || null),
-                    convenio: willResetToWaitlist ? null : (currentBooking.convenio || null),
-                    vaga_id: willResetToWaitlist ? null : (currentBooking.vaga_id || null),
-                    solicitation_date: preserveSolicitationDate
-                        ? (currentBooking.solicitation_date || (currentBooking.created_at ? currentBooking.created_at.split('T')[0] : new Date().toISOString().split('T')[0]))
-                        : new Date().toISOString().split('T')[0],
-                    priority: preservePriority ? (currentBooking.priority || 'Normal') : 'Normal'
+                    procedimento_id: targetProcedimentoId
                 };
+
+                if (!preserveSolicitationDate) {
+                    payloadUpdates.solicitation_date = new Date().toISOString().split('T')[0];
+                }
+                if (!preservePriority) {
+                    payloadUpdates.priority = 'Normal';
+                }
 
                 await updateAgendamento(id, payloadUpdates);
                 result.successCount++;
@@ -5586,7 +5672,7 @@ export const batchTransferAgendamentos = async (params: BatchTransferParams): Pr
         await auditLogService.logAction({
             action_type: 'BATCH_TRANSFER_AGENDAMENTOS',
             module: 'Regulação - Acompanhar',
-            description: `Transferência em lote de ${result.successCount} solicitação(ões) para o procedimento "${targetProc.name}".`,
+            description: `Transferência em lote de ${result.successCount} solicitação(ões) para o procedimento "${targetProc.name}". Todos os dados de agendamento foram integralmente preservados.`,
             details: {
                 target_procedimento_id: targetProcedimentoId,
                 target_procedimento_name: targetProc.name,
@@ -5923,3 +6009,60 @@ export const batchPauseResumeAgendamentos = async (params: BatchPauseResumeParam
         throw err;
     }
 };
+
+/**
+ * Retorna a contagem agregada de solicitações por procedimento no Supabase (/Regulacao/Acompanhar).
+ * - Considera todos os status (fila de espera, agendado, realizado, faltou, cancelado, etc.).
+ * - Elimina duplicidades por id de solicitação.
+ * - Busca de alto desempenho sem limite de 1000 registros (paginação automática em blocos).
+ * - Retorna um mapa indexado por ID/código de procedimento com o total exato de solicitações.
+ */
+export const getProcedimentoSolicitacoesCounts = async (): Promise<Record<string, number>> => {
+    try {
+        const CHUNK_SIZE = 1000;
+        let from = 0;
+        let hasMore = true;
+        const counts: Record<string, number> = {};
+        const seenIds = new Set<string>();
+
+        while (hasMore) {
+            const { data, error } = await supabase
+                .from('consultas_agendamentos')
+                .select('id, procedimento_id')
+                .range(from, from + CHUNK_SIZE - 1);
+
+            if (error) {
+                console.error('[consultasService] Erro ao buscar contagem de solicitações:', error);
+                break;
+            }
+
+            if (!data || data.length === 0) {
+                hasMore = false;
+                break;
+            }
+
+            for (const item of data) {
+                if (!item || !item.id) continue;
+                if (seenIds.has(item.id)) continue;
+                seenIds.add(item.id);
+
+                const procId = item.procedimento_id;
+                if (procId) {
+                    counts[procId] = (counts[procId] || 0) + 1;
+                }
+            }
+
+            if (data.length < CHUNK_SIZE) {
+                hasMore = false;
+            } else {
+                from += CHUNK_SIZE;
+            }
+        }
+
+        return counts;
+    } catch (err) {
+        console.error('[consultasService] Erro geral ao obter contagem de solicitações por procedimento:', err);
+        return {};
+    }
+};
+

@@ -56,9 +56,11 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
     // Procedures & Especialistas Data & Filter States
     const [procedures, setProcedures] = useState<ConsultaProcedimento[]>([]);
     const [especialistas, setEspecialistas] = useState<ConsultaEspecialista[]>([]);
+    const [solicitacoesCounts, setSolicitacoesCounts] = useState<Record<string, number>>({});
     const [procSearch, setProcSearch] = useState('');
     const [selectedTypeFilter, setSelectedTypeFilter] = useState<'Todos' | 'Exame' | 'Consulta' | 'Cirurgia'>('Todos');
     const [selectedStatusFilter, setSelectedStatusFilter] = useState<'Todos' | 'Ativos' | 'Suspensos'>('Todos');
+    const [selectedSolicitacoesFilter, setSelectedSolicitacoesFilter] = useState<'Todos' | 'Com Solicitações' | 'Sem Solicitações'>('Todos');
 
     // Procedure Modal State (Create / Edit)
     const [isProcModalOpen, setIsProcModalOpen] = useState(false);
@@ -285,18 +287,20 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
         return assignments;
     }, [vagas, procBookings]);
 
-    // Load all procedures & especialistas
+    // Load all procedures & especialistas & contagem de solicitações agregada
     const fetchProcedures = async () => {
         setLoading(true);
         try {
-            const [procsData, espsData] = await Promise.all([
+            const [procsData, espsData, countsData] = await Promise.all([
                 db.getProcedimentos(),
-                db.getEspecialistas()
+                db.getEspecialistas(),
+                db.getProcedimentoSolicitacoesCounts()
             ]);
             setProcedures(procsData || []);
             setEspecialistas(espsData || []);
+            setSolicitacoesCounts(countsData || {});
         } catch (error) {
-            console.error('Erro ao carregar procedimentos:', error);
+            console.error('Erro ao carregar procedimentos e contagens de solicitações:', error);
             showToast('Erro ao carregar lista de procedimentos.', 'error');
         } finally {
             setLoading(false);
@@ -306,16 +310,18 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
     const reloadVagas = async () => {
         if (!selectedProc) return;
         try {
-            const [vagasData, bookingsData, procData, espsData] = await Promise.all([
+            const [vagasData, bookingsData, procData, espsData, countsData] = await Promise.all([
                 db.getVagas(selectedProc.id),
                 db.getAgendamentos({ procedimentoId: selectedProc.id }),
                 db.getProcedimentos(),
-                db.getEspecialistas()
+                db.getEspecialistas(),
+                db.getProcedimentoSolicitacoesCounts()
             ]);
             setVagas(vagasData);
             setProcBookings(bookingsData);
             setProcedures(procData);
             setEspecialistas(espsData || []);
+            setSolicitacoesCounts(countsData || {});
 
             const updated = procData.find(p => p.id === selectedProc.id);
             if (updated) {
@@ -408,9 +414,11 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
         return buildProcedimentosHierarchy(procedures, especialistas, {
             search: procSearch,
             typeFilter: selectedTypeFilter,
-            statusFilter: selectedStatusFilter
+            statusFilter: selectedStatusFilter,
+            solicitacoesFilter: selectedSolicitacoesFilter,
+            solicitacoesCounts
         });
-    }, [procedures, especialistas, procSearch, selectedTypeFilter, selectedStatusFilter]);
+    }, [procedures, especialistas, procSearch, selectedTypeFilter, selectedStatusFilter, selectedSolicitacoesFilter, solicitacoesCounts]);
 
     // Métricas resumidas cobrindo todos os cards visíveis na raiz e o total cadastrado no banco
     const metrics = useMemo(() => {
@@ -424,6 +432,7 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
             ativos,
             suspensos,
             totalCotas,
+            totalSolicitacoes: hierarchicalProcedures.counts.totalSolicitacoesCount,
             ...hierarchicalProcedures.counts
         };
     }, [procedures, hierarchicalProcedures]);
@@ -792,6 +801,10 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                             <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700">Cotas</span>
                             <span className="text-xs font-black text-indigo-800">{metrics.totalCotas}</span>
                         </div>
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-xl shadow-xs" title="Total de solicitações vinculadas em todos os procedimentos">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-blue-700">Solicitações</span>
+                            <span className="text-xs font-black text-blue-800">{metrics.totalSolicitacoes}</span>
+                        </div>
                     </div>
                 </div>
             )}
@@ -879,6 +892,10 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                                 }`}>
                                                     {selectedProc.status === 'Ativo' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
                                                     {selectedProc.status === 'Ativo' ? 'Ativo' : 'Suspenso / Inativo'}
+                                                </span>
+                                                <span className="px-2.5 py-0.5 rounded-lg text-[9.5px] font-black uppercase tracking-wider inline-flex items-center gap-1 bg-blue-50 text-blue-800 border border-blue-200 shadow-2xs">
+                                                    <Users className="w-3 h-3 text-blue-600" />
+                                                    <span>Solicitações: {(solicitacoesCounts[selectedProc.id] || 0) + (selectedProc.code && selectedProc.code !== selectedProc.id ? (solicitacoesCounts[selectedProc.code] || 0) : 0)}</span>
                                                 </span>
                                             </div>
                                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Gestão de Vagas por Horário e Agendamentos</p>
@@ -1126,6 +1143,23 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                         </button>
                                     ))}
                                 </div>
+
+                                {/* Solicitações filter pills */}
+                                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto shrink-0 max-w-full" title="Filtrar por movimentação de solicitações">
+                                    {(['Todos', 'Com Solicitações', 'Sem Solicitações'] as const).map(solicOpt => (
+                                        <button
+                                            key={solicOpt}
+                                            onClick={() => setSelectedSolicitacoesFilter(solicOpt)}
+                                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                                                selectedSolicitacoesFilter === solicOpt
+                                                    ? 'bg-white text-slate-900 shadow-2xs'
+                                                    : 'text-slate-500 hover:text-slate-800'
+                                            }`}
+                                        >
+                                            {solicOpt === 'Todos' ? 'Todas Solicitações' : solicOpt}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
 
                             {/* Action Buttons - 100% responsivos dentro do viewport */}
@@ -1187,6 +1221,12 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                         : null;
                                     const rootEspNome = rootEspObj?.nome || (parent.especialista_id ? 'Especialista Vinculado' : '');
 
+                                    // Contagens de solicitações reais
+                                    const parentDirectCount = (solicitacoesCounts[parent.id] || 0) + (parent.code && parent.code !== parent.id ? (solicitacoesCounts[parent.code] || 0) : 0);
+                                    const groupTotalCount = parentDirectCount + children.reduce((sum, c) => {
+                                        return sum + (solicitacoesCounts[c.id] || 0) + (c.code && c.code !== c.id ? (solicitacoesCounts[c.code] || 0) : 0);
+                                    }, 0);
+
                                     const typeConfig = (() => {
                                         switch (parent.type) {
                                             case 'Exame':
@@ -1243,6 +1283,34 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                                             <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider ${typeConfig.badgeClass} border`}>
                                                                 {parent.type}
                                                             </span>
+
+                                                            {/* Badge: Contador de Solicitações do Procedimento Pai */}
+                                                            <span 
+                                                                className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider inline-flex items-center gap-1 border shadow-2xs transition-all ${
+                                                                    parentDirectCount > 0
+                                                                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                                                        : 'bg-slate-100 text-slate-500 border-slate-200'
+                                                                }`}
+                                                                title={`Total de solicitações vinculadas diretamente a este código: ${parentDirectCount}`}
+                                                            >
+                                                                <Users className="w-2.5 h-2.5 shrink-0" />
+                                                                <span>Solicitações: {parentDirectCount}</span>
+                                                            </span>
+
+                                                            {/* Badge: Total do Grupo (quando possuir especialistas vinculados) */}
+                                                            {children.length > 0 && (
+                                                                <span 
+                                                                    className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider inline-flex items-center gap-1 border shadow-2xs transition-all ${
+                                                                        groupTotalCount > 0
+                                                                            ? 'bg-violet-50 text-violet-700 border-violet-200'
+                                                                            : 'bg-slate-100 text-slate-500 border-slate-200'
+                                                                    }`}
+                                                                    title={`Total do grupo (Procedimento Pai ${parent.code || ''} + ${children.length} especialista${children.length > 1 ? 's' : ''}): ${groupTotalCount} solicitações`}
+                                                                >
+                                                                    <Layers className="w-2.5 h-2.5 shrink-0" />
+                                                                    <span>Total Grupo: {groupTotalCount}</span>
+                                                                </span>
+                                                            )}
 
                                                             {/* Badge Procedimento Principal vs. Especialista Vinculado sem Pai */}
                                                             {isOrphanSpecialist ? (
@@ -1412,9 +1480,18 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                             {/* Sub-lista Hierárquica: Especialistas Vinculados (Filhos) */}
                                             {children.length > 0 && isExpanded && (
                                                 <div className="bg-slate-50/70 border-t border-slate-200/70 px-4 py-3 pl-8 sm:pl-12 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                                                    <div className="flex items-center justify-between pb-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                                                        <span>Especialistas Vinculados a este Procedimento ({children.length})</span>
-                                                        <span className="text-[9px] text-slate-400">Códigos derivados de {parent.code}</span>
+                                                    <div className="flex flex-wrap items-center justify-between pb-1.5 border-b border-slate-200/70 gap-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <Stethoscope className="w-3.5 h-3.5 text-indigo-600" />
+                                                            Especialistas Vinculados a este Procedimento ({children.length})
+                                                        </span>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-[9px] text-slate-400">Códigos derivados de {parent.code}</span>
+                                                            <span className="px-2.5 py-0.5 rounded-lg bg-violet-50 text-violet-900 border border-violet-200 text-[9.5px] font-black inline-flex items-center gap-1 shadow-2xs">
+                                                                <Layers className="w-3 h-3 text-violet-600" />
+                                                                <span>Total do grupo: {groupTotalCount} solicitações</span>
+                                                            </span>
+                                                        </div>
                                                     </div>
 
                                                     <div className="space-y-1.5">
@@ -1422,6 +1499,7 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                                             const isChildSuspended = child.status !== 'Ativo';
                                                             const espObj = child.especialista || especialistas.find(e => e.id === child.especialista_id);
                                                             const espNome = espObj?.nome || 'Especialista';
+                                                            const childDirectCount = (solicitacoesCounts[child.id] || 0) + (child.code && child.code !== child.id ? (solicitacoesCounts[child.code] || 0) : 0);
 
                                                             return (
                                                                 <div 
@@ -1442,6 +1520,20 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                                                                 <span className="px-2 py-0.5 rounded-md text-[9px] font-black tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">
                                                                                     {child.code || '----'}
                                                                                 </span>
+
+                                                                                {/* Badge de Solicitações do Filho */}
+                                                                                <span 
+                                                                                    className={`px-2 py-0.5 rounded-md text-[9px] font-black tracking-wider inline-flex items-center gap-1 border shadow-2xs transition-all ${
+                                                                                        childDirectCount > 0
+                                                                                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                                                                            : 'bg-slate-100 text-slate-500 border-slate-200'
+                                                                                    }`}
+                                                                                    title={`Solicitações vinculadas a este especialista (${child.code || ''}): ${childDirectCount}`}
+                                                                                >
+                                                                                    <Users className="w-2.5 h-2.5 shrink-0" />
+                                                                                    <span>Solicitações: {childDirectCount}</span>
+                                                                                </span>
+
                                                                                 <span className="text-[8.5px] font-bold uppercase tracking-wider text-slate-400">
                                                                                     Especialista Vinculado
                                                                                 </span>

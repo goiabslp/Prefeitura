@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { 
     X, ArrowRightLeft, XCircle, Trash2, Sparkles, PauseCircle, PlayCircle, 
-    AlertTriangle, CheckCircle2, Loader2, Search, Filter, ShieldAlert, Check
+    AlertTriangle, CheckCircle2, Loader2, Search, Filter, ShieldAlert, ShieldCheck, Check
 } from 'lucide-react';
 import { ConsultaAgendamento, ConsultaProcedimento, User } from '../../types';
 import { formatProcedimentoLabel } from '../../services/consultasService';
@@ -37,8 +37,6 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
     const [targetProcId, setTargetProcId] = useState('');
     const [searchProc, setSearchProc] = useState('');
     const [typeFilter, setTypeFilter] = useState<'TODOS' | 'Consulta' | 'Exame' | 'Cirurgia'>('TODOS');
-    const [preserveDate, setPreserveDate] = useState(true);
-    const [preservePriority, setPreservePriority] = useState(true);
     const [reason, setReason] = useState('');
     const [error, setError] = useState('');
 
@@ -65,10 +63,11 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
         }
 
         try {
+            // REGRA OBRIGATÓRIA: Preservação automática de data original, prioridade, status e agendamento
             await onConfirmTransfer({
                 targetProcedimentoId: targetProcId,
-                preserveSolicitationDate: preserveDate,
-                preservePriority: preservePriority,
+                preserveSolicitationDate: true,
+                preservePriority: true,
                 reason: reason.trim()
             });
         } catch (err: any) {
@@ -164,6 +163,17 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
                                     </span>
                                 </div>
                             ))}
+                        </div>
+                    </div>
+
+                    {/* Garantia de Preservação Individual de Agendamentos */}
+                    <div className="p-3 bg-indigo-50/70 border border-indigo-200/80 rounded-2xl flex items-start gap-2.5 text-indigo-900 text-xs shadow-2xs">
+                        <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                        <div className="space-y-0.5">
+                            <span className="font-extrabold uppercase text-[10.5px] block text-indigo-950">Preservação Individual Garantida:</span>
+                            <p className="text-[11px] leading-relaxed text-indigo-900 font-semibold">
+                                A transferência altera <strong>exclusivamente o procedimento vinculado</strong>. Cada solicitação preservará individualmente seu status (inclusive agendadas, confirmadas ou canceladas), além de data, horário, local e especialista existentes.
+                            </p>
                         </div>
                     </div>
 

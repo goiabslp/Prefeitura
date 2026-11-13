@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { User, ConsultaPaciente, ConsultaAgendamento, ConsultaProcedimento, AppState, ConsultaVaga, ConsultaSolicitacaoCancelamento } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Copy, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users, UserCheck, Building2, ShieldCheck, ShieldAlert, FileText, Phone, MapPin, Lock, ArrowRightLeft, PauseCircle, PlayCircle, Pause, Play, Eye, CheckSquare, CheckCheck } from 'lucide-react';
+import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Copy, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users, UserCheck, Building2, ShieldCheck, ShieldAlert, FileText, Phone, MapPin, Lock, ArrowRightLeft, PauseCircle, PlayCircle, Pause, Play, Eye, CheckSquare, CheckCheck, AlertTriangle } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { formatProcedimentoLabel, BatchOperationResult } from '../../services/consultasService';
 import { isConsultasAcompanharReadOnly, hasConsultasAcompanharOperationalAccess } from '../../services/permissionService';
@@ -581,11 +581,8 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
     const canCompleteThis = !isReadOnly && (canComplete || (!isGestorOrAdmin && isAppointmentPassed));
 
     // 2. Transferir Procedimento:
-    //    - Administradores e Gestores podem transferir
-    //    - Usuários comuns: ocultado após a data da consulta OU quando o status for "Agendado"
-    const canTransferThis = Boolean(!isReadOnly && onTransfer && canEdit && (
-        isGestorOrAdmin || (!isAppointmentPassed && booking.status !== 'Agendado')
-    ));
+    //    Permitir a transferência de qualquer solicitação para outro procedimento, independentemente do status atual
+    const canTransferThis = Boolean(!isReadOnly && onTransfer && canEdit);
 
     // 3. Cancelar:
     //    - Administradores e Gestores podem cancelar
@@ -2833,40 +2830,13 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         setTransferError('');
 
         try {
-            // Se o agendamento original já estava confirmado/agendado ou realizado,
-            // ao transferir de procedimento ele deve retornar à fila de espera do novo procedimento,
-            // limpando data e horário para que a nova equipe possa agendar na nova agenda médica.
-            const willResetToWaitlist = transferTarget.status === 'Agendado' || transferTarget.status === 'Realizado';
-            const newStatus: ConsultaAgendamento['status'] = willResetToWaitlist ? 'Fila de espera' : (transferTarget.status || 'Fila de espera');
-
-            const payloadUpdates: Partial<ConsultaAgendamento> = {
-                procedimento_id: transferSelectedProcId,
-                status: newStatus,
-                appointment_date: willResetToWaitlist ? null : (transferTarget.appointment_date || null),
-                appointment_time: willResetToWaitlist ? null : (transferTarget.appointment_time || null),
-                tipo_atendimento: willResetToWaitlist ? null : (transferTarget.tipo_atendimento || null),
-                prestador: willResetToWaitlist ? null : (transferTarget.prestador || null),
-                municipio: willResetToWaitlist ? null : (transferTarget.municipio || null),
-                convenio: willResetToWaitlist ? null : (transferTarget.convenio || null),
-                vaga_id: willResetToWaitlist ? null : (transferTarget.vaga_id || null),
-                solicitation_date: transferPreserveSolicitationDate
-                    ? (transferTarget.solicitation_date || (transferTarget.created_at ? transferTarget.created_at.split('T')[0] : new Date().toISOString().split('T')[0]))
-                    : new Date().toISOString().split('T')[0],
-                priority: transferPreservePriority ? (transferTarget.priority || 'Normal') : 'Normal',
-                queue_position: undefined,
-                special_sequence: undefined
-            };
-
-            await db.updateAgendamento(transferTarget.id, payloadUpdates);
-
-            // Recalcular e persistir posições da fila
-            await db.recalculateAndPersistQueuePositions();
-            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
-            window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+            // REGRA OBRIGATÓRIA: A transferência altera EXCLUSIVAMENTE o procedimento vinculado,
+            // preservando integralmente todas as demais informações (data, horário, local, prestador, status, prioridade e histórico).
+            await db.transferAgendamentoProcedimento(transferTarget.id, transferSelectedProcId, currentUser);
 
             // Toast de sucesso
             const patientName = transferTarget.paciente?.name || 'Paciente';
-            setTransferSuccessToast(`Agendamento de ${patientName} transferido com sucesso para ${formatProcedimentoLabel(newProc)}!`);
+            setTransferSuccessToast(`Solicitação de ${patientName} transferida com sucesso para ${formatProcedimentoLabel(newProc)}! Todos os dados do agendamento foram preservados.`);
             setTimeout(() => {
                 setTransferSuccessToast(null);
             }, 4500);
@@ -2876,7 +2846,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             await loadData(true);
         } catch (err: any) {
             console.error('Erro ao transferir procedimento:', err);
-            setTransferError(err.message || 'Ocorreu um erro ao transferir o agendamento.');
+            setTransferError(err.message || 'Ocorreu um erro ao transferir a solicitação.');
         } finally {
             setIsTransferring(false);
         }
@@ -3301,9 +3271,39 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         }
     };
 
+    // Memos para o Modal de Transferência de Procedimento (Análise de Incompatibilidade e Destino)
+    const transferSelectedProc = useMemo(() => {
+        if (!transferSelectedProcId) return null;
+        return procedures.find(p => p.id === transferSelectedProcId) || null;
+    }, [procedures, transferSelectedProcId]);
 
+    const transferIncompatibilityReasons = useMemo(() => {
+        if (!transferTarget || !transferSelectedProc) return [];
+        const reasons: string[] = [];
 
+        // 1. Tipo / Modalidade
+        if (transferSelectedProc.type && transferTarget.procedimento?.type && transferSelectedProc.type !== transferTarget.procedimento.type) {
+            reasons.push(`Modalidade diferente: de "${transferTarget.procedimento.type}" para "${transferSelectedProc.type}".`);
+        }
 
+        // 2. Especialista / Especialidade
+        const curEsp = transferTarget.procedimento?.especialista?.nome || (transferTarget.procedimento?.especialista as any)?.name;
+        const newEsp = transferSelectedProc.especialista?.nome || (transferSelectedProc.especialista as any)?.name;
+        if (curEsp && newEsp && curEsp.trim().toLowerCase() !== newEsp.trim().toLowerCase()) {
+            reasons.push(`Especialista diferente: o atual é "${curEsp}" e o novo é "${newEsp}".`);
+        } else if (curEsp && !newEsp) {
+            reasons.push(`O procedimento atual possui especialista vinculado ("${curEsp}"), enquanto o novo procedimento não possui especialista.`);
+        } else if (!curEsp && newEsp) {
+            reasons.push(`O novo procedimento possui especialista vinculado ("${newEsp}"), enquanto a solicitação de origem não possuía especialista.`);
+        }
+
+        // 3. Prestador / Local
+        if (transferTarget.prestador) {
+            reasons.push(`O agendamento existente está vinculado ao local/prestador "${transferTarget.prestador}". Certifique-se de que este local atende ao novo procedimento.`);
+        }
+
+        return reasons;
+    }, [transferTarget, transferSelectedProc]);
 
     return (
         <div className="w-full mx-auto flex flex-col flex-1 h-full max-h-full min-h-0 bg-white rounded-3xl border border-slate-200/80 shadow-2xl shadow-slate-100 overflow-hidden">
@@ -5092,6 +5092,78 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 </div>
                             </div>
 
+                            {/* Apresentação dos Dados do Agendamento Existente & Garantia de Preservação */}
+                            <div className="bg-slate-50/90 border border-slate-200/90 rounded-2xl p-3.5 space-y-3">
+                                <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                                        <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                                        Dados do Agendamento Existente
+                                    </span>
+                                    <span className="text-[9.5px] font-extrabold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 uppercase">
+                                        {transferTarget.status || 'Solicitado'}
+                                    </span>
+                                </div>
+
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/70 shadow-2xs">
+                                        <span className="text-[8.5px] font-black uppercase text-slate-400 block tracking-wider">Status Atual</span>
+                                        <span className="text-xs font-black text-slate-800 uppercase block mt-0.5">
+                                            {transferTarget.status || 'Solicitado'}
+                                        </span>
+                                    </div>
+                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/70 shadow-2xs">
+                                        <span className="text-[8.5px] font-black uppercase text-slate-400 block tracking-wider">Data Agendada</span>
+                                        <span className="text-xs font-black text-slate-800 block mt-0.5">
+                                            {transferTarget.appointment_date 
+                                                ? new Date(transferTarget.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR') 
+                                                : 'Sem data definida'}
+                                        </span>
+                                    </div>
+                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/70 shadow-2xs">
+                                        <span className="text-[8.5px] font-black uppercase text-slate-400 block tracking-wider">Horário</span>
+                                        <span className="text-xs font-black text-slate-800 block mt-0.5">
+                                            {transferTarget.appointment_time ? transferTarget.appointment_time.substring(0, 5) : 'Sem horário'}
+                                        </span>
+                                    </div>
+                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/70 shadow-2xs">
+                                        <span className="text-[8.5px] font-black uppercase text-slate-400 block tracking-wider">Local / Prestador</span>
+                                        <span className="text-xs font-black text-slate-800 uppercase block mt-0.5 truncate" title={transferTarget.prestador || 'Não definido'}>
+                                            {transferTarget.prestador || 'Não definido'}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Especialista vinculado ao procedimento atual */}
+                                {(transferTarget.procedimento?.especialista?.nome || (transferTarget.procedimento?.especialista as any)?.name) && (
+                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/70 flex items-center justify-between gap-2 shadow-2xs">
+                                        <div>
+                                            <span className="text-[8.5px] font-black uppercase text-slate-400 block tracking-wider">Especialista / Médico Atual</span>
+                                            <span className="text-xs font-black text-indigo-950 uppercase block mt-0.5">
+                                                {transferTarget.procedimento.especialista.nome || (transferTarget.procedimento.especialista as any).name}
+                                            </span>
+                                        </div>
+                                        {transferTarget.procedimento.especialista.especialidade && (
+                                            <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                                {transferTarget.procedimento.especialista.especialidade}
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Garantia de Preservação Integral */}
+                                <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-2.5 flex items-start gap-2 text-emerald-900">
+                                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                                    <div>
+                                        <span className="font-black uppercase text-[10px] block leading-tight text-emerald-950">
+                                            Preservação Integral Garantida
+                                        </span>
+                                        <p className="text-[11px] leading-relaxed font-semibold text-emerald-900 mt-0.5">
+                                            Somente o <strong>procedimento vinculado</strong> será alterado. O agendamento permanece <strong>exatamente igual</strong>: status, data, horário, prestador e histórico da solicitação são mantidos sem cancelamento ou reagendamento.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Seleção do Novo Procedimento (Destino) */}
                             <div className="space-y-3">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -5238,16 +5310,47 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 </div>
                             </div>
 
-                            {/* Aviso informativo caso o agendamento já possua data marcada */}
-                            {(transferTarget.status === 'Agendado' || transferTarget.status === 'Realizado') && (
-                                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 text-xs text-amber-900 flex items-start gap-2.5 shadow-2xs">
-                                    <Clock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                                    <div>
-                                        <span className="font-black uppercase text-[10.5px] block">Aviso de Reclassificação na Fila:</span>
-                                        <p className="font-semibold text-[11px] mt-0.5 leading-relaxed">
-                                            Como este agendamento já possuía data marcada, ao transferir para outro procedimento ele será movido para a <strong>Fila de espera</strong> do novo procedimento para definição de data/horário na nova agenda médica. A data de solicitação e a prioridade originais são <strong>preservadas permanentemente</strong>.
-                                        </p>
+                            {/* Aviso de Incompatibilidade (quando houver divergência entre procedimento de origem e destino) */}
+                            {transferSelectedProc && transferIncompatibilityReasons.length > 0 && (
+                                <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3.5 space-y-2 text-amber-950 shadow-2xs animate-in fade-in">
+                                    <div className="flex items-center gap-2">
+                                        <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+                                        <span className="font-black uppercase text-[11px] tracking-wide text-amber-900">
+                                            Aviso de Possível Incompatibilidade Detectada
+                                        </span>
                                     </div>
+                                    <ul className="space-y-1 pl-6 list-disc text-[11px] font-semibold text-amber-900">
+                                        {transferIncompatibilityReasons.map((reason, idx) => (
+                                            <li key={idx} className="leading-relaxed">
+                                                {reason}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                    <p className="text-[10px] text-amber-800 font-bold border-t border-amber-200/80 pt-1.5 leading-normal">
+                                        Aviso informativo: Os dados do agendamento permanecerão inalterados. Nenhuma alteração de data, horário ou prestador será feita automaticamente.
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Resumo do Procedimento de Destino Selecionado */}
+                            {transferSelectedProc && (
+                                <div className="bg-indigo-50/70 border border-indigo-200 rounded-2xl p-3 flex items-center justify-between gap-3 text-indigo-950">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                                            <Check className="w-4 h-4" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <span className="text-[9px] font-black uppercase tracking-wider text-indigo-700 block leading-tight">
+                                                Novo Procedimento Selecionado
+                                            </span>
+                                            <span className="text-xs font-black uppercase text-indigo-950 block truncate">
+                                                {formatProcedimentoLabel(transferSelectedProc)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <span className="text-[9.5px] font-black uppercase px-2 py-0.5 rounded bg-indigo-600 text-white shrink-0">
+                                        {transferSelectedProc.type}
+                                    </span>
                                 </div>
                             )}
 
