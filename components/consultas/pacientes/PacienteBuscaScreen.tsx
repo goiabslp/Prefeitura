@@ -18,9 +18,13 @@ import {
     ChevronLeft, 
     ChevronRight, 
     ChevronsLeft, 
-    ChevronsRight 
+    ChevronsRight,
+    ShieldAlert,
+    AlertTriangle
 } from 'lucide-react';
 import { PacienteFormModal } from './PacienteFormModal';
+import { AuditoriaTelefonesModal } from './AuditoriaTelefonesModal';
+import { isSuspiciousPhone, getPhoneInconsistencyReason } from '../../../utils/phoneValidation';
 
 interface PacienteBuscaScreenProps {
     onSelectPaciente: (pacienteId: string) => void;
@@ -61,6 +65,7 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
     const [paginaAtual, setPaginaAtual] = useState<number>(initialPagina);
 
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+    const [isAuditoriaOpen, setIsAuditoriaOpen] = useState(false);
     const [editingPatient, setEditingPatient] = useState<ConsultaPaciente | null>(null);
 
     const carregarPacientes = async () => {
@@ -211,16 +216,28 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
                         </div>
                     </div>
 
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setEditingPatient(null);
-                            setIsFormModalOpen(true);
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-black uppercase tracking-wider shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer shrink-0"
-                    >
-                        <Plus className="w-3 h-3" /> <span>Cadastrar Paciente</span>
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                            type="button"
+                            onClick={() => setIsAuditoriaOpen(true)}
+                            className="px-2.5 py-1 rounded-lg border border-slate-200 hover:border-rose-300 hover:bg-rose-50/50 text-slate-700 hover:text-rose-700 text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer shrink-0"
+                            title="Auditar integridade de telefones e identificar números fictícios ou inválidos"
+                        >
+                            <ShieldAlert className="w-3 h-3 text-rose-600" />
+                            <span>Auditar Telefones</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setEditingPatient(null);
+                                setIsFormModalOpen(true);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-black uppercase tracking-wider shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer shrink-0"
+                        >
+                            <Plus className="w-3 h-3" /> <span>Cadastrar Paciente</span>
+                        </button>
+                    </div>
                 </div>
 
                 {/* Linha Inferior: Campo Único de Busca */}
@@ -280,7 +297,8 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-2.5">
                         {pacientesPaginados.map((paciente) => {
                             const cpfFormatado = formatarCpf(paciente.cpf);
-                            const temPendenciaCadastro = !paciente.cpf || !paciente.sus_number || !paciente.phone || !paciente.birth_date;
+                            const temTelefoneSuspeito = isSuspiciousPhone(paciente.phone);
+                            const temPendenciaCadastro = !paciente.cpf || !paciente.sus_number || !paciente.phone || !paciente.birth_date || temTelefoneSuspeito;
 
                             return (
                                 <div
@@ -301,7 +319,11 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
                                                 )}
                                             </div>
 
-                                            {temPendenciaCadastro ? (
+                                            {temTelefoneSuspeito ? (
+                                                <span className="px-1.5 py-0.2 rounded text-[8px] font-black uppercase bg-rose-50 text-rose-700 border border-rose-200 shrink-0 flex items-center gap-0.5">
+                                                    <AlertTriangle className="w-2.5 h-2.5 text-rose-600" /> Tel. Suspeito
+                                                </span>
+                                            ) : temPendenciaCadastro ? (
                                                 <span className="px-1.5 py-0.2 rounded text-[8px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
                                                     Pendente
                                                 </span>
@@ -325,9 +347,21 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
                                                 </span>
                                             </div>
 
-                                            <div className="flex items-center gap-1 text-slate-600 truncate">
-                                                <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                                                <span className="truncate">{paciente.phone || 'Sem tel'}</span>
+                                            <div className="flex items-center gap-1 truncate">
+                                                {temTelefoneSuspeito ? (
+                                                    <div className="flex items-center gap-1 text-rose-600 truncate" title={`Telefone com padrão fictício ou inválido: ${getPhoneInconsistencyReason(paciente.phone)}`}>
+                                                        <AlertTriangle className="w-3 h-3 text-rose-500 shrink-0" />
+                                                        <span className="truncate line-through font-mono">{paciente.phone}</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center gap-1 text-slate-600 truncate" title={paciente.phone_fixed ? `WhatsApp: ${paciente.phone || 'Sem'} | Fixo: ${paciente.phone_fixed}` : undefined}>
+                                                        <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                                                        <span className="truncate">{paciente.phone || 'Sem tel'}</span>
+                                                        {paciente.phone_fixed && (
+                                                            <span className="text-[9px] text-slate-400 font-normal truncate">({paciente.phone_fixed})</span>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
 
                                             <div className="flex items-center gap-1 text-slate-600 truncate">
@@ -447,6 +481,21 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
                     onSuccess={(pacienteSalvo) => {
                         carregarPacientes();
                         onSelectPaciente(pacienteSalvo.id);
+                    }}
+                />
+            )}
+
+            {/* Modal de Auditoria de Telefones */}
+            {isAuditoriaOpen && (
+                <AuditoriaTelefonesModal
+                    isOpen={isAuditoriaOpen}
+                    onClose={() => setIsAuditoriaOpen(false)}
+                    onEditPaciente={(pacienteId) => {
+                        const target = pacientes.find(p => p.id === pacienteId);
+                        if (target) {
+                            setEditingPatient(target);
+                            setIsFormModalOpen(true);
+                        }
                     }}
                 />
             )}

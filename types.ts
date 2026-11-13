@@ -640,6 +640,7 @@ export interface ConsultaPaciente {
   birth_date?: string;
   nickname?: string;
   phone?: string;
+  phone_fixed?: string;
   neighborhood?: string;
   street?: string;
   city?: string;

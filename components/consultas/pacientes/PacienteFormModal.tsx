@@ -21,6 +21,17 @@ import {
     detectarCriterioPesquisaPaciente
 } from '../../../utils/cpfUtils';
 import {
+    validateBrazilianPhone,
+    formatBrazilianPhone,
+    formatWhatsApp,
+    maskWhatsAppInput,
+    formatLandlinePhone,
+    maskLandlineInput,
+    validateWhatsApp,
+    validateLandlinePhone,
+    TELEFONE_INVALIDO_MSG
+} from '../../../utils/phoneValidation';
+import {
     X,
     User,
     Save,
@@ -87,12 +98,15 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
     // Estados do formulário de cadastro/edição
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [whatsappError, setWhatsappError] = useState('');
+    const [telefoneFixoError, setTelefoneFixoError] = useState('');
     const [cpfLocked, setCpfLocked] = useState(false);
     const [nome, setNome] = useState('');
     const [apelido, setApelido] = useState('');
     const [cpf, setCpf] = useState('');
     const [dataNascimento, setDataNascimento] = useState('');
-    const [telefone, setTelefone] = useState('');
+    const [whatsapp, setWhatsapp] = useState('');
+    const [telefoneFixo, setTelefoneFixo] = useState('');
     const [bairro, setBairro] = useState('');
     const [rua, setRua] = useState('');
     const [cidade, setCidade] = useState('SÃO JOSÉ DO GOIABAL -MG');
@@ -118,13 +132,16 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
         setCpf(cleanCpf ? formatCpf(cleanCpf) : '');
         setCpfLocked(Boolean(cleanCpf));
         setDataNascimento('');
-        setTelefone('');
+        setWhatsapp('');
+        setTelefoneFixo('');
         setBairro('');
         setRua('');
         setCidade('SÃO JOSÉ DO GOIABAL -MG');
         setSusNumber(opts?.prefillCns ? normalizeCns(opts.prefillCns) : '');
         setAgenteSaude('');
         setError('');
+        setWhatsappError('');
+        setTelefoneFixoError('');
         setDuplicateConflictPatient(null);
     };
 
@@ -142,13 +159,16 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
             setApelido(editingPatient.nickname || '');
             setCpf(formatCpf(editingPatient.cpf || ''));
             setDataNascimento(editingPatient.birth_date || '');
-            setTelefone(editingPatient.phone || '');
+            setWhatsapp(editingPatient.phone ? formatWhatsApp(editingPatient.phone) : '');
+            setTelefoneFixo(editingPatient.phone_fixed ? formatLandlinePhone(editingPatient.phone_fixed) : '');
             setBairro(editingPatient.neighborhood || '');
             setRua(editingPatient.street || '');
             setCidade(editingPatient.city || 'SÃO JOSÉ DO GOIABAL -MG');
             setSusNumber(editingPatient.sus_number || '');
             setAgenteSaude(editingPatient.agente_saude || '');
             setError('');
+            setWhatsappError('');
+            setTelefoneFixoError('');
             setSearchValidationError('');
             setLookupErrorState(null);
             setDuplicateConflictPatient(null);
@@ -364,13 +384,51 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
         onClose();
     };
 
-    const handleTelefoneChange = (val: string) => {
-        const numbers = val.replace(/\D/g, '').slice(0, 11);
-        let masked = numbers;
-        if (numbers.length > 10) masked = numbers.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-        else if (numbers.length > 6) masked = numbers.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
-        else if (numbers.length > 2) masked = numbers.replace(/(\d{2})(\d{0,5})/, '($1) $2');
-        setTelefone(masked);
+    const handleWhatsAppChange = (val: string) => {
+        const masked = maskWhatsAppInput(val);
+        setWhatsapp(masked);
+
+        const clean = masked.replace(/\D/g, '');
+        if (!clean) {
+            setWhatsappError('O WhatsApp é obrigatório.');
+        } else if (clean.length === 11) {
+            const check = validateWhatsApp(masked, { required: true });
+            if (!check.isValid) {
+                setWhatsappError(check.errorMessage || 'WhatsApp celular inválido.');
+            } else {
+                setWhatsappError('');
+            }
+        } else if (clean.length > 2 && clean[2] !== '9') {
+            setWhatsappError('O WhatsApp celular deve iniciar com o dígito 9.');
+        } else {
+            setWhatsappError('');
+        }
+    };
+
+    const handleTelefoneFixoChange = (val: string) => {
+        const masked = maskLandlineInput(val);
+        setTelefoneFixo(masked);
+
+        const clean = masked.replace(/\D/g, '');
+        if (!clean) {
+            setTelefoneFixoError('');
+        } else if (clean.length === 10) {
+            const check = validateLandlinePhone(masked, { required: false });
+            if (!check.isValid) {
+                setTelefoneFixoError(check.errorMessage || 'Telefone Fixo inválido.');
+            } else {
+                setTelefoneFixoError('');
+            }
+        } else if (clean.length > 2) {
+            const first = Number(clean[2]);
+            if (first < 2 || first > 5) {
+                setTelefoneFixoError('Telefone fixo deve iniciar com dígito entre 2 e 5.');
+            } else {
+                setTelefoneFixoError('');
+            }
+        } else {
+            setTelefoneFixoError('');
+        }
     };
 
     const handleSave = async (e: React.FormEvent) => {
@@ -400,6 +458,29 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
             return;
         }
 
+        // Validação Obrigatória de WhatsApp (Celular)
+        const whatsappValidation = validateWhatsApp(whatsapp, { required: true });
+        if (!whatsappValidation.isValid) {
+            const errorMsg = whatsappValidation.errorMessage || 'Informe um número de WhatsApp celular válido.';
+            setWhatsappError(errorMsg);
+            setError(errorMsg);
+            return;
+        }
+        const phoneFormatted = whatsappValidation.formatted || whatsapp.trim();
+
+        // Validação de Telefone Fixo (Opcional)
+        let phoneFixedFormatted: string | null = null;
+        if (telefoneFixo.trim()) {
+            const fixoValidation = validateLandlinePhone(telefoneFixo, { required: false });
+            if (!fixoValidation.isValid) {
+                const errorMsg = fixoValidation.errorMessage || 'Informe um Telefone Fixo válido.';
+                setTelefoneFixoError(errorMsg);
+                setError(errorMsg);
+                return;
+            }
+            phoneFixedFormatted = fixoValidation.formatted || telefoneFixo.trim();
+        }
+
         setLoading(true);
         try {
             // Verifica novamente a existência na base antes de salvar (quando novo cadastro)
@@ -423,7 +504,8 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
                 nickname: apelido.trim() ? apelido.trim().toUpperCase() : null,
                 cpf: cleanCpf,
                 birth_date: dataNascimento,
-                phone: telefone.trim() || null,
+                phone: phoneFormatted,
+                phone_fixed: phoneFixedFormatted,
                 neighborhood: bairro.trim() ? bairro.trim().toUpperCase() : null,
                 street: rua.trim() ? rua.trim().toUpperCase() : null,
                 city: cidade.trim() ? cidade.trim().toUpperCase() : 'SÃO JOSÉ DO GOIABAL -MG',
@@ -501,31 +583,31 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
             aria-labelledby="paciente-modal-title"
         >
             <div
-                className={`bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-h-[90vh] flex flex-col overflow-hidden transition-all duration-200 ease-out animate-in zoom-in-95 ${
-                    isExpandedForm ? 'max-w-2xl' : 'max-w-xl'
+                className={`bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-h-[96vh] sm:max-h-[92vh] flex flex-col overflow-hidden transition-all duration-200 ease-out animate-in zoom-in-95 ${
+                    isExpandedForm ? 'max-w-xl sm:max-w-2xl lg:max-w-3xl' : 'max-w-xl'
                 }`}
             >
                 {/* Cabeçalho Azul e Roxo Preservado */}
-                <div className="p-4 sm:p-5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white flex items-center justify-between shrink-0">
+                <div className="px-4 py-3 sm:px-5 sm:py-3.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white flex items-center justify-between shrink-0">
                     <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-2xl bg-white/15 flex items-center justify-center border border-white/25 shrink-0">
+                        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-white/15 flex items-center justify-center border border-white/25 shrink-0">
                             {editingPatient ? (
-                                <User className="w-5 h-5 text-white" />
+                                <User className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-white" />
                             ) : step === 'register' ? (
-                                <UserPlus className="w-5 h-5 text-white" />
+                                <UserPlus className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-white" />
                             ) : (
-                                <Search className="w-5 h-5 text-white" />
+                                <Search className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-white" />
                             )}
                         </div>
                         <div className="min-w-0">
-                            <h3 id="paciente-modal-title" className="text-base sm:text-lg font-black tracking-tight truncate">
+                            <h3 id="paciente-modal-title" className="text-sm sm:text-base font-black tracking-tight truncate">
                                 {editingPatient
                                     ? 'Editar Cadastro do Paciente'
                                     : step === 'register'
                                     ? 'Cadastrar Novo Paciente'
                                     : 'Localizar Paciente'}
                             </h3>
-                            <p className="text-[11px] sm:text-xs text-indigo-100 font-medium truncate">
+                            <p className="text-[10px] sm:text-xs text-indigo-100 font-medium truncate">
                                 Base Integrada Municipal (Regulação, Farmácia Popular e AutoSenha)
                             </p>
                         </div>
@@ -537,7 +619,7 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
                             onClose();
                         }}
                         disabled={loading}
-                        className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                        className="p-1.5 sm:p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
                         title="Fechar"
                         aria-label="Fechar modal Localizar Paciente"
                     >
@@ -826,12 +908,15 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
 
                 {/* ETAPA 3: FORMULÁRIO DE CADASTRO COMPLETO (OU EDIÇÃO) */}
                 {isExpandedForm && (
-                    <form onSubmit={handleSave} className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4 no-scrollbar animate-in fade-in duration-200">
+                    <form
+                        onSubmit={handleSave}
+                        className="p-3.5 sm:p-5 overflow-y-auto sm:overflow-y-visible flex-1 flex flex-col justify-between gap-2 sm:gap-2.5 scrollbar-none animate-in fade-in duration-200"
+                    >
                         {!editingPatient && (
-                            <div className="p-3 bg-indigo-50 border border-indigo-200/80 rounded-2xl flex flex-wrap items-center justify-between gap-2 text-xs text-indigo-900">
+                            <div className="px-3 py-1.5 sm:py-2 bg-indigo-50 border border-indigo-200/80 rounded-xl flex flex-wrap items-center justify-between gap-1.5 text-xs text-indigo-900 shrink-0">
                                 <div className="flex items-center gap-2">
-                                    <UserPlus className="w-4 h-4 text-indigo-600 shrink-0" />
-                                    <span className="font-semibold">
+                                    <UserPlus className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                                    <span className="font-semibold text-[11px] sm:text-xs">
                                         Preencha os dados para cadastrar e vincular o paciente à fila.
                                     </span>
                                 </div>
@@ -839,7 +924,7 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
                                     type="button"
                                     onClick={handleBackToSearch}
                                     disabled={loading}
-                                    className="text-[11px] font-black uppercase tracking-wider text-indigo-700 hover:text-indigo-900 underline cursor-pointer shrink-0 flex items-center gap-1"
+                                    className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-indigo-700 hover:text-indigo-900 underline cursor-pointer shrink-0 flex items-center gap-1"
                                 >
                                     <ArrowLeft className="w-3 h-3" />
                                     Voltar à Pesquisa
@@ -848,20 +933,20 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
                         )}
 
                         {error && (
-                            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3 text-xs text-rose-800 space-y-2">
+                            <div className="bg-rose-50 border border-rose-200 rounded-xl p-2.5 text-xs text-rose-800 space-y-1.5 shrink-0">
                                 <div className="flex items-center gap-2 font-semibold">
                                     <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
                                     <span>{error}</span>
                                 </div>
                                 {duplicateConflictPatient && (
                                     <div className="pt-1 flex flex-wrap items-center justify-between gap-2 border-t border-rose-200/80">
-                                        <span className="text-[11px] font-bold text-rose-900 uppercase">
+                                        <span className="text-[10px] sm:text-[11px] font-bold text-rose-900 uppercase">
                                             Cadastro existente: {duplicateConflictPatient.name}
                                         </span>
                                         <button
                                             type="button"
                                             onClick={() => handleSelectExistingPatient(duplicateConflictPatient)}
-                                            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black uppercase tracking-wider cursor-pointer inline-flex items-center gap-1.5"
+                                            className="px-3 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] sm:text-[11px] font-black uppercase tracking-wider cursor-pointer inline-flex items-center gap-1.5"
                                         >
                                             <UserCheck className="w-3.5 h-3.5" />
                                             Selecionar Paciente
@@ -871,9 +956,10 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
                             </div>
                         )}
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3.5 sm:gap-x-4 gap-y-2 sm:gap-y-2.5 flex-1">
+                            {/* Linha 1: Nome Completo */}
                             <div className="sm:col-span-2">
-                                <label className="text-xs font-black uppercase tracking-wider text-slate-700 block mb-1">
+                                <label className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-700 block mb-0.5 sm:mb-1">
                                     Nome Completo *
                                 </label>
                                 <input
@@ -882,16 +968,17 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
                                     required
                                     value={nome}
                                     onChange={(e) => setNome(e.target.value)}
-                                    placeholder="Nome completo do paciente"
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all uppercase"
+                                    placeholder="NOME COMPLETO DO PACIENTE"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 sm:py-2 text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all uppercase"
                                 />
                             </div>
 
+                            {/* Linha 2: CPF | Data de Nascimento */}
                             <div>
-                                <label className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5 mb-1">
+                                <label className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5 mb-0.5 sm:mb-1">
                                     <span>CPF *</span>
                                     {!editingPatient && cpfLocked && (
-                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md border border-slate-200 normal-case">
+                                        <span className="inline-flex items-center gap-1 text-[9px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200 normal-case">
                                             <Lock className="w-2.5 h-2.5" />
                                             Da pesquisa
                                         </span>
@@ -907,7 +994,7 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
                                     disabled={!editingPatient && cpfLocked}
                                     onChange={(e) => setCpf(formatCpf(e.target.value))}
                                     placeholder="000.000.000-00"
-                                    className={`w-full border rounded-xl px-3 py-2 text-xs font-black font-mono transition-all ${
+                                    className={`w-full border rounded-xl px-3 py-1.5 sm:py-2 text-xs font-black font-mono transition-all ${
                                         !editingPatient && cpfLocked
                                             ? 'bg-slate-100 border-slate-200 text-slate-600 cursor-not-allowed select-all'
                                             : 'bg-slate-50 border-slate-200 text-slate-800 focus:bg-white focus:border-indigo-500'
@@ -916,7 +1003,7 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
                             </div>
 
                             <div>
-                                <label className="text-xs font-black uppercase tracking-wider text-slate-700 block mb-1">
+                                <label className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-700 block mb-0.5 sm:mb-1">
                                     Data de Nascimento *
                                 </label>
                                 <input
@@ -925,38 +1012,102 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
                                     max={todayDateMax}
                                     value={dataNascimento}
                                     onChange={(e) => setDataNascimento(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-500 transition-all"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 sm:py-2 text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-500 transition-all"
                                 />
                             </div>
 
+                            {/* Linha 3: Apelido / Como prefere ser chamado | WhatsApp */}
                             <div>
-                                <label className="text-xs font-black uppercase tracking-wider text-slate-700 block mb-1">
+                                <label className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-700 block mb-0.5 sm:mb-1">
                                     Apelido / Como prefere ser chamado
                                 </label>
                                 <input
                                     type="text"
                                     value={apelido}
                                     onChange={(e) => setApelido(e.target.value)}
-                                    placeholder="Ex: Zé, Dona Maria"
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-500 transition-all uppercase"
+                                    placeholder="EX: ZÉ, DONA MARIA"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 sm:py-2 text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-500 transition-all uppercase"
                                 />
                             </div>
 
                             <div>
-                                <label className="text-xs font-black uppercase tracking-wider text-slate-700 block mb-1">
-                                    Telefone / WhatsApp
+                                <label className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-700 flex items-center justify-between mb-0.5 sm:mb-1">
+                                    <span>WhatsApp *</span>
+                                    <span className="text-[10px] text-indigo-600 font-bold normal-case">Celular</span>
                                 </label>
                                 <input
                                     type="tel"
-                                    value={telefone}
-                                    onChange={(e) => handleTelefoneChange(e.target.value)}
-                                    placeholder="(00) 00000-0000"
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-500 transition-all font-mono"
+                                    required
+                                    maxLength={17}
+                                    value={whatsapp}
+                                    onChange={(e) => handleWhatsAppChange(e.target.value)}
+                                    onBlur={() => {
+                                        if (whatsapp.trim()) {
+                                            const check = validateWhatsApp(whatsapp, { required: true });
+                                            if (!check.isValid) {
+                                                setWhatsappError(check.errorMessage || 'WhatsApp inválido.');
+                                            } else {
+                                                setWhatsappError('');
+                                            }
+                                        } else {
+                                            setWhatsappError('O WhatsApp é obrigatório.');
+                                        }
+                                    }}
+                                    placeholder="(00) 0 0000-0000"
+                                    className={`w-full rounded-xl px-3 py-1.5 sm:py-2 text-xs font-bold transition-all font-mono ${
+                                        whatsappError
+                                            ? 'border-2 border-rose-400 bg-rose-50/50 text-rose-900 focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20'
+                                            : 'bg-slate-50 border border-slate-200 text-slate-800 focus:bg-white focus:border-indigo-500'
+                                    }`}
                                 />
+                                {whatsappError && (
+                                    <div className="flex items-start gap-1 mt-0.5 text-[10px] font-bold text-rose-600 leading-tight">
+                                        <AlertTriangle className="w-3 h-3 shrink-0 text-rose-500 mt-0.5" />
+                                        <span>{whatsappError}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Linha 4: Telefone Fixo | Cartão SUS (CNS) */}
+                            <div>
+                                <label className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-700 flex items-center justify-between mb-0.5 sm:mb-1">
+                                    <span>Telefone Fixo</span>
+                                    <span className="text-[10px] text-slate-400 font-normal normal-case">Opcional</span>
+                                </label>
+                                <input
+                                    type="tel"
+                                    maxLength={14}
+                                    value={telefoneFixo}
+                                    onChange={(e) => handleTelefoneFixoChange(e.target.value)}
+                                    onBlur={() => {
+                                        if (telefoneFixo.trim()) {
+                                            const check = validateLandlinePhone(telefoneFixo, { required: false });
+                                            if (!check.isValid) {
+                                                setTelefoneFixoError(check.errorMessage || 'Telefone Fixo inválido.');
+                                            } else {
+                                                setTelefoneFixoError('');
+                                            }
+                                        } else {
+                                            setTelefoneFixoError('');
+                                        }
+                                    }}
+                                    placeholder="(00) 0000-0000"
+                                    className={`w-full rounded-xl px-3 py-1.5 sm:py-2 text-xs font-bold transition-all font-mono ${
+                                        telefoneFixoError
+                                            ? 'border-2 border-rose-400 bg-rose-50/50 text-rose-900 focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20'
+                                            : 'bg-slate-50 border border-slate-200 text-slate-800 focus:bg-white focus:border-indigo-500'
+                                    }`}
+                                />
+                                {telefoneFixoError && (
+                                    <div className="flex items-start gap-1 mt-0.5 text-[10px] font-bold text-rose-600 leading-tight">
+                                        <AlertTriangle className="w-3 h-3 shrink-0 text-rose-500 mt-0.5" />
+                                        <span>{telefoneFixoError}</span>
+                                    </div>
+                                )}
                             </div>
 
                             <div>
-                                <label className="text-xs font-black uppercase tracking-wider text-slate-700 block mb-1">
+                                <label className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-700 block mb-0.5 sm:mb-1">
                                     Cartão SUS (CNS)
                                 </label>
                                 <input
@@ -966,18 +1117,19 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
                                     value={susNumber}
                                     onChange={(e) => setSusNumber(e.target.value.replace(/\D/g, '').slice(0, 15))}
                                     placeholder="15 dígitos do Cartão SUS"
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-500 transition-all font-mono"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 sm:py-2 text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-500 transition-all font-mono"
                                 />
                             </div>
 
+                            {/* Linha 5: Agente Comunitário de Saúde (ACS) | Bairro */}
                             <div>
-                                <label className="text-xs font-black uppercase tracking-wider text-slate-700 block mb-1">
+                                <label className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-700 block mb-0.5 sm:mb-1">
                                     Agente Comunitário de Saúde (ACS)
                                 </label>
                                 <select
                                     value={agenteSaude}
                                     onChange={(e) => setAgenteSaude(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-500 transition-all uppercase"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 sm:py-2 text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-500 transition-all uppercase"
                                 >
                                     <option value="">Selecione o Agente de Saúde...</option>
                                     {agentesSaudeItems.map(a => (
@@ -989,39 +1141,35 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
                             </div>
 
                             <div>
-                                <label className="text-xs font-black uppercase tracking-wider text-slate-700 block mb-1">
+                                <label className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-700 block mb-0.5 sm:mb-1">
                                     Bairro
                                 </label>
                                 <input
                                     type="text"
                                     value={bairro}
                                     onChange={(e) => setBairro(e.target.value)}
-                                    placeholder="Nome do Bairro"
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-500 transition-all uppercase"
+                                    placeholder="NOME DO BAIRRO"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 sm:py-2 text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-500 transition-all uppercase"
                                 />
                             </div>
 
-                            <div>
-                                <label className="text-xs font-black uppercase tracking-wider text-slate-700 block mb-1">
+                            {/* Linha 6: Endereço / Rua / Número */}
+                            <div className="sm:col-span-2">
+                                <label className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-700 block mb-0.5 sm:mb-1">
                                     Endereço / Rua / Número
                                 </label>
                                 <input
                                     type="text"
                                     value={rua}
                                     onChange={(e) => setRua(e.target.value)}
-                                    placeholder="Logradouro completo"
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-500 transition-all uppercase"
+                                    placeholder="LOGRADOURO COMPLETO"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 sm:py-2 text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-500 transition-all uppercase"
                                 />
                             </div>
                         </div>
 
-                        <div className="p-3 bg-indigo-50/50 rounded-2xl border border-indigo-100 flex items-center gap-2 text-xs text-indigo-800">
-                            <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
-                            <span>Este cadastro é compartilhado de forma unificada entre Regulação, Farmácia Popular e AutoSenha sem duplicar dados.</span>
-                        </div>
-
-                        {/* Rodapé */}
-                        <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                        {/* Rodapé sempre acessível */}
+                        <div className="pt-2.5 sm:pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5 shrink-0">
                             <button
                                 type="button"
                                 onClick={() => {
@@ -1029,14 +1177,14 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
                                     onClose();
                                 }}
                                 disabled={loading}
-                                className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-black uppercase text-slate-600 hover:bg-slate-50 transition-all cursor-pointer disabled:opacity-50"
+                                className="px-4 py-2 sm:py-2.5 rounded-xl border border-slate-200 text-xs font-black uppercase text-slate-600 hover:bg-slate-50 transition-all cursor-pointer disabled:opacity-50"
                             >
                                 Cancelar
                             </button>
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-wider shadow-md shadow-indigo-600/20 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60"
+                                className="px-5 py-2 sm:py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-wider shadow-md shadow-indigo-600/20 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60"
                             >
                                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                                 <span>{editingPatient ? 'Salvar Alterações' : 'Cadastrar e Selecionar Paciente'}</span>

@@ -8,6 +8,8 @@ import { normalizeCrmAndUf } from './dashboard/MedicosDashboardTab';
 import { getPacientes, createPaciente, updatePaciente } from '../../services/consultasService';
 import { useAgentesSaude } from '../../services/agentesSaudeService';
 import { CadastroIncompletoModal, isPatientComplete } from '../common/CadastroIncompletoModal';
+import { RegularizacaoTelefoneModal } from '../common/RegularizacaoTelefoneModal';
+import { validateBrazilianPhone, maskPhoneInput, isTelefoneIrregularParaOperacao, TELEFONE_INVALIDO_MSG } from '../../utils/phoneValidation';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { FarmaciaPdfGenerator } from './FarmaciaPdfGenerator';
@@ -233,6 +235,10 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     // Validação de Cadastro Incompleto do Paciente
     const [incompletePatient, setIncompletePatient] = useState<ConsultaPaciente | null>(null);
     const [isValidationModalOpen, setIsValidationModalOpen] = useState(false);
+
+    // Bloqueio Obrigatório por Telefone Irregular
+    const [phoneIrregularPatient, setPhoneIrregularPatient] = useState<ConsultaPaciente | null>(null);
+    const [isPhoneRegularizacaoOpen, setIsPhoneRegularizacaoOpen] = useState(false);
 
     // Helper to get local date time formatted for datetime-local (YYYY-MM-DDTHH:mm:ss)
     const getFormattedDateTimeLocal = () => {
@@ -692,6 +698,15 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         setPatientCpf(formattedCpf);
         setSelectedPatientObj(patientObj);
 
+        // 1. Bloqueio compulsório de Telefone Irregular / Fictício / Vazio
+        if (isTelefoneIrregularParaOperacao(patientObj.phone)) {
+            setPhoneIrregularPatient(patientObj);
+            setIsPhoneRegularizacaoOpen(true);
+            setIsPatientUnlocked(false);
+            return;
+        }
+
+        // 2. Validação geral de cadastro incompleto
         if (!isPatientComplete(patientObj)) {
             setIncompletePatient(patientObj);
             setIsValidationModalOpen(true);
@@ -700,6 +715,35 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
             setIsPatientUnlocked(true);
             navigateToTab('paciente');
         }
+    };
+
+    const handlePhoneRegularizadoSuccess = (updated: ConsultaPaciente) => {
+        setPacientes(prev => prev.map(p => p.id === updated.id ? updated : p));
+        const displayName = updated.nickname ? `${updated.name} (${updated.nickname})` : updated.name;
+        setPatientName(displayName);
+        if (updated.cpf) {
+            setPatientCpf(updated.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4"));
+        }
+        setSelectedPatientObj(updated);
+        setPhoneIrregularPatient(null);
+        setIsPhoneRegularizacaoOpen(false);
+
+        if (!isPatientComplete(updated)) {
+            setIncompletePatient(updated);
+            setIsValidationModalOpen(true);
+            setIsPatientUnlocked(false);
+        } else {
+            setIsPatientUnlocked(true);
+            navigateToTab('paciente');
+        }
+    };
+
+    const handlePhoneExceptionAllowed = (exemptPatient: ConsultaPaciente) => {
+        setPhoneIrregularPatient(null);
+        setIsPhoneRegularizacaoOpen(false);
+        setSelectedPatientObj(exemptPatient);
+        setIsPatientUnlocked(true);
+        navigateToTab('paciente');
     };
 
     const handlePatientValidationComplete = (updated: ConsultaPaciente) => {
@@ -736,18 +780,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
 
     // Format Phone Input: (00) 00000-0000 or (00) 0000-0000
     const handlePhoneChange = (val: string) => {
-        const clean = val.replace(/\D/g, '');
-        let formatted = '';
-        if (clean.length <= 2) {
-            formatted = clean;
-        } else if (clean.length <= 6) {
-            formatted = `(${clean.slice(0, 2)}) ${clean.slice(2)}`;
-        } else if (clean.length <= 10) {
-            formatted = `(${clean.slice(0, 2)}) ${clean.slice(2, 6)}-${clean.slice(6)}`;
-        } else {
-            formatted = `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7, 11)}`;
-        }
-        setNewPatientPhone(formatted);
+        setNewPatientPhone(maskPhoneInput(val));
     };
 
     // Download Receipt PDF
@@ -1513,7 +1546,14 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
 
                             <button
                                 type="button"
-                                onClick={() => navigateToTab('medicamentos')}
+                                onClick={() => {
+                                    if (selectedPatientObj && isTelefoneIrregularParaOperacao(selectedPatientObj.phone)) {
+                                        setPhoneIrregularPatient(selectedPatientObj);
+                                        setIsPhoneRegularizacaoOpen(true);
+                                        return;
+                                    }
+                                    navigateToTab('medicamentos');
+                                }}
                                 className="px-5 py-2.5 bg-gradient-to-r from-pink-600 via-rose-600 to-pink-600 hover:from-pink-500 hover:via-rose-500 hover:to-pink-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-pink-600/25 active:scale-95 flex items-center gap-2 cursor-pointer border border-pink-700/20"
                             >
                                 <span>Avançar para Medicamentos</span>
@@ -2505,9 +2545,9 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                     showAlert('Por favor, preencha todos os campos obrigatórios (*).', 'error');
                                     return;
                                 }
-                                const cleanPhone = newPatientPhone.replace(/\D/g, '');
-                                if (cleanPhone.length < 10) {
-                                    showAlert('O telefone deve conter DDD + Número (mínimo 10 dígitos).', 'error');
+                                const phoneCheck = validateBrazilianPhone(newPatientPhone, { required: true });
+                                if (!phoneCheck.isValid) {
+                                    showAlert(phoneCheck.errorMessage || TELEFONE_INVALIDO_MSG, 'error');
                                     return;
                                 }
                                 setRegistering(true);
@@ -2517,7 +2557,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                         nickname: newPatientNickname.trim() || null,
                                         cpf: pendingCpf.replace(/\D/g, ''),
                                         birth_date: newPatientBirthDate,
-                                        phone: newPatientPhone,
+                                        phone: phoneCheck.formatted || newPatientPhone,
                                         neighborhood: newPatientNeighborhood,
                                         street: newPatientStreet,
                                         city: newPatientCity,
@@ -3101,6 +3141,22 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* MODAL PERSONALIZADO DE BLOQUEIO POR TELEFONE IRREGULAR */}
+            {isPhoneRegularizacaoOpen && phoneIrregularPatient && (
+                <RegularizacaoTelefoneModal
+                    isOpen={isPhoneRegularizacaoOpen}
+                    onClose={() => {
+                        setIsPhoneRegularizacaoOpen(false);
+                        setPhoneIrregularPatient(null);
+                    }}
+                    patient={phoneIrregularPatient}
+                    currentUser={currentUser}
+                    moduloOrigem="Farmácia Popular - Retirar"
+                    onSuccess={handlePhoneRegularizadoSuccess}
+                    onExceptionAllowed={handlePhoneExceptionAllowed}
+                />
             )}
 
             {/* MODAL DE VALIDAÇÃO AUTOMÁTICA DE CADASTRO INCOMPLETO */}

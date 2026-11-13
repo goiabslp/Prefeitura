@@ -4,6 +4,7 @@ import { ConsultaPaciente } from '../../types';
 import { updatePaciente } from '../../services/consultasService';
 import { useAgentesSaude } from '../../services/agentesSaudeService';
 import { AlertTriangle, Check, X, Loader2, Phone, Calendar, MapPin, Building, Home, UserCheck, ShieldAlert, CreditCard, ChevronDown, Info } from 'lucide-react';
+import { validateBrazilianPhone, maskPhoneInput, TELEFONE_INVALIDO_MSG } from '../../utils/phoneValidation';
 
 /**
  * Campos ESTRITAMENTE OBRIGATÓRIOS (Bloqueantes).
@@ -58,8 +59,8 @@ export const getPendingRequiredFields = (patient?: Partial<ConsultaPaciente> | n
 
     if (isValueBlank(patient.birth_date)) pending.push('birth_date');
 
-    const cleanPhone = (patient.phone || '').replace(/\D/g, '');
-    if (cleanPhone.length < 10 || /^0+$/.test(cleanPhone)) pending.push('phone');
+    const phoneCheck = validateBrazilianPhone(patient.phone, { required: true });
+    if (!phoneCheck.isValid) pending.push('phone');
 
     if (isValueBlank(patient.street)) pending.push('street');
     if (isValueBlank(patient.neighborhood)) pending.push('neighborhood');
@@ -155,18 +156,7 @@ export const CadastroIncompletoModal: React.FC<CadastroIncompletoModalProps> = (
     }
 
     const handlePhoneMask = (val: string) => {
-        const clean = val.replace(/\D/g, '');
-        let formatted = clean;
-        if (clean.length <= 2) {
-            formatted = clean;
-        } else if (clean.length <= 6) {
-            formatted = `(${clean.slice(0, 2)}) ${clean.slice(2)}`;
-        } else if (clean.length <= 10) {
-            formatted = `(${clean.slice(0, 2)}) ${clean.slice(2, 6)}-${clean.slice(6)}`;
-        } else {
-            formatted = `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7, 11)}`;
-        }
-        setFormValues(prev => ({ ...prev, phone: formatted }));
+        setFormValues(prev => ({ ...prev, phone: maskPhoneInput(val) }));
     };
 
     const handleCpfMask = (val: string) => {
@@ -220,10 +210,10 @@ export const CadastroIncompletoModal: React.FC<CadastroIncompletoModalProps> = (
             return;
         }
 
-        if (pendingRequiredKeys.includes('phone')) {
-            const cleanPhone = (formValues.phone || '').replace(/\D/g, '');
-            if (cleanPhone.length < 10 || /^0+$/.test(cleanPhone)) {
-                setErrorMessage('O Telefone é obrigatório (informe DDD + Número com pelo menos 10 dígitos).');
+        if (pendingRequiredKeys.includes('phone') || (formValues.phone && formValues.phone.trim())) {
+            const phoneCheck = validateBrazilianPhone(formValues.phone, { required: pendingRequiredKeys.includes('phone') });
+            if (!phoneCheck.isValid) {
+                setErrorMessage(phoneCheck.errorMessage || TELEFONE_INVALIDO_MSG);
                 return;
             }
         }
@@ -260,7 +250,7 @@ export const CadastroIncompletoModal: React.FC<CadastroIncompletoModalProps> = (
                 city: (formValues.city?.trim() || 'SÃO JOSÉ DO GOIABAL -MG').toUpperCase(),
                 agente_saude: formValues.agente_saude?.trim().toUpperCase(),
                 sus_number: cleanSus.length === 15 ? formValues.sus_number?.trim() : (patient.sus_number || null),
-                phone: formValues.phone?.trim()
+                phone: formValues.phone?.trim() ? (validateBrazilianPhone(formValues.phone).formatted || formValues.phone.trim()) : null
             };
 
             const updated = await updatePaciente(patient.id, updatePayload);

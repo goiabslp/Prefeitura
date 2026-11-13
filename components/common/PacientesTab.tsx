@@ -4,6 +4,7 @@ import { ConsultaPaciente, ConsultaAgendamento, AGENTES_DE_SAUDE } from '../../t
 import { Search, Plus, Edit2, Trash2, X, AlertTriangle, Loader2, ChevronDown, Users, ArrowLeft } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { useAgentesSaude } from '../../services/agentesSaudeService';
+import { validateBrazilianPhone, maskPhoneInput, TELEFONE_INVALIDO_MSG } from '../../utils/phoneValidation';
 
 export const formatPatientName = (patient?: ConsultaPaciente | null) => {
     if (!patient) return '';
@@ -22,7 +23,7 @@ export const getMissingPatientFields = (patient?: Partial<ConsultaPaciente> | nu
     if (isBlank(patient.name)) missing.push('Nome Completo');
     if (isBlank(patient.cpf)) missing.push('CPF');
     if (isBlank(patient.birth_date)) missing.push('Data de Nascimento');
-    if (isBlank(patient.phone)) missing.push('Telefone');
+    if (!patient.phone || !validateBrazilianPhone(patient.phone, { required: true }).isValid) missing.push('Telefone');
     if (isBlank(patient.neighborhood)) missing.push('Bairro');
     if (isBlank(patient.street)) missing.push('Rua / Endereço');
     if (isBlank(patient.city)) missing.push('Cidade');
@@ -92,16 +93,7 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
 
     // Patient Form Phone Mask
     const handlePatPhoneChange = (value: string) => {
-        const numbers = value.replace(/\D/g, '').slice(0, 11);
-        let masked = numbers;
-        if (numbers.length > 10) {
-            masked = numbers.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-        } else if (numbers.length > 6) {
-            masked = numbers.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
-        } else if (numbers.length > 2) {
-            masked = numbers.replace(/(\d{2})(\d{0,5})/, '($1) $2');
-        }
-        setPatPhone(masked);
+        setPatPhone(maskPhoneInput(value));
     };
 
     // Patient Form CPF Mask
@@ -138,9 +130,9 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
             return;
         }
 
-        const cleanPhone = patPhone.replace(/\D/g, '');
-        if (!cleanPhone || cleanPhone.length < 10) {
-            setPatError('O Telefone é obrigatório (informe DDD + Número com pelo menos 10 dígitos).');
+        const phoneCheck = validateBrazilianPhone(patPhone, { required: true });
+        if (!phoneCheck.isValid) {
+            setPatError(phoneCheck.errorMessage || TELEFONE_INVALIDO_MSG);
             return;
         }
 
@@ -156,7 +148,7 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
                 nickname: patNickname.trim() ? patNickname.trim().toUpperCase() : null,
                 cpf: cleanCpf,
                 birth_date: patBirthDate,
-                phone: patPhone.trim() || null,
+                phone: phoneCheck.formatted || patPhone.trim(),
                 neighborhood: patNeighborhood.trim() ? patNeighborhood.trim().toUpperCase() : null,
                 street: patStreet.trim() ? patStreet.trim().toUpperCase() : null,
                 city: patCity.trim() ? patCity.trim().toUpperCase() : 'SÃO JOSÉ DO GOIABAL -MG',

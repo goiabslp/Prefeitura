@@ -11,6 +11,17 @@ import {
     CriterioPesquisaPacienteDetectado
 } from '../utils/cpfUtils';
 import {
+    validateBrazilianPhone,
+    formatBrazilianPhone,
+    formatWhatsApp,
+    formatLandlinePhone,
+    validateWhatsApp,
+    validateLandlinePhone,
+    TELEFONE_INVALIDO_MSG,
+    isSuspiciousPhone,
+    getPhoneInconsistencyReason
+} from '../utils/phoneValidation';
+import {
     getActiveGlobalModuleSettings,
     getActivePermissionUser,
     hasConsultasAcompanharOperationalAccess,
@@ -784,12 +795,35 @@ export const createPaciente = async (
             }
         }
 
+        // Validação rigorosa de WhatsApp (celular)
+        let validPhone: string | null = null;
+        if (paciente.phone && String(paciente.phone).trim()) {
+            const phoneCheck = validateWhatsApp(String(paciente.phone), { required: Boolean(options?.strictNoDuplicate) });
+            if (!phoneCheck.isValid) {
+                throw new Error(phoneCheck.errorMessage || TELEFONE_INVALIDO_MSG);
+            }
+            validPhone = phoneCheck.formatted || String(paciente.phone).trim();
+        } else if (options?.strictNoDuplicate) {
+            throw new Error('O WhatsApp é obrigatório.');
+        }
+
+        // Validação de Telefone Fixo (opcional)
+        let validPhoneFixed: string | null = null;
+        if (paciente.phone_fixed && String(paciente.phone_fixed).trim()) {
+            const fixedCheck = validateLandlinePhone(String(paciente.phone_fixed), { required: false });
+            if (!fixedCheck.isValid) {
+                throw new Error(fixedCheck.errorMessage || 'Telefone Fixo inválido.');
+            }
+            validPhoneFixed = fixedCheck.formatted || String(paciente.phone_fixed).trim();
+        }
+
         const cleanPaciente: any = {
             name: paciente.name?.trim().toUpperCase(),
             nickname: paciente.nickname?.trim() ? paciente.nickname.trim().toUpperCase() : null,
             cpf: cleanCpf,
             birth_date: paciente.birth_date,
-            phone: paciente.phone?.trim() ? paciente.phone.trim() : null,
+            phone: validPhone,
+            phone_fixed: validPhoneFixed,
             neighborhood: paciente.neighborhood?.trim() ? paciente.neighborhood.trim().toUpperCase() : null,
             street: paciente.street?.trim() ? paciente.street.trim().toUpperCase() : null,
             city: paciente.city?.trim() ? paciente.city.trim().toUpperCase() : 'SÃO JOSÉ DO GOIABAL -MG',
@@ -809,7 +843,7 @@ export const createPaciente = async (
             console.warn('[consultasService] Coluna(s) ausente(s) no Supabase. Tentando fallback progressivo...', error.message);
 
             // Lista de colunas opcionais que podem não existir ainda na tabela
-            const optionalCols = ['agente_saude', 'sus_number', 'phone', 'neighborhood', 'street', 'nickname', 'city'];
+            const optionalCols = ['phone_fixed', 'agente_saude', 'sus_number', 'phone', 'neighborhood', 'street', 'nickname', 'city'];
             let fallbackPaciente = { ...cleanPaciente };
             let lastError = error;
 
@@ -878,6 +912,32 @@ export const updatePaciente = async (id: string, updates: Partial<ConsultaPacien
             cleanUpdates.cpf = rawCpf.length > 0 ? rawCpf : null;
         }
 
+        // Validação de WhatsApp anti-fictício (Anatel + Padrões)
+        if (updates.phone !== undefined) {
+            if (updates.phone && String(updates.phone).trim()) {
+                const phoneCheck = validateWhatsApp(String(updates.phone), { required: false });
+                if (!phoneCheck.isValid) {
+                    throw new Error(phoneCheck.errorMessage || TELEFONE_INVALIDO_MSG);
+                }
+                cleanUpdates.phone = phoneCheck.formatted || String(updates.phone).trim();
+            } else {
+                cleanUpdates.phone = null;
+            }
+        }
+
+        // Validação de Telefone Fixo (opcional)
+        if (updates.phone_fixed !== undefined) {
+            if (updates.phone_fixed && String(updates.phone_fixed).trim()) {
+                const fixedCheck = validateLandlinePhone(String(updates.phone_fixed), { required: false });
+                if (!fixedCheck.isValid) {
+                    throw new Error(fixedCheck.errorMessage || 'Telefone Fixo inválido.');
+                }
+                cleanUpdates.phone_fixed = fixedCheck.formatted || String(updates.phone_fixed).trim();
+            } else {
+                cleanUpdates.phone_fixed = null;
+            }
+        }
+
         let { data, error } = await supabase
             .from('consultas_pacientes')
             .update(cleanUpdates)
@@ -889,7 +949,7 @@ export const updatePaciente = async (id: string, updates: Partial<ConsultaPacien
         if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache'))) {
             console.warn('[consultasService] Coluna(s) ausente(s) no Supabase (update). Tentando fallback progressivo...', error.message);
 
-            const optionalCols = ['agente_saude', 'sus_number', 'phone', 'neighborhood', 'street', 'birth_date', 'nickname', 'rg'];
+            const optionalCols = ['phone_fixed', 'agente_saude', 'sus_number', 'phone', 'neighborhood', 'street', 'birth_date', 'nickname', 'rg'];
             let fallbackUpdates = { ...cleanUpdates };
             let lastError = error;
 
@@ -929,6 +989,80 @@ export const updatePaciente = async (id: string, updates: Partial<ConsultaPacien
         }
         throw appError;
     }
+};
+
+export interface ItemAuditoriaTelefone {
+    pacienteId: string;
+    pacienteNome: string;
+    pacienteCpf: string | null;
+    telefoneCadastrado: string | null;
+    motivo: string;
+    errorCode: string;
+    tipoSuspeita: 'ficticio' | 'invalido' | 'ddd_inexistente' | 'sem_telefone' | 'regra_anatel';
+}
+
+export interface RelatorioAuditoriaTelefones {
+    totalAnalisados: number;
+    totalValidos: number;
+    totalSuspeitos: number;
+    totalSemTelefone: number;
+    itensSuspeitos: ItemAuditoriaTelefone[];
+    dataHoraExecucao: string;
+}
+
+/**
+ * Executa auditoria diagnóstica de todos os telefones de pacientes cadastrados na base,
+ * identificando inconsistências, números fictícios e violações de regras sem alterar nenhum dado.
+ */
+export const auditarTelefonesPacientes = async (): Promise<RelatorioAuditoriaTelefones> => {
+    const pacientes = await getPacientes();
+    const itensSuspeitos: ItemAuditoriaTelefone[] = [];
+    let totalValidos = 0;
+    let totalSemTelefone = 0;
+
+    for (const p of pacientes) {
+        const rawPhone = p.phone ? String(p.phone).trim() : '';
+        if (!rawPhone) {
+            totalSemTelefone++;
+            continue;
+        }
+
+        const check = validateBrazilianPhone(rawPhone, { required: false });
+        if (check.isValid) {
+            totalValidos++;
+        } else {
+            let tipoSuspeita: ItemAuditoriaTelefone['tipoSuspeita'] = 'invalido';
+            if (check.errorCode === 'INVALID_DDD') tipoSuspeita = 'ddd_inexistente';
+            else if (check.errorCode === 'INVALID_ANATEL_RULE') tipoSuspeita = 'regra_anatel';
+            else if (
+                check.errorCode === 'REPETITIVE_DIGITS' ||
+                check.errorCode === 'PROGRESSIVE_SEQUENCE' ||
+                check.errorCode === 'CYCLIC_PATTERN' ||
+                check.errorCode === 'SUSPICIOUS_FICTITIOUS'
+            ) {
+                tipoSuspeita = 'ficticio';
+            }
+
+            itensSuspeitos.push({
+                pacienteId: p.id,
+                pacienteNome: p.name,
+                pacienteCpf: p.cpf || null,
+                telefoneCadastrado: rawPhone,
+                motivo: check.diagnosticReason || check.errorMessage || TELEFONE_INVALIDO_MSG,
+                errorCode: check.errorCode || 'SUSPICIOUS_FICTITIOUS',
+                tipoSuspeita
+            });
+        }
+    }
+
+    return {
+        totalAnalisados: pacientes.length,
+        totalValidos,
+        totalSuspeitos: itensSuspeitos.length,
+        totalSemTelefone,
+        itensSuspeitos,
+        dataHoraExecucao: new Date().toISOString()
+    };
 };
 
 export const deletePaciente = async (id: string): Promise<boolean> => {

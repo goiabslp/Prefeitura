@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { ConsultaAgendamento, ConsultaVaga } from '../../types';
+import { ConsultaAgendamento, ConsultaVaga, ConsultaPaciente, User } from '../../types';
 import { 
     X, Calendar, Clock, CheckCircle2, AlertCircle, Loader2, 
     Sparkles, User as UserIcon, Activity, Stethoscope, ChevronRight,
@@ -8,10 +8,13 @@ import {
 } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { formatProcedimentoLabel } from '../../services/consultasService';
+import { isTelefoneIrregularParaOperacao } from '../../utils/phoneValidation';
+import { RegularizacaoTelefoneModal } from '../common/RegularizacaoTelefoneModal';
 
 interface DefinirDataModalProps {
     isOpen: boolean;
     booking: ConsultaAgendamento | null;
+    currentUser?: User | null;
     onClose: () => void;
     onSuccess?: () => void;
 }
@@ -19,6 +22,7 @@ interface DefinirDataModalProps {
 export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
     isOpen,
     booking,
+    currentUser,
     onClose,
     onSuccess
 }) => {
@@ -26,6 +30,10 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
     const [submitting, setSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
+
+    // Bloqueio Obrigatório por Telefone Irregular
+    const [phoneIrregularPatient, setPhoneIrregularPatient] = useState<ConsultaPaciente | null>(null);
+    const [isPhoneRegularizacaoOpen, setIsPhoneRegularizacaoOpen] = useState(false);
 
     const [vagas, setVagas] = useState<ConsultaVaga[]>([]);
     const [confirmedBookings, setConfirmedBookings] = useState<ConsultaAgendamento[]>([]);
@@ -142,16 +150,8 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
     const procName = formatProcedimentoLabel(booking.procedimento) || 'Procedimento';
     const procType = booking.procedimento?.type || 'Consulta';
 
-    const handleConfirm = async () => {
-        if (!selectedDate) {
-            setErrorMsg('Por favor, selecione uma data para o agendamento.');
-            return;
-        }
-        if (!selectedSlot) {
-            setErrorMsg('Por favor, selecione uma vaga de horário para o agendamento.');
-            return;
-        }
-
+    const executarGravacaoAgendamento = async () => {
+        if (!selectedSlot) return;
         setSubmitting(true);
         setErrorMsg('');
         setSuccessMsg('');
@@ -178,6 +178,41 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
         } finally {
             setSubmitting(false);
         }
+    };
+
+    const handleConfirm = async () => {
+        if (!selectedDate) {
+            setErrorMsg('Por favor, selecione uma data para o agendamento.');
+            return;
+        }
+        if (!selectedSlot) {
+            setErrorMsg('Por favor, selecione uma vaga de horário para o agendamento.');
+            return;
+        }
+
+        // Bloqueio compulsório de Telefone Irregular / Fictício
+        if (booking.paciente && isTelefoneIrregularParaOperacao(booking.paciente.phone)) {
+            setPhoneIrregularPatient(booking.paciente);
+            setIsPhoneRegularizacaoOpen(true);
+            return;
+        }
+
+        await executarGravacaoAgendamento();
+    };
+
+    const handlePhoneRegularizadoSuccess = async (updated: ConsultaPaciente) => {
+        if (booking.paciente) {
+            booking.paciente.phone = updated.phone;
+        }
+        setPhoneIrregularPatient(null);
+        setIsPhoneRegularizacaoOpen(false);
+        await executarGravacaoAgendamento();
+    };
+
+    const handlePhoneExceptionAllowed = async () => {
+        setPhoneIrregularPatient(null);
+        setIsPhoneRegularizacaoOpen(false);
+        await executarGravacaoAgendamento();
     };
 
     return createPortal(
@@ -468,6 +503,22 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
                 </div>
 
             </div>
+
+            {/* MODAL PERSONALIZADO DE BLOQUEIO POR TELEFONE IRREGULAR */}
+            {isPhoneRegularizacaoOpen && phoneIrregularPatient && (
+                <RegularizacaoTelefoneModal
+                    isOpen={isPhoneRegularizacaoOpen}
+                    onClose={() => {
+                        setIsPhoneRegularizacaoOpen(false);
+                        setPhoneIrregularPatient(null);
+                    }}
+                    patient={phoneIrregularPatient}
+                    currentUser={currentUser}
+                    moduloOrigem="Regulação - Definir Data / Agendar"
+                    onSuccess={handlePhoneRegularizadoSuccess}
+                    onExceptionAllowed={handlePhoneExceptionAllowed}
+                />
+            )}
         </div>,
         document.body
     );

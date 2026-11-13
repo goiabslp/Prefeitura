@@ -21,36 +21,23 @@ import {
     Edit2,
     Plus,
     Lock,
-    ShieldAlert
+    ShieldAlert,
+    AlertTriangle
 } from 'lucide-react';
 import { formatProcedimentoLabel, updatePaciente } from '../../services/consultasService';
 import { isConsultasAcompanharReadOnly, hasConsultasAcompanharOperationalAccess } from '../../services/permissionService';
+import { 
+    validateBrazilianPhone, 
+    formatBrazilianPhone, 
+    maskPhoneInput, 
+    isSuspiciousPhone, 
+    getPhoneInconsistencyReason, 
+    TELEFONE_INVALIDO_MSG 
+} from '../../utils/phoneValidation';
 
 // Helpers para formatação e máscara de telefone
 const formatPhoneNumber = (phone?: string | null): string => {
-    if (!phone) return '';
-    const clean = phone.replace(/\D/g, '');
-    if (clean.length === 11) {
-        return clean.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-    }
-    if (clean.length === 10) {
-        return clean.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
-    }
-    return phone;
-};
-
-const maskPhoneInput = (val: string): string => {
-    const digits = val.replace(/\D/g, '').slice(0, 11);
-    if (digits.length > 10) {
-        return digits.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-    }
-    if (digits.length > 6) {
-        return digits.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
-    }
-    if (digits.length > 2) {
-        return digits.replace(/(\d{2})(\d{0,5})/, '($1) $2');
-    }
-    return digits;
+    return formatBrazilianPhone(phone);
 };
 
 interface ConfirmacaoAtendimentosModalProps {
@@ -216,20 +203,24 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
             return;
         }
 
-        const digits = phoneInputValue.replace(/\D/g, '');
-        if (digits.length > 0 && digits.length < 10) {
-            setPhoneSaveError('Informe DDD + Número (ao menos 10 dígitos).');
-            return;
+        const clean = phoneInputValue.trim();
+        if (clean.length > 0) {
+            const check = validateBrazilianPhone(clean, { required: false });
+            if (!check.isValid) {
+                setPhoneSaveError(check.errorMessage || TELEFONE_INVALIDO_MSG);
+                return;
+            }
         }
 
         setIsSavingPhone(true);
         setPhoneSaveError(null);
         try {
-            const masked = formatPhoneNumber(digits);
-            await updatePaciente(pId, { phone: masked });
+            const phoneValidation = clean.length > 0 ? validateBrazilianPhone(clean, { required: false }) : null;
+            const phoneToSave = phoneValidation && phoneValidation.isValid ? (phoneValidation.formatted || clean) : null;
+            await updatePaciente(pId, { phone: phoneToSave });
             setPatientPhoneOverrides(prev => ({
                 ...prev,
-                [pId]: masked
+                [pId]: phoneToSave || ''
             }));
             setEditingPhonePatientId(null);
             if (typeof window !== 'undefined') {
@@ -822,45 +813,74 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
                                                                                         )}
                                                                                     </div>
                                                                                 ) : formattedPhone ? (
-                                                                                    <div className="flex items-center gap-1">
-                                                                                        {/* Atalho WhatsApp */}
-                                                                                        <a
-                                                                                            href={`https://wa.me/55${cleanPhoneDigits}`}
-                                                                                            target="_blank"
-                                                                                            rel="noopener noreferrer"
-                                                                                            onClick={(e) => e.stopPropagation()}
-                                                                                            className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 active:scale-95 border border-emerald-200/90 px-2 py-0.5 rounded-lg transition-all shadow-2xs group"
-                                                                                            title="Abrir WhatsApp para confirmar atendimento"
-                                                                                        >
-                                                                                            <MessageCircle className="w-3 h-3 text-emerald-600 group-hover:scale-110 transition-transform" />
-                                                                                            <span>{formattedPhone}</span>
-                                                                                        </a>
-
-                                                                                        {/* Ligação Direta */}
-                                                                                        <a
-                                                                                            href={`tel:${cleanPhoneDigits}`}
-                                                                                            onClick={(e) => e.stopPropagation()}
-                                                                                            className="p-1 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors"
-                                                                                            title="Ligar para o paciente"
-                                                                                        >
-                                                                                            <Phone className="w-3 h-3" />
-                                                                                        </a>
-
-                                                                                        {/* Editar Telefone */}
-                                                                                        {pId && (
-                                                                                            <button
-                                                                                                type="button"
-                                                                                                onClick={(e) => {
-                                                                                                    e.stopPropagation();
-                                                                                                    handleStartEditPhone(pId, formattedPhone);
-                                                                                                }}
-                                                                                                className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                                                                                                title="Editar telefone do paciente"
+                                                                                    isSuspiciousPhone(formattedPhone) ? (
+                                                                                        <div className="flex items-center gap-1">
+                                                                                            {/* Bloqueio de WhatsApp por Telefone Suspeito */}
+                                                                                            <span
+                                                                                                className="inline-flex items-center gap-1 text-[10px] font-extrabold text-rose-700 bg-rose-50 border border-rose-300 px-2 py-0.5 rounded-lg shadow-2xs"
+                                                                                                title={`Telefone suspeito/inválido: ${getPhoneInconsistencyReason(formattedPhone)}. Integração WhatsApp bloqueada até a regularização do cadastro.`}
                                                                                             >
-                                                                                                <Edit2 className="w-2.5 h-2.5" />
-                                                                                            </button>
-                                                                                        )}
-                                                                                    </div>
+                                                                                                <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                                                                                                <span className="line-through">{formattedPhone}</span>
+                                                                                                <span className="text-[8px] uppercase tracking-wider font-black px-1 py-0.2 rounded bg-rose-200/80 text-rose-900">Suspeito</span>
+                                                                                            </span>
+
+                                                                                            {/* Corrigir Telefone */}
+                                                                                            {pId && (
+                                                                                                <button
+                                                                                                    type="button"
+                                                                                                    onClick={(e) => {
+                                                                                                        e.stopPropagation();
+                                                                                                        handleStartEditPhone(pId, formattedPhone);
+                                                                                                    }}
+                                                                                                    className="p-1 text-slate-400 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                                                                                    title="Corrigir telefone suspeito"
+                                                                                                >
+                                                                                                    <Edit2 className="w-2.5 h-2.5" />
+                                                                                                </button>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <div className="flex items-center gap-1">
+                                                                                            {/* Atalho WhatsApp */}
+                                                                                            <a
+                                                                                                href={`https://wa.me/55${cleanPhoneDigits}`}
+                                                                                                target="_blank"
+                                                                                                rel="noopener noreferrer"
+                                                                                                onClick={(e) => e.stopPropagation()}
+                                                                                                className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 active:scale-95 border border-emerald-200/90 px-2 py-0.5 rounded-lg transition-all shadow-2xs group"
+                                                                                                title="Abrir WhatsApp para confirmar atendimento"
+                                                                                            >
+                                                                                                <MessageCircle className="w-3 h-3 text-emerald-600 group-hover:scale-110 transition-transform" />
+                                                                                                <span>{formattedPhone}</span>
+                                                                                            </a>
+
+                                                                                            {/* Ligação Direta */}
+                                                                                            <a
+                                                                                                href={`tel:${cleanPhoneDigits}`}
+                                                                                                onClick={(e) => e.stopPropagation()}
+                                                                                                className="p-1 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors"
+                                                                                                title="Ligar para o paciente"
+                                                                                            >
+                                                                                                <Phone className="w-3 h-3" />
+                                                                                            </a>
+
+                                                                                            {/* Editar Telefone */}
+                                                                                            {pId && (
+                                                                                                <button
+                                                                                                    type="button"
+                                                                                                    onClick={(e) => {
+                                                                                                        e.stopPropagation();
+                                                                                                        handleStartEditPhone(pId, formattedPhone);
+                                                                                                    }}
+                                                                                                    className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                                                                                                    title="Editar telefone do paciente"
+                                                                                                >
+                                                                                                    <Edit2 className="w-2.5 h-2.5" />
+                                                                                                </button>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    )
                                                                                 ) : (
                                                                                     /* Botão Inserir Telefone */
                                                                                     pId && (

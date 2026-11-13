@@ -21,6 +21,8 @@ import { PacienteLinhaDoTempoTab } from './PacienteLinhaDoTempoTab';
 import { PacienteAnaliseTab } from './PacienteAnaliseTab';
 import { PacienteRelatorioModal } from './PacienteRelatorioModal';
 import { PacienteFormModal } from './PacienteFormModal';
+import { RegularizacaoTelefoneModal } from '../../common/RegularizacaoTelefoneModal';
+import { isTelefoneIrregularParaOperacao, getPhoneInconsistencyReason } from '../../../utils/phoneValidation';
 import {
     ArrowLeft,
     FileText,
@@ -97,6 +99,7 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
     // Modais
     const [isRelatorioOpen, setIsRelatorioOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isRegularizarPhoneOpen, setIsRegularizarPhoneOpen] = useState(false);
     const [alertasOpen, setAlertasOpen] = useState(false);
 
     // Carrega dados completos do paciente
@@ -341,6 +344,17 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
 
                     {/* Ações Rápidas no Cabeçalho */}
                     <div className="flex items-center gap-1 shrink-0">
+                        {isTelefoneIrregularParaOperacao(paciente.phone) && (
+                            <button
+                                type="button"
+                                onClick={() => setIsRegularizarPhoneOpen(true)}
+                                className="px-2 py-0.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer shadow-2xs animate-pulse"
+                                title="Telefone irregular: clique para regularizar o contato"
+                            >
+                                <Phone className="w-2.5 h-2.5 text-rose-600" /> <span>Regularizar Tel</span>
+                            </button>
+                        )}
+
                         <button
                             type="button"
                             onClick={() => setIsEditModalOpen(true)}
@@ -371,7 +385,26 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
                         {idade !== null ? ` (${idade}a)` : ''}
                     </span>
                     <span className="text-slate-300">•</span>
-                    <span>Tel: {paciente.phone || 'Sem tel'}</span>
+                    {isTelefoneIrregularParaOperacao(paciente.phone) ? (
+                        <button
+                            type="button"
+                            onClick={() => setIsRegularizarPhoneOpen(true)}
+                            className="inline-flex items-center gap-1 text-rose-700 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200 hover:bg-rose-100 transition-colors cursor-pointer"
+                            title={`Telefone irregular: ${getPhoneInconsistencyReason(paciente.phone) || 'Não informado'}. Clique para regularizar.`}
+                        >
+                            <AlertTriangle className="w-2.5 h-2.5 text-rose-600 shrink-0" />
+                            <span className="line-through">{paciente.phone || 'Sem telefone'}</span>
+                            <span className="text-[8px] font-black uppercase tracking-wider text-rose-800">Irregular</span>
+                        </button>
+                    ) : (
+                        <span>WhatsApp: {paciente.phone}</span>
+                    )}
+                    {paciente.phone_fixed && (
+                        <>
+                            <span className="text-slate-300">•</span>
+                            <span>Fixo: {paciente.phone_fixed}</span>
+                        </>
+                    )}
                     {paciente.agente_saude && (
                         <>
                             <span className="text-slate-300">•</span>
@@ -735,6 +768,21 @@ export const PacienteDashboardScreen: React.FC<PacienteDashboardScreenProps> = (
                     isOpen={isEditModalOpen}
                     onClose={() => setIsEditModalOpen(false)}
                     editingPatient={paciente}
+                    onSuccess={(pAtualizado) => {
+                        setPaciente(pAtualizado);
+                        carregarDados();
+                    }}
+                />
+            )}
+
+            {/* Modal de Regularização de Telefone */}
+            {isRegularizarPhoneOpen && paciente && (
+                <RegularizacaoTelefoneModal
+                    isOpen={isRegularizarPhoneOpen}
+                    onClose={() => setIsRegularizarPhoneOpen(false)}
+                    patient={paciente}
+                    currentUser={currentUser}
+                    moduloOrigem="Regulação - Prontuário de Paciente"
                     onSuccess={(pAtualizado) => {
                         setPaciente(pAtualizado);
                         carregarDados();

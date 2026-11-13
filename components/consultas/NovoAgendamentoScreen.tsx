@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { User, ConsultaPaciente, ConsultaProcedimento, AppState, ConsultaAgendamento, ConsultaVaga, AGENTES_DE_SAUDE } from '../../types';
 import { useAgentesSaude } from '../../services/agentesSaudeService';
+import { validateBrazilianPhone, maskPhoneInput, isTelefoneIrregularParaOperacao, TELEFONE_INVALIDO_MSG } from '../../utils/phoneValidation';
+import { RegularizacaoTelefoneModal } from '../common/RegularizacaoTelefoneModal';
 import { 
     ArrowLeft, 
     UserPlus, 
@@ -103,7 +105,19 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     const [incompletePatient, setIncompletePatient] = useState<ConsultaPaciente | null>(null);
     const [isValidationModalOpen, setIsValidationModalOpen] = useState(false);
 
+    // Bloqueio Obrigatório de Telefone Irregular
+    const [phoneIrregularPatient, setPhoneIrregularPatient] = useState<ConsultaPaciente | null>(null);
+    const [isPhoneRegularizacaoOpen, setIsPhoneRegularizacaoOpen] = useState(false);
+
     const selectAndValidatePatient = (patientObj: ConsultaPaciente) => {
+        // 1. Bloqueio compulsório de Telefone Irregular / Fictício / Vazio
+        if (isTelefoneIrregularParaOperacao(patientObj.phone)) {
+            setPhoneIrregularPatient(patientObj);
+            setIsPhoneRegularizacaoOpen(true);
+            return;
+        }
+
+        // 2. Validação geral de cadastro incompleto
         if (!isPatientComplete(patientObj)) {
             setIncompletePatient(patientObj);
             setIsValidationModalOpen(true);
@@ -112,6 +126,29 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
             setIsRetornoQuestionModalOpen(true);
             onNavigate('consultas:novo-agendamento-paciente');
         }
+    };
+
+    const handlePhoneRegularizadoSuccess = (updated: ConsultaPaciente) => {
+        setPhoneIrregularPatient(null);
+        setIsPhoneRegularizacaoOpen(false);
+
+        // Se após atualizar o telefone ainda houver outros campos pendentes
+        if (!isPatientComplete(updated)) {
+            setIncompletePatient(updated);
+            setIsValidationModalOpen(true);
+        } else {
+            setSelectedPatient(updated);
+            setIsRetornoQuestionModalOpen(true);
+            onNavigate('consultas:novo-agendamento-paciente');
+        }
+    };
+
+    const handlePhoneExceptionAllowed = (exemptPatient: ConsultaPaciente) => {
+        setPhoneIrregularPatient(null);
+        setIsPhoneRegularizacaoOpen(false);
+        setSelectedPatient(exemptPatient);
+        setIsRetornoQuestionModalOpen(true);
+        onNavigate('consultas:novo-agendamento-paciente');
     };
 
     const handlePatientValidationComplete = (updated: ConsultaPaciente) => {
@@ -605,18 +642,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
 
     // Format Phone Input: (00) 00000-0000 or (00) 0000-0000
     const handlePhoneChange = (val: string) => {
-        const clean = val.replace(/\D/g, '');
-        let formatted = '';
-        if (clean.length <= 2) {
-            formatted = clean;
-        } else if (clean.length <= 6) {
-            formatted = `(${clean.slice(0, 2)}) ${clean.slice(2)}`;
-        } else if (clean.length <= 10) {
-            formatted = `(${clean.slice(0, 2)}) ${clean.slice(2, 6)}-${clean.slice(6)}`;
-        } else {
-            formatted = `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7, 11)}`;
-        }
-        setNewPatientPhone(formatted);
+        setNewPatientPhone(maskPhoneInput(val));
     };
 
     // CPF Validation algorithm
@@ -732,9 +758,9 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
             setErrorMessage('Data de nascimento é obrigatória.');
             return;
         }
-        const cleanPhone = newPatientPhone.replace(/\D/g, '');
-        if (!cleanPhone || cleanPhone.length < 10) {
-            setErrorMessage('Telefone é obrigatório (informe DDD + Número com pelo menos 10 dígitos).');
+        const phoneCheck = validateBrazilianPhone(newPatientPhone, { required: true });
+        if (!phoneCheck.isValid) {
+            setErrorMessage(phoneCheck.errorMessage || TELEFONE_INVALIDO_MSG);
             return;
         }
         if (!newPatientAgenteSaude || !newPatientAgenteSaude.trim()) {
@@ -749,7 +775,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 nickname: newPatientNickname.trim() ? newPatientNickname.trim().toUpperCase() : null,
                 cpf: newPatientCpf,
                 birth_date: newPatientBirthDate,
-                phone: newPatientPhone.trim(),
+                phone: phoneCheck.formatted || newPatientPhone.trim(),
                 neighborhood: newPatientNeighborhood.trim() ? newPatientNeighborhood.trim().toUpperCase() : null,
                 street: newPatientStreet.trim() ? newPatientStreet.trim().toUpperCase() : null,
                 city: newPatientCity.trim() ? newPatientCity.trim().toUpperCase() : 'SÃO JOSÉ DO GOIABAL -MG',
@@ -1467,6 +1493,11 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                 <div className="pt-0.5 flex justify-end shrink-0">
                                     <button
                                         onClick={() => {
+                                            if (selectedPatient && isTelefoneIrregularParaOperacao(selectedPatient.phone)) {
+                                                setPhoneIrregularPatient(selectedPatient);
+                                                setIsPhoneRegularizacaoOpen(true);
+                                                return;
+                                            }
                                             if (selectedPatient && !isPatientComplete(selectedPatient)) {
                                                 setIncompletePatient(selectedPatient);
                                                 setIsValidationModalOpen(true);
@@ -3645,6 +3676,22 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                     </div>
                 </div>,
                 document.body
+            )}
+
+            {/* MODAL PERSONALIZADO DE BLOQUEIO POR TELEFONE IRREGULAR */}
+            {isPhoneRegularizacaoOpen && phoneIrregularPatient && (
+                <RegularizacaoTelefoneModal
+                    isOpen={isPhoneRegularizacaoOpen}
+                    onClose={() => {
+                        setIsPhoneRegularizacaoOpen(false);
+                        setPhoneIrregularPatient(null);
+                    }}
+                    patient={phoneIrregularPatient}
+                    currentUser={currentUser}
+                    moduloOrigem="Regulação - Novo Agendamento"
+                    onSuccess={handlePhoneRegularizadoSuccess}
+                    onExceptionAllowed={handlePhoneExceptionAllowed}
+                />
             )}
 
             {/* MODAL DE VALIDAÇÃO AUTOMÁTICA DE CADASTRO INCOMPLETO */}
