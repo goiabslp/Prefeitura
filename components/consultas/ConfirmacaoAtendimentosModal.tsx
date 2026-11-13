@@ -34,6 +34,7 @@ import {
     getPhoneInconsistencyReason, 
     TELEFONE_INVALIDO_MSG 
 } from '../../utils/phoneValidation';
+import { ConfirmarAcaoAtendimentoModal } from './ConfirmarAcaoAtendimentoModal';
 
 // Helpers para formatação e máscara de telefone
 const formatPhoneNumber = (phone?: string | null): string => {
@@ -46,7 +47,11 @@ interface ConfirmacaoAtendimentosModalProps {
     pendencias: ConsultaAgendamento[];
     currentUser: User;
     isGestorOrAdmin?: boolean;
-    onConfirmar: (id: string, situacao: 'Realizado' | 'Não Realizado') => Promise<void>;
+    onConfirmar: (
+        id: string, 
+        situacao: 'Realizado' | 'Não Realizado', 
+        contatoInfo?: { contatoConfirmado: boolean; declaracaoContato: string }
+    ) => Promise<void>;
 }
 
 type PeriodFilterType = 'todas' | 'ontem' | '7dias' | 'personalizado';
@@ -177,6 +182,12 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
     // Controle de Linhas em Processamento (loading individual por linha)
     const [processingIds, setProcessingIds] = useState<Record<string, 'Realizado' | 'Não Realizado' | undefined>>({});
     const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
+
+    // Modal de Confirmação Obrigatória de Contato
+    const [confirmTarget, setConfirmTarget] = useState<{
+        booking: ConsultaAgendamento;
+        situacao: 'Realizado' | 'Não Realizado';
+    } | null>(null);
 
     // Controle de Edição Rápida de Telefone do Paciente
     const [patientPhoneOverrides, setPatientPhoneOverrides] = useState<Record<string, string>>({});
@@ -409,8 +420,12 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
         return groups;
     }, [filteredList]);
 
-    // Executar ação de confirmação individual
-    const handleAction = async (id: string, situacao: 'Realizado' | 'Não Realizado') => {
+    // Executar ação de confirmação individual após confirmação expressa de contato
+    const handleAction = async (
+        id: string, 
+        situacao: 'Realizado' | 'Não Realizado',
+        contatoInfo?: { contatoConfirmado: boolean; declaracaoContato: string }
+    ) => {
         if (isReadOnlyUser || !hasOperational) {
             setRowErrors(prev => ({
                 ...prev,
@@ -429,7 +444,7 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
         });
 
         try {
-            await onConfirmar(id, situacao);
+            await onConfirmar(id, situacao, contatoInfo);
         } catch (err: any) {
             console.error('Erro ao confirmar atendimento:', err);
             setRowErrors(prev => ({
@@ -932,7 +947,10 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
                                                                 {/* Botão Realizado */}
                                                                 <button
                                                                     type="button"
-                                                                    onClick={() => handleAction(booking.id, 'Realizado')}
+                                                                    onClick={() => {
+                                                                        if (isReadOnlyUser || !hasOperational || isProcessing) return;
+                                                                        setConfirmTarget({ booking, situacao: 'Realizado' });
+                                                                    }}
                                                                     disabled={isProcessing}
                                                                     className="flex-1 md:flex-initial px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-[11px] sm:text-xs rounded-xl shadow-xs shadow-emerald-600/20 transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
                                                                     title="Confirmar comparecimento do paciente (Realizado)"
@@ -948,7 +966,10 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
                                                                 {/* Botão Faltou */}
                                                                 <button
                                                                     type="button"
-                                                                    onClick={() => handleAction(booking.id, 'Não Realizado')}
+                                                                    onClick={() => {
+                                                                        if (isReadOnlyUser || !hasOperational || isProcessing) return;
+                                                                        setConfirmTarget({ booking, situacao: 'Não Realizado' });
+                                                                    }}
                                                                     disabled={isProcessing}
                                                                     className="flex-1 md:flex-initial px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-rose-50 hover:bg-rose-100 hover:border-rose-300 active:scale-95 text-rose-700 font-extrabold text-[11px] sm:text-xs rounded-xl border border-rose-200 transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
                                                                     title="Registrar ausência do paciente (Faltou)"
@@ -1006,6 +1027,20 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
                     )}
                 </footer>
             </div>
+
+            {/* 5. MODAL DE CONFIRMAÇÃO EXPRESSA DE CONTATO COM O PACIENTE */}
+            {confirmTarget && (
+                <ConfirmarAcaoAtendimentoModal
+                    isOpen={Boolean(confirmTarget)}
+                    onClose={() => setConfirmTarget(null)}
+                    booking={confirmTarget.booking}
+                    situacao={confirmTarget.situacao}
+                    currentUser={currentUser}
+                    onConfirm={async (contatoInfo) => {
+                        await handleAction(confirmTarget.booking.id, confirmTarget.situacao, contatoInfo);
+                    }}
+                />
+            )}
         </div>
     );
 };

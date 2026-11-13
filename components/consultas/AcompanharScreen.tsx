@@ -2522,12 +2522,16 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     };
 
     // Handler para confirmar individualmente (Realizado ou Faltou)
-    const handleConfirmarComparecimento = async (id: string, situacao: 'Realizado' | 'Não Realizado') => {
+    const handleConfirmarComparecimento = async (
+        id: string,
+        situacao: 'Realizado' | 'Não Realizado',
+        contatoInfo?: { contatoConfirmado: boolean; declaracaoContato: string }
+    ) => {
         if (isReadOnly || !canConfirmarAtendimentos) {
             console.warn('[AcompanharScreen] Tentativa de confirmar atendimento bloqueada (permissão somente leitura).');
             return;
         }
-        const updated = await db.confirmarComparecimentoAgendamento(id, situacao, currentUser);
+        const updated = await db.confirmarComparecimentoAgendamento(id, situacao, currentUser, contatoInfo);
         if (updated) {
             setAllBookings(prev => prev.map(b => b.id === id ? updated : b));
         }

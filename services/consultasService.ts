@@ -3314,7 +3314,11 @@ export const getAgendamentosPendentesConfirmacao = async (currentUser?: User | n
 export const confirmarComparecimentoAgendamento = async (
     id: string,
     situacao: 'Realizado' | 'Não Realizado',
-    currentUser: User
+    currentUser: User,
+    contatoInfo?: {
+        contatoConfirmado: boolean;
+        declaracaoContato: string;
+    }
 ): Promise<ConsultaAgendamento> => {
     if (!currentUser || isConsultasAcompanharReadOnly(currentUser) || !hasConsultasAcompanharOperationalAccess(currentUser)) {
         throw new Error('Acesso negado (Modo Somente Leitura): seu usuário não possui permissão operacional para confirmar comparecimento de atendimentos.');
@@ -3323,13 +3327,20 @@ export const confirmarComparecimentoAgendamento = async (
     const agoraIso = new Date().toISOString();
     const serverName = currentUser?.name || 'Servidor Municipal';
 
+    const defaultDeclaracao = situacao === 'Realizado'
+        ? `Contato realizado com o paciente confirmando realização do procedimento.`
+        : `Contato realizado com o paciente confirmando ausência no procedimento.`;
+
     // 1. Atualizar agendamento no Supabase
     const payload: Partial<ConsultaAgendamento> = {
         status: situacao,
         confirmed_at: agoraIso,
         confirmed_by: currentUser?.id || null,
         confirmed_by_name: serverName,
-        confirmation_origin: 'Regulação - Confirmação Automática de Atendimentos'
+        confirmation_origin: 'Regulação - Confirmação Automática de Atendimentos',
+        contato_confirmado: contatoInfo ? contatoInfo.contatoConfirmado : true,
+        declaracao_contato: contatoInfo?.declaracaoContato || defaultDeclaracao,
+        contato_data: agoraIso
     };
 
     const updated = await updateAgendamento(id, payload);
@@ -3342,7 +3353,7 @@ export const confirmarComparecimentoAgendamento = async (
         await auditLogService.logAction({
             action_type: situacao === 'Realizado' ? 'CONFIRMACAO_ATENDIMENTO_REALIZADO' : 'CONFIRMACAO_ATENDIMENTO_FALTOU',
             module: 'Regulação - Acompanhar',
-            description: `Atendimento marcado como "${situacao === 'Realizado' ? 'Realizado' : 'Faltou'}" para o paciente ${updated.paciente?.name || 'N/A'} (Procedimento: ${updated.procedimento?.name || 'N/A'}).`,
+            description: `Atendimento marcado como "${situacao === 'Realizado' ? 'Realizado' : 'Faltou'}" para o paciente ${updated.paciente?.name || 'N/A'} (Procedimento: ${updated.procedimento?.name || 'N/A'}). Declaração: ${payload.declaracao_contato}`,
             details: {
                 agendamento_id: id,
                 paciente_id: updated.patient_id,
@@ -3355,7 +3366,10 @@ export const confirmarComparecimentoAgendamento = async (
                 nova_situacao: situacao,
                 confirmed_at: agoraIso,
                 confirmed_by: currentUser.id,
-                confirmed_by_name: serverName
+                confirmed_by_name: serverName,
+                contato_confirmado: payload.contato_confirmado,
+                declaracao_contato: payload.declaracao_contato,
+                contato_data: agoraIso
             },
             user: {
                 id: currentUser.id,
@@ -4163,6 +4177,9 @@ export const updateAgendamento = async (
                 'confirmed_at',
                 'confirmed_by',
                 'confirmed_by_name',
+                'contato_confirmado',
+                'declaracao_contato',
+                'contato_data',
                 'convenio',
                 'prestador',
                 'municipio',

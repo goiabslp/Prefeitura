@@ -747,11 +747,14 @@ export interface ConsultaAgendamento {
   pause_history?: PauseHistoryItem[];
   original_status?: string;
 
-  // Confirmação de Comparecimento
+  // Confirmação de Comparecimento e Contato
   confirmed_at?: string;
   confirmed_by?: string;
   confirmed_by_name?: string;
   confirmation_origin?: string;
+  contato_confirmado?: boolean;
+  declaracao_contato?: string;
+  contato_data?: string;
 
   // Solicitação de Cancelamento e Exclusão
   cancelamento_pendente?: boolean;
