@@ -805,40 +805,50 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                             )}
                             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-xl shadow-xs min-w-[75px] justify-center">
                                 <span className="text-[9.5px] font-black uppercase tracking-wider text-indigo-700">Cotas</span>
-                                <span className="text-xs font-black text-indigo-800">{metrics.totalCotas}</span>
+                                <span className="text-xs font-black text-indigo-800">{metrics.totalCotas.toLocaleString('pt-BR')}</span>
                             </div>
                             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-xl shadow-xs min-w-[90px] justify-center" title="Total de solicitações vinculadas em todos os procedimentos">
                                 <span className="text-[9.5px] font-black uppercase tracking-wider text-blue-700">Solicitações</span>
-                                <span className="text-xs font-black text-blue-800">{metrics.totalSolicitacoes}</span>
+                                <span className="text-xs font-black text-blue-800">{metrics.totalSolicitacoes.toLocaleString('pt-BR')}</span>
                             </div>
                         </div>
                     </div>
 
-                    {/* Quando não estiver no detalhe de procedimento, exibe LINHA 2 e LINHA 3 */}
+                    {/* Quando não estiver no detalhe de procedimento, exibe LINHA 2 (Busca, Filtros e Ações Alinhadas) */}
                     {!selectedProc && (
-                        <>
-                            {/* LINHA 2 — Pesquisa e filtros */}
-                            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+                        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-3 border-t border-slate-100">
+                            {/* Lado Esquerdo: Campo de Pesquisa e Filtros */}
+                            <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
                                 {/* Campo de pesquisa por nome ou código */}
-                                <div className="relative flex-1 min-w-[220px] max-w-full sm:max-w-xs md:max-w-sm">
+                                <div className="relative w-64 sm:w-72 md:w-80 shrink-0">
                                     <input
                                         type="text"
                                         placeholder="Buscar exame, consulta ou código..."
-                                        className="w-full h-9 bg-white border border-slate-300 rounded-xl pl-9 pr-4 text-xs font-semibold placeholder:text-slate-400 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-2xs"
+                                        className="w-full h-9 bg-white border border-slate-300 rounded-xl pl-9 pr-8 text-xs font-semibold placeholder:text-slate-400 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-2xs"
                                         value={procSearch}
                                         onChange={(e) => setProcSearch(e.target.value)}
                                     />
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                                    {procSearch && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setProcSearch('')}
+                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-100 cursor-pointer"
+                                            title="Limpar busca"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
                                 </div>
 
                                 {/* Filtro de tipo: Todos, Exame, Consulta, Cirurgia */}
-                                <div className="flex items-center h-9 bg-slate-100 p-0.5 rounded-xl border border-slate-200/80 overflow-x-auto shrink-0 max-w-full shadow-2xs">
+                                <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 shrink-0 shadow-2xs">
                                     {(['Todos', 'Exame', 'Consulta', 'Cirurgia'] as const).map(type => (
                                         <button
                                             key={type}
                                             type="button"
                                             onClick={() => setSelectedTypeFilter(type)}
-                                            className={`h-8 px-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
+                                            className={`h-7 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
                                                 selectedTypeFilter === type
                                                     ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
                                                     : 'text-slate-500 hover:text-slate-800'
@@ -850,13 +860,13 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                 </div>
 
                                 {/* Filtro de status: Todos, Ativos, Suspensos */}
-                                <div className="flex items-center h-9 bg-slate-100 p-0.5 rounded-xl border border-slate-200/80 overflow-x-auto shrink-0 max-w-full shadow-2xs">
+                                <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 shrink-0 shadow-2xs">
                                     {(['Todos', 'Ativos', 'Suspensos'] as const).map(st => (
                                         <button
                                             key={st}
                                             type="button"
                                             onClick={() => setSelectedStatusFilter(st)}
-                                            className={`h-8 px-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
+                                            className={`h-7 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
                                                 selectedStatusFilter === st
                                                     ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
                                                     : 'text-slate-500 hover:text-slate-800'
@@ -868,7 +878,7 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                 </div>
 
                                 {/* Filtro de solicitações: Todas, Com Solicitações, Sem Solicitações */}
-                                <div className="flex items-center h-9 bg-slate-100 p-0.5 rounded-xl border border-slate-200/80 overflow-x-auto shrink-0 max-w-full shadow-2xs" title="Filtrar por movimentação de solicitações">
+                                <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 shrink-0 shadow-2xs" title="Filtrar por movimentação de solicitações">
                                     {[
                                         { value: 'Todos', label: 'Todas' },
                                         { value: 'Com Solicitações', label: 'Com Solicitações' },
@@ -878,7 +888,7 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                             key={solicOpt.value}
                                             type="button"
                                             onClick={() => setSelectedSolicitacoesFilter(solicOpt.value as any)}
-                                            className={`h-8 px-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
+                                            className={`h-7 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
                                                 selectedSolicitacoesFilter === solicOpt.value
                                                     ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
                                                     : 'text-slate-500 hover:text-slate-800'
@@ -890,22 +900,8 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                 </div>
                             </div>
 
-                            {/* LINHA 3 — Ações administrativas */}
-                            <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-                                {/* REVISAR DUPLICIDADES */}
-                                {isAdmin && (
-                                    <button
-                                        type="button"
-                                        onClick={handleOpenRevisarDuplicidades}
-                                        className="h-9 px-3.5 bg-gradient-to-r from-sky-600 via-indigo-600 to-indigo-700 hover:from-sky-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-xs hover:shadow-indigo-500/20 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-400/30 whitespace-nowrap"
-                                        title="Revisar procedimentos de ultrassom, padronizar nomenclaturas e analisar duplicidades ou equivalências"
-                                    >
-                                        <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                                        <span>Revisar Duplicidades</span>
-                                    </button>
-                                )}
-
-                                {/* + ADICIONAR ESPECIALISTA */}
+                            {/* Lado Direito: Ações Administrativas */}
+                            <div className="flex items-center gap-2 shrink-0">
                                 <button
                                     type="button"
                                     onClick={() => handleOpenAddEspecialistaModal()}
@@ -916,121 +912,120 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                     <span>+ Adicionar Especialista</span>
                                 </button>
 
-                                {/* + NOVO PROCEDIMENTO */}
                                 <button
                                     type="button"
                                     onClick={() => handleOpenProcModal()}
-                                    className="h-9 px-3.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-xs hover:shadow-sky-500/15 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                                    className="h-9 px-4 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-xs hover:shadow-sky-500/15 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                                     title="Cadastrar novo procedimento"
                                 >
-                                    <Plus className="w-3.5 h-3.5 shrink-0" />
+                                    <Plus className="w-4 h-4 shrink-0" />
                                     <span>+ Novo Procedimento</span>
                                 </button>
                             </div>
-                        </>
+                        </div>
                     )}
                 </div>
             ) : (
-                /* Quando embedded={true}, renderiza Linha 2 e Linha 3 de forma compacta */
+                /* Quando embedded={true}, renderiza Linha 2 de forma compacta e alinhada */
                 !selectedProc && (
-                    <div className="p-4 border-b border-slate-100 bg-white space-y-3 shrink-0">
-                        {/* Linha 2 em modo embedded */}
-                        <div className="flex flex-wrap items-center gap-2">
-                            <div className="relative flex-1 min-w-[200px] max-w-full sm:max-w-xs">
-                                <input
-                                    type="text"
-                                    placeholder="Buscar exame, consulta ou código..."
-                                    className="w-full h-9 bg-white border border-slate-300 rounded-xl pl-9 pr-4 text-xs font-semibold placeholder:text-slate-400 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-2xs"
-                                    value={procSearch}
-                                    onChange={(e) => setProcSearch(e.target.value)}
-                                />
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                    <div className="p-4 border-b border-slate-100 bg-white shrink-0">
+                        <div className="flex flex-wrap items-center justify-between gap-2.5">
+                            <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+                                <div className="relative w-60 sm:w-64 md:w-72 shrink-0">
+                                    <input
+                                        type="text"
+                                        placeholder="Buscar exame, consulta ou código..."
+                                        className="w-full h-9 bg-white border border-slate-300 rounded-xl pl-9 pr-8 text-xs font-semibold placeholder:text-slate-400 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-2xs"
+                                        value={procSearch}
+                                        onChange={(e) => setProcSearch(e.target.value)}
+                                    />
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                                    {procSearch && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setProcSearch('')}
+                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-100 cursor-pointer"
+                                            title="Limpar busca"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 shrink-0 shadow-2xs">
+                                    {(['Todos', 'Exame', 'Consulta', 'Cirurgia'] as const).map(type => (
+                                        <button
+                                            key={type}
+                                            type="button"
+                                            onClick={() => setSelectedTypeFilter(type)}
+                                            className={`h-7 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
+                                                selectedTypeFilter === type
+                                                    ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
+                                                    : 'text-slate-500 hover:text-slate-800'
+                                            }`}
+                                        >
+                                            {type}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 shrink-0 shadow-2xs">
+                                    {(['Todos', 'Ativos', 'Suspensos'] as const).map(st => (
+                                        <button
+                                            key={st}
+                                            type="button"
+                                            onClick={() => setSelectedStatusFilter(st)}
+                                            className={`h-7 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
+                                                selectedStatusFilter === st
+                                                    ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
+                                                    : 'text-slate-500 hover:text-slate-800'
+                                            }`}
+                                        >
+                                            {st}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 shrink-0 shadow-2xs">
+                                    {[
+                                        { value: 'Todos', label: 'Todas' },
+                                        { value: 'Com Solicitações', label: 'Com Solicitações' },
+                                        { value: 'Sem Solicitações', label: 'Sem Solicitações' }
+                                    ].map(solicOpt => (
+                                        <button
+                                            key={solicOpt.value}
+                                            type="button"
+                                            onClick={() => setSelectedSolicitacoesFilter(solicOpt.value as any)}
+                                            className={`h-7 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
+                                                selectedSolicitacoesFilter === solicOpt.value
+                                                    ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
+                                                    : 'text-slate-500 hover:text-slate-800'
+                                            }`}
+                                        >
+                                            {solicOpt.label}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
 
-                            <div className="flex items-center h-9 bg-slate-100 p-0.5 rounded-xl border border-slate-200/80 overflow-x-auto shrink-0 max-w-full shadow-2xs">
-                                {(['Todos', 'Exame', 'Consulta', 'Cirurgia'] as const).map(type => (
-                                    <button
-                                        key={type}
-                                        type="button"
-                                        onClick={() => setSelectedTypeFilter(type)}
-                                        className={`h-8 px-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
-                                            selectedTypeFilter === type
-                                                ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
-                                                : 'text-slate-500 hover:text-slate-800'
-                                        }`}
-                                    >
-                                        {type}
-                                    </button>
-                                ))}
-                            </div>
-
-                            <div className="flex items-center h-9 bg-slate-100 p-0.5 rounded-xl border border-slate-200/80 overflow-x-auto shrink-0 max-w-full shadow-2xs">
-                                {(['Todos', 'Ativos', 'Suspensos'] as const).map(st => (
-                                    <button
-                                        key={st}
-                                        type="button"
-                                        onClick={() => setSelectedStatusFilter(st)}
-                                        className={`h-8 px-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
-                                            selectedStatusFilter === st
-                                                ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
-                                                : 'text-slate-500 hover:text-slate-800'
-                                        }`}
-                                    >
-                                        {st}
-                                    </button>
-                                ))}
-                            </div>
-
-                            <div className="flex items-center h-9 bg-slate-100 p-0.5 rounded-xl border border-slate-200/80 overflow-x-auto shrink-0 max-w-full shadow-2xs">
-                                {[
-                                    { value: 'Todos', label: 'Todas' },
-                                    { value: 'Com Solicitações', label: 'Com Solicitações' },
-                                    { value: 'Sem Solicitações', label: 'Sem Solicitações' }
-                                ].map(solicOpt => (
-                                    <button
-                                        key={solicOpt.value}
-                                        type="button"
-                                        onClick={() => setSelectedSolicitacoesFilter(solicOpt.value as any)}
-                                        className={`h-8 px-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center ${
-                                            selectedSolicitacoesFilter === solicOpt.value
-                                                ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
-                                                : 'text-slate-500 hover:text-slate-800'
-                                        }`}
-                                    >
-                                        {solicOpt.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Linha 3 em modo embedded */}
-                        <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-                            {isAdmin && (
+                            <div className="flex items-center gap-2 shrink-0">
                                 <button
                                     type="button"
-                                    onClick={handleOpenRevisarDuplicidades}
-                                    className="h-9 px-3.5 bg-gradient-to-r from-sky-600 via-indigo-600 to-indigo-700 hover:from-sky-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-xs text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-400/30 whitespace-nowrap"
+                                    onClick={() => handleOpenAddEspecialistaModal()}
+                                    className="h-9 px-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-xs text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-500/30 whitespace-nowrap"
                                 >
-                                    <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                                    <span>Revisar Duplicidades</span>
+                                    <Stethoscope className="w-3.5 h-3.5 text-indigo-200 shrink-0" />
+                                    <span>+ Adicionar Especialista</span>
                                 </button>
-                            )}
-                            <button
-                                type="button"
-                                onClick={() => handleOpenAddEspecialistaModal()}
-                                className="h-9 px-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-xs text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-500/30 whitespace-nowrap"
-                            >
-                                <Stethoscope className="w-3.5 h-3.5 text-indigo-200 shrink-0" />
-                                <span>+ Adicionar Especialista</span>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => handleOpenProcModal()}
-                                className="h-9 px-3.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-xs text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
-                            >
-                                <Plus className="w-3.5 h-3.5 shrink-0" />
-                                <span>+ Novo Procedimento</span>
-                            </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleOpenProcModal()}
+                                    className="h-9 px-4 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-xs text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                                >
+                                    <Plus className="w-4 h-4 shrink-0" />
+                                    <span>+ Novo Procedimento</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )
