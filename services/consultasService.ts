@@ -2617,7 +2617,7 @@ export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<Con
             quantity, priority, queue_position, special_sequence, status, created_by, created_at,
             is_retorno, retorno_tipo, retorno_grau, tipo_atendimento, prestador, municipio, convenio, vaga_id,
             cancellation_reason, canceled_by, canceled_by_name, canceled_at,
-            paciente:consultas_pacientes(id, name, cpf, birth_date, phone, neighborhood, sus_number, agente_saude),
+            paciente:consultas_pacientes(id, name, cpf, nickname, birth_date, phone, neighborhood, sus_number, agente_saude),
             procedimento:consultas_procedimentos(id, name, code, type, available_quantity, total_quantity, status, recurso),
             responsavel:profiles(id, name)
         `;
@@ -2626,7 +2626,7 @@ export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<Con
             id, patient_id, procedimento_id, appointment_date, appointment_time, solicitation_date,
             quantity, priority, queue_position, special_sequence, status, created_by, created_at,
             is_retorno,
-            paciente:consultas_pacientes(id, name, cpf, birth_date, phone, neighborhood, sus_number, agente_saude),
+            paciente:consultas_pacientes(id, name, cpf, nickname, birth_date, phone, neighborhood, sus_number, agente_saude),
             procedimento:consultas_procedimentos(id, name, code, type, available_quantity, total_quantity, status, recurso),
             responsavel:profiles(id, name)
         `;
@@ -2830,7 +2830,7 @@ export const searchRemoteAgendamentos = async (
             quantity, priority, queue_position, special_sequence, status, created_by, created_at,
             is_retorno, retorno_tipo, retorno_grau, tipo_atendimento, prestador, municipio, convenio, vaga_id,
             cancellation_reason, canceled_by, canceled_by_name, canceled_at,
-            paciente:consultas_pacientes(id, name, cpf, birth_date, phone, neighborhood, sus_number, agente_saude),
+            paciente:consultas_pacientes(id, name, cpf, nickname, birth_date, phone, neighborhood, sus_number, agente_saude),
             procedimento:consultas_procedimentos(id, name, code, type, available_quantity, total_quantity, status, recurso),
             responsavel:profiles(id, name)
         `;

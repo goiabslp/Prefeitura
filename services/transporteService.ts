@@ -23,6 +23,7 @@ import {
   validarCapacidadeViagem,
   calcularIndicadoresTransporte
 } from '../utils/transporteRules';
+import { getAgendamentos } from './consultasService';
 
 export {
   normalizeCityTransporte,
@@ -37,357 +38,51 @@ export type { GrupoDataHierarquico, GrupoDestinoHierarquico };
 
 export const normalizeCity = normalizeCityTransporte;
 
+// Chave única de persistência do cache offline das demandas reais
 const STORAGE_KEY = 'prefeitura_transporte_demandas_v1';
 
-// Base de dados inicial padrão alinhada à especificação visual da Central de Transporte
-const getDemandasIniciaisPadrao = (): TransporteDemanda[] => {
-  const result: TransporteDemanda[] = [];
-
-  // 1. Data 20/11/2026 — Ipatinga — MG (10 pacientes)
-  result.push(
-    {
-      id: 'dem_ipa_01',
-      agendamentoId: 'ag_ipa_01',
-      pacienteId: 'pac_ipa_01',
-      pacienteNome: 'Maria Aparecida Silva',
-      pacienteApelido: 'Maria',
-      pacienteCpf: '123.456.789-00',
-      procedimentoId: 'proc_cardio',
-      procedimentoNome: 'Consulta – Cardiologia',
-      procedimentoCodigo: '0717',
-      tipoProcedimento: 'Consulta',
-      dataAtendimento: '2026-11-20',
-      horaAtendimento: '08:00',
-      municipioDestino: 'Ipatinga — MG',
-      estabelecimentoSaude: 'Hospital Márcio Cunha',
-      necessitaAcompanhante: true,
-      qtdAcompanhantes: 1,
-      necessitaVeiculoAdaptado: false,
-      prioridade: 'Normal',
-      statusTransporte: 'Aguardando vaga',
-      createdAt: '2026-11-15T08:00:00Z',
-      updatedAt: '2026-11-15T08:00:00Z'
-    },
-    {
-      id: 'dem_ipa_02',
-      agendamentoId: 'ag_ipa_02',
-      pacienteId: 'pac_ipa_02',
-      pacienteNome: 'Raimundo Carvalho Souza',
-      pacienteApelido: 'Raimundo',
-      pacienteCpf: '987.654.321-00',
-      procedimentoId: 'proc_ultra',
-      procedimentoNome: 'Exame – Ultrassom',
-      procedimentoCodigo: '0034',
-      tipoProcedimento: 'Exame',
-      dataAtendimento: '2026-11-20',
-      horaAtendimento: '09:20',
-      municipioDestino: 'Ipatinga — MG',
-      estabelecimentoSaude: 'Centro de Diagnóstico Imagem',
-      necessitaAcompanhante: false,
-      qtdAcompanhantes: 0,
-      necessitaVeiculoAdaptado: true,
-      prioridade: 'Normal',
-      statusTransporte: 'Aguardando vaga',
-      createdAt: '2026-11-15T08:30:00Z',
-      updatedAt: '2026-11-15T08:30:00Z'
-    },
-    {
-      id: 'dem_ipa_03',
-      agendamentoId: 'ag_ipa_03',
-      pacienteId: 'pac_ipa_03',
-      pacienteNome: 'Nilton Marques',
-      pacienteApelido: 'Nilton',
-      pacienteCpf: '456.789.123-00',
-      procedimentoId: 'proc_orto',
-      procedimentoNome: 'Consulta – Ortopedia',
-      procedimentoCodigo: '0210',
-      tipoProcedimento: 'Consulta',
-      dataAtendimento: '2026-11-20',
-      horaAtendimento: '10:00',
-      municipioDestino: 'Ipatinga — MG',
-      estabelecimentoSaude: 'Clínica Ortopédica Vale do Aço',
-      necessitaAcompanhante: true,
-      qtdAcompanhantes: 1,
-      necessitaVeiculoAdaptado: false,
-      prioridade: 'Normal',
-      statusTransporte: 'Alocado',
-      viagemId: 'trip_qxv_4b21',
-      veiculoId: 'veh_qxv_4b21',
-      createdAt: '2026-11-15T09:00:00Z',
-      updatedAt: '2026-11-15T09:00:00Z'
-    },
-    {
-      id: 'dem_ipa_04',
-      agendamentoId: 'ag_ipa_04',
-      pacienteId: 'pac_ipa_04',
-      pacienteNome: 'Vanilda Pereira dos Santos',
-      pacienteApelido: 'Vanilda',
-      pacienteCpf: '321.654.987-00',
-      procedimentoId: 'proc_ressonancia',
-      procedimentoNome: 'Exame – Ressonância',
-      procedimentoCodigo: '0108',
-      tipoProcedimento: 'Exame',
-      dataAtendimento: '2026-11-20',
-      horaAtendimento: '10:30',
-      municipioDestino: 'Ipatinga — MG',
-      estabelecimentoSaude: 'Hospital Márcio Cunha II',
-      necessitaAcompanhante: false,
-      qtdAcompanhantes: 0,
-      necessitaVeiculoAdaptado: false,
-      prioridade: 'Normal',
-      statusTransporte: 'Alocado',
-      viagemId: 'trip_qxv_4b21',
-      veiculoId: 'veh_qxv_4b21',
-      createdAt: '2026-11-15T09:30:00Z',
-      updatedAt: '2026-11-15T09:30:00Z'
-    },
-    {
-      id: 'dem_ipa_05',
-      agendamentoId: 'ag_ipa_05',
-      pacienteId: 'pac_ipa_05',
-      pacienteNome: 'Sebastião Alves Moreira',
-      pacienteApelido: 'Tião',
-      pacienteCpf: '555.444.333-22',
-      procedimentoId: 'proc_oftalmo',
-      procedimentoNome: 'Consulta – Oftalmologia',
-      procedimentoCodigo: '0412',
-      tipoProcedimento: 'Consulta',
-      dataAtendimento: '2026-11-20',
-      horaAtendimento: '11:00',
-      municipioDestino: 'Ipatinga — MG',
-      necessitaAcompanhante: false,
-      qtdAcompanhantes: 0,
-      necessitaVeiculoAdaptado: false,
-      prioridade: 'Normal',
-      statusTransporte: 'Alocado',
-      viagemId: 'trip_rfb_7c32',
-      veiculoId: 'veh_rfb_7c32',
-      createdAt: '2026-11-15T10:00:00Z',
-      updatedAt: '2026-11-15T10:00:00Z'
-    },
-    {
-      id: 'dem_ipa_06',
-      agendamentoId: 'ag_ipa_06',
-      pacienteId: 'pac_ipa_06',
-      pacienteNome: 'Francisca Ferreira Lima',
-      pacienteApelido: 'Dona Chica',
-      pacienteCpf: '666.777.888-99',
-      procedimentoId: 'proc_gineco',
-      procedimentoNome: 'Exame – Mamografia',
-      procedimentoCodigo: '0520',
-      tipoProcedimento: 'Exame',
-      dataAtendimento: '2026-11-20',
-      horaAtendimento: '11:30',
-      municipioDestino: 'Ipatinga — MG',
-      necessitaAcompanhante: false,
-      qtdAcompanhantes: 0,
-      necessitaVeiculoAdaptado: false,
-      prioridade: 'Normal',
-      statusTransporte: 'Alocado',
-      viagemId: 'trip_rfb_7c32',
-      veiculoId: 'veh_rfb_7c32',
-      createdAt: '2026-11-15T10:30:00Z',
-      updatedAt: '2026-11-15T10:30:00Z'
-    },
-    {
-      id: 'dem_ipa_07',
-      agendamentoId: 'ag_ipa_07',
-      pacienteId: 'pac_ipa_07',
-      pacienteNome: 'Geraldo Antônio de Souza',
-      pacienteApelido: 'Geraldinho',
-      pacienteCpf: '777.888.999-00',
-      procedimentoId: 'proc_urologia',
-      procedimentoNome: 'Consulta – Urologia',
-      procedimentoCodigo: '0630',
-      tipoProcedimento: 'Consulta',
-      dataAtendimento: '2026-11-20',
-      horaAtendimento: '13:00',
-      municipioDestino: 'Ipatinga — MG',
-      necessitaAcompanhante: false,
-      qtdAcompanhantes: 0,
-      necessitaVeiculoAdaptado: false,
-      prioridade: 'Normal',
-      statusTransporte: 'Aguardando vaga',
-      createdAt: '2026-11-15T11:00:00Z',
-      updatedAt: '2026-11-15T11:00:00Z'
-    },
-    {
-      id: 'dem_ipa_08',
-      agendamentoId: 'ag_ipa_08',
-      pacienteId: 'pac_ipa_08',
-      pacienteNome: 'Luciana Martins Barbosa',
-      pacienteApelido: 'Lu',
-      pacienteCpf: '888.999.000-11',
-      procedimentoId: 'proc_dermato',
-      procedimentoNome: 'Consulta – Dermatologia',
-      procedimentoCodigo: '0740',
-      tipoProcedimento: 'Consulta',
-      dataAtendimento: '2026-11-20',
-      horaAtendimento: '14:00',
-      municipioDestino: 'Ipatinga — MG',
-      necessitaAcompanhante: false,
-      qtdAcompanhantes: 0,
-      necessitaVeiculoAdaptado: false,
-      prioridade: 'Normal',
-      statusTransporte: 'Aguardando vaga',
-      createdAt: '2026-11-15T11:30:00Z',
-      updatedAt: '2026-11-15T11:30:00Z'
-    },
-    {
-      id: 'dem_ipa_09',
-      agendamentoId: 'ag_ipa_09',
-      pacienteId: 'pac_ipa_09',
-      pacienteNome: 'José Benedito da Costa',
-      pacienteApelido: 'Benedito',
-      pacienteCpf: '999.000.111-22',
-      procedimentoId: 'proc_eco',
-      procedimentoNome: 'Exame – Ecocardiograma',
-      procedimentoCodigo: '0850',
-      tipoProcedimento: 'Exame',
-      dataAtendimento: '2026-11-20',
-      horaAtendimento: '14:45',
-      municipioDestino: 'Ipatinga — MG',
-      necessitaAcompanhante: false,
-      qtdAcompanhantes: 0,
-      necessitaVeiculoAdaptado: false,
-      prioridade: 'Normal',
-      statusTransporte: 'Aguardando vaga',
-      createdAt: '2026-11-15T12:00:00Z',
-      updatedAt: '2026-11-15T12:00:00Z'
-    },
-    {
-      id: 'dem_ipa_10',
-      agendamentoId: 'ag_ipa_10',
-      pacienteId: 'pac_ipa_10',
-      pacienteNome: 'Terezinha de Jesus Ribeiro',
-      pacienteApelido: 'Dona Tetê',
-      pacienteCpf: '111.222.444-55',
-      procedimentoId: 'proc_neuro',
-      procedimentoNome: 'Consulta – Neurologia',
-      procedimentoCodigo: '0960',
-      tipoProcedimento: 'Consulta',
-      dataAtendimento: '2026-11-20',
-      horaAtendimento: '15:30',
-      municipioDestino: 'Ipatinga — MG',
-      necessitaAcompanhante: false,
-      qtdAcompanhantes: 0,
-      necessitaVeiculoAdaptado: false,
-      prioridade: 'Normal',
-      statusTransporte: 'Aguardando vaga',
-      createdAt: '2026-11-15T12:30:00Z',
-      updatedAt: '2026-11-15T12:30:00Z'
-    }
-  );
-
-  // 2. Data 20/11/2026 — Ponte Nova — MG (8 pacientes)
-  const nomesPonteNova = [
-    'Antônio Carlos Rezende', 'Cláudia Mendes Guimarães', 'Edson Pinheiro Duarte',
-    'Helena Vasconcelos', 'Igor Nascimento', 'Joaquim Silva Prado',
-    'Kelly Regina Ramos', 'Luiz Fernando Correa'
-  ];
-  nomesPonteNova.forEach((nome, idx) => {
-    result.push({
-      id: `dem_pn_${idx + 1}`,
-      agendamentoId: `ag_pn_${idx + 1}`,
-      pacienteId: `pac_pn_${idx + 1}`,
-      pacienteNome: nome,
-      pacienteApelido: nome.split(' ')[0],
-      pacienteCpf: `123.987.${String(idx + 1).padStart(3, '0')}-00`,
-      procedimentoId: `proc_pn_${idx + 1}`,
-      procedimentoNome: idx % 2 === 0 ? 'Consulta – Especialidades' : 'Exame Laboratorial',
-      procedimentoCodigo: `0${idx + 3}00`,
-      tipoProcedimento: idx % 2 === 0 ? 'Consulta' : 'Exame',
-      dataAtendimento: '2026-11-20',
-      horaAtendimento: `${String(7 + idx).padStart(2, '0')}:00`,
-      municipioDestino: 'Ponte Nova — MG',
-      estabelecimentoSaude: 'Hospital Nossa Senhora das Dores',
-      necessitaAcompanhante: false,
-      qtdAcompanhantes: 0,
-      necessitaVeiculoAdaptado: false,
-      prioridade: 'Normal',
-      statusTransporte: 'Aguardando vaga',
-      createdAt: '2026-11-15T08:00:00Z',
-      updatedAt: '2026-11-15T08:00:00Z'
-    });
-  });
-
-  // 3. Data 21/11/2026 — Sábado (24 pacientes)
-  for (let i = 1; i <= 24; i++) {
-    result.push({
-      id: `dem_21_${i}`,
-      agendamentoId: `ag_21_${i}`,
-      pacienteId: `pac_21_${i}`,
-      pacienteNome: `Paciente Sábado ${i}`,
-      pacienteApelido: `Apelido ${i}`,
-      pacienteCpf: `210.000.${String(i).padStart(3, '0')}-11`,
-      procedimentoId: `proc_21_${i}`,
-      procedimentoNome: i % 2 === 0 ? 'Consulta – Clínica Geral' : 'Exame Geral',
-      procedimentoCodigo: `02${String(i).padStart(2, '0')}`,
-      tipoProcedimento: i % 2 === 0 ? 'Consulta' : 'Exame',
-      dataAtendimento: '2026-11-21',
-      horaAtendimento: `${String(7 + (i % 8)).padStart(2, '0')}:30`,
-      municipioDestino: i % 2 === 0 ? 'Belo Horizonte — MG' : 'Ipatinga — MG',
-      necessitaAcompanhante: i % 4 === 0,
-      qtdAcompanhantes: i % 4 === 0 ? 1 : 0,
-      necessitaVeiculoAdaptado: false,
-      prioridade: 'Normal',
-      statusTransporte: i <= 10 ? 'Alocado' : 'Aguardando vaga',
-      createdAt: '2026-11-15T08:00:00Z',
-      updatedAt: '2026-11-15T08:00:00Z'
-    });
-  }
-
-  // 4. Data 24/11/2026 — Terça-feira (16 pacientes)
-  for (let i = 1; i <= 16; i++) {
-    result.push({
-      id: `dem_24_${i}`,
-      agendamentoId: `ag_24_${i}`,
-      pacienteId: `pac_24_${i}`,
-      pacienteNome: `Paciente Terça ${i}`,
-      pacienteApelido: `Apelido ${i}`,
-      pacienteCpf: `240.000.${String(i).padStart(3, '0')}-22`,
-      procedimentoId: `proc_24_${i}`,
-      procedimentoNome: 'Consulta Especializada',
-      procedimentoCodigo: `04${String(i).padStart(2, '0')}`,
-      tipoProcedimento: 'Consulta',
-      dataAtendimento: '2026-11-24',
-      horaAtendimento: `${String(8 + (i % 6)).padStart(2, '0')}:00`,
-      municipioDestino: 'Ipatinga — MG',
-      necessitaAcompanhante: false,
-      qtdAcompanhantes: 0,
-      necessitaVeiculoAdaptado: false,
-      prioridade: 'Normal',
-      statusTransporte: i <= 10 ? 'Alocado' : 'Aguardando vaga',
-      createdAt: '2026-11-15T08:00:00Z',
-      updatedAt: '2026-11-15T08:00:00Z'
-    });
-  }
-
-  return result;
-};
-
-// Recupera dados locais como fallback imediato e cache offline
-const getLocalDemandas = (): TransporteDemanda[] => {
+/**
+ * Recupera demandas locais como cache e persistência de alocação/status.
+ * Purga estritamente quaisquer registros fictícios ou mockados gravados em versões anteriores.
+ * NUNCA retorna dados inventados ou simulados.
+ */
+export const getLocalDemandas = (): TransporteDemanda[] => {
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    // Purga estrita: rejeita dados falsos, simulados ou com prefixos mockados
+    const dadosReais = parsed.filter((item: any) => {
+      if (!item || typeof item !== 'object') return false;
+      const id = String(item.id || '');
+      const agId = String(item.agendamentoId || '');
+      const pacId = String(item.pacienteId || '');
+
+      if (id.startsWith('dem_ipa_') || id.startsWith('dem_pn_') || id.startsWith('dem_21_') || id.startsWith('dem_24_')) return false;
+      if (agId.startsWith('ag_ipa_') || agId.startsWith('ag_pn_') || agId.startsWith('ag_21_') || agId.startsWith('ag_24_')) return false;
+      if (pacId.startsWith('pac_ipa_') || pacId.startsWith('pac_pn_') || pacId.startsWith('pac_21_') || pacId.startsWith('pac_24_')) return false;
+      if (item.pacienteNome?.includes('Paciente Sábado') || item.pacienteNome?.includes('Paciente Terça')) return false;
+
+      return true;
+    });
+
+    if (dadosReais.length !== parsed.length) {
+      saveLocalDemandas(dadosReais);
     }
-    const defaultData = getDemandasIniciaisPadrao();
-    saveLocalDemandas(defaultData);
-    return defaultData;
+
+    return dadosReais;
   } catch (err) {
     console.warn('[transporteService] Erro ao ler demandas locais:', err);
-    return getDemandasIniciaisPadrao();
+    return [];
   }
 };
 
 // Persiste dados locais
-const saveLocalDemandas = (demandas: TransporteDemanda[]) => {
+export const saveLocalDemandas = (demandas: TransporteDemanda[]) => {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(demandas));
@@ -413,28 +108,35 @@ export const criarDemandaDeAgendamento = async (
   const existingIndex = localList.findIndex(d => d.agendamentoId === booking.id);
 
   const pacienteNome = booking.paciente?.name || 'Paciente Não Identificado';
-  const pacienteCpf = booking.paciente?.cpf || '';
+  const pacienteApelido = booking.paciente?.nickname || 'Não informado';
+  const pacienteCpf = booking.paciente?.cpf || 'Não informado';
   const pacienteDataNasc = booking.paciente?.birth_date || (booking.paciente as any)?.birthDate || '';
   const pacienteTelefone = booking.paciente?.phone || '';
 
   const procNome = booking.procedimento?.name || 'Procedimento';
+  const procCod = booking.procedimento?.code || '';
   const tipoProc = booking.procedimento?.type || 'Consulta';
 
-  // Destino prioritário da vaga/agendamento
-  const destinoRaw = booking.municipio || booking.prestador || 'BELO HORIZONTE - MG';
-  const destinoFinal = destinoRaw.toUpperCase().includes('MG') ? destinoRaw.toUpperCase() : `${destinoRaw.toUpperCase()} - MG`;
+  // Destino prioritário da vaga/agendamento — se não informado, não inventar cidade
+  const destinoRaw = (booking.municipio || booking.prestador || '').trim();
+  const destinoFinal = destinoRaw 
+    ? (destinoRaw.toUpperCase().includes('MG') ? destinoRaw : `${destinoRaw} — MG`) 
+    : 'Destino não informado';
 
   const novaDemanda: TransporteDemanda = {
-    id: existingIndex >= 0 ? localList[existingIndex].id : `td_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    id: existingIndex >= 0 ? localList[existingIndex].id : `dem_${booking.id}`,
     agendamentoId: booking.id,
     pacienteId: booking.patient_id,
     pacienteNome,
+    pacienteApelido,
     pacienteCpf,
     pacienteDataNascimento: pacienteDataNasc,
     pacienteTelefone,
     procedimentoId: booking.procedimento_id,
     procedimentoNome: procNome,
+    procedimentoCodigo: procCod,
     tipoProcedimento: tipoProc as any,
+    // REGRA OBRIGATÓRIA: Utilizar exclusivamente a data do agendamento (appointment_date)
     dataAtendimento: booking.appointment_date || new Date().toISOString().substring(0, 10),
     horaAtendimento: booking.appointment_time ? booking.appointment_time.substring(0, 5) : '08:00',
     municipioDestino: destinoFinal,
@@ -461,36 +163,12 @@ export const criarDemandaDeAgendamento = async (
   }
 
   saveLocalDemandas(localList);
-
-  // Tenta persistir no Supabase (se a tabela ou campos existirem)
-  try {
-    await supabase
-      .from('consultas_agendamentos')
-      .update({
-        transporte_necessario: true,
-        transporte_acompanhantes: novaDemanda.qtdAcompanhantes,
-        transporte_adaptado: novaDemanda.necessitaVeiculoAdaptado,
-        transporte_observacoes: novaDemanda.observacoes,
-        transporte_demanda_id: novaDemanda.id
-      })
-      .eq('id', booking.id);
-  } catch (err) {
-    console.warn('[transporteService] Aviso ao atualizar consultas_agendamentos com metadata de transporte:', err);
-  }
-
-  try {
-    await supabase
-      .from('transporte_demandas')
-      .upsert(novaDemanda);
-  } catch (err) {
-    // Tabela pode ainda não ter sido migrada no banco de dados remoto
-  }
-
   return novaDemanda;
 };
 
 /**
  * Retorna as demandas com filtros opcionais
+ * Consulta a sincronização real com a Regulação
  */
 export const getDemandas = async (filtros?: {
   data?: string;
@@ -502,31 +180,8 @@ export const getDemandas = async (filtros?: {
   estabelecimento?: string;
   search?: string;
 }): Promise<TransporteDemanda[]> => {
-  let list = getLocalDemandas();
-
-  // Tenta sincronizar com Supabase se a tabela existir
-  try {
-    const { data, error } = await supabase
-      .from('transporte_demandas')
-      .select('*')
-      .order('dataAtendimento', { ascending: true });
-
-    if (!error && data && data.length > 0) {
-      // Mescla com dados locais priorizando mais recente
-      const map = new Map<string, TransporteDemanda>();
-      list.forEach(item => map.set(item.id, item));
-      data.forEach((item: any) => {
-        const local = map.get(item.id);
-        if (!local || new Date(item.updatedAt || 0) >= new Date(local.updatedAt || 0)) {
-          map.set(item.id, item);
-        }
-      });
-      list = Array.from(map.values());
-      saveLocalDemandas(list);
-    }
-  } catch (e) {
-    // Modo offline/local
-  }
+  // Sincroniza com agendamentos reais da Regulação
+  let list = await sincronizarComRegulacao();
 
   // Aplica filtros em memória
   if (filtros) {
@@ -555,9 +210,17 @@ export const getDemandas = async (filtros?: {
       const cleanDigits = filtros.search.replace(/\D/g, '');
       list = list.filter(d => {
         const normNome = normalizeTransporteText(d.pacienteNome);
+        const normApelido = normalizeTransporteText(d.pacienteApelido || '');
         const normCpf = (d.pacienteCpf || '').replace(/\D/g, '');
         const normProc = normalizeTransporteText(d.procedimentoNome);
-        return normNome.includes(query) || (cleanDigits && normCpf.includes(cleanDigits)) || normProc.includes(query);
+        const codProc = (d.procedimentoCodigo || '').toLowerCase();
+        return (
+          normNome.includes(query) ||
+          normApelido.includes(query) ||
+          (cleanDigits && normCpf.includes(cleanDigits)) ||
+          normProc.includes(query) ||
+          codProc.includes(query)
+        );
       });
     }
   }
@@ -797,147 +460,141 @@ export const registrarContatoConfirmacao = async (
 };
 
 /**
- * Sincronização automática com a Regulação
- * Garante que agendamentos confirmados gerem demandas e alterações reflitam no transporte
+ * Sincronização automática com a Regulação (/Regulacao/Acompanhar)
+ * Consulta os agendamentos reais existentes no Supabase e deriva as demandas de transporte.
+ * NÃO inventa cidades, NÃO usa data de solicitação e NÃO gera dados fictícios.
  */
-export const sincronizarComRegulacao = async (agendamentos?: ConsultaAgendamento[]): Promise<TransporteDemanda[]> => {
-  let agendamentosLista = agendamentos;
+export const sincronizarComRegulacao = async (agendamentosFornecidos?: ConsultaAgendamento[]): Promise<TransporteDemanda[]> => {
+  let agendamentosLista = agendamentosFornecidos;
 
-  // Se não foi fornecida lista em memória, tenta buscar diretamente no Supabase
+  // Se não foi fornecida lista em memória, consulta os agendamentos reais do módulo de Regulação
   if (!agendamentosLista || agendamentosLista.length === 0) {
     try {
+      const ags = await getAgendamentos();
+      if (Array.isArray(ags) && ags.length > 0) {
+        agendamentosLista = ags;
+      }
+    } catch (err) {
+      console.warn('[transporteService] getAgendamentos falhou, tentando consulta direta ao Supabase...', err);
+    }
+
+    if (!agendamentosLista || agendamentosLista.length === 0) {
       const { data, error } = await supabase
         .from('consultas_agendamentos')
         .select(`
-          id, patient_id, procedimento_id, appointment_date, appointment_time, status,
-          prestador, municipio, convenio, priority,
-          transporte_necessario, transporte_acompanhantes, transporte_adaptado, transporte_observacoes,
+          id, patient_id, procedimento_id, appointment_date, appointment_time, solicitation_date,
+          status, priority, is_deleted, prestador, municipio, convenio,
           paciente:consultas_pacientes(id, name, cpf, nickname, birth_date, phone),
           procedimento:consultas_procedimentos(id, name, code, type)
         `)
-        .not('appointment_date', 'is', null)
-        .not('status', 'in', '("Cancelado", "Excluído", "Fila de espera", "Aguardando Data", "Pausada", "Suspensa — Exclusão Pendente")');
+        .not('appointment_date', 'is', null);
 
-      if (!error && data && data.length > 0) {
-        agendamentosLista = data as any;
+      if (error) {
+        console.error('[transporteService] Erro ao sincronizar consultas_agendamentos:', error);
+        throw new Error(error.message || 'Falha de comunicação com o banco de dados Supabase.');
       }
-    } catch (err) {
-      console.warn('[transporteService] Erro ao sincronizar consultas_agendamentos do Supabase:', err);
+
+      agendamentosLista = (data || []) as any[];
     }
   }
 
-  const list = getLocalDemandas();
-  if (!agendamentosLista || agendamentosLista.length === 0) {
-    return list;
-  }
+  // Lista local prévia para preservar alocações e contatos de confirmação já efetuados
+  const localList = getLocalDemandas();
+  const mapaDemandasExistentes = new Map<string, TransporteDemanda>();
+  localList.forEach(d => {
+    if (d.agendamentoId) {
+      mapaDemandasExistentes.set(d.agendamentoId, d);
+    }
+  });
 
-  const bookingsMap = new Map<string, any>();
-  agendamentosLista.forEach(b => bookingsMap.set(b.id, b));
+  // Filtragem estrita dos critérios de inclusão:
+  // - Possuir appointment_date preenchido (data de agendamento realizada)
+  // - NÃO estar cancelado, excluído, em fila de espera ou aguardando data
+  // - Não estar deletado (is_deleted !== true)
+  const statusExcluidos = new Set([
+    'Cancelado',
+    'Excluído',
+    'Fila de espera',
+    'Aguardando Data',
+    'Pausada',
+    'Suspensa — Exclusão Pendente'
+  ]);
 
-  let modified = false;
+  const demandasResultado: TransporteDemanda[] = [];
 
-  // 1. Atualizar ou cancelar demandas existentes
-  list.forEach(demanda => {
-    const booking = bookingsMap.get(demanda.agendamentoId);
+  (agendamentosLista || []).forEach(booking => {
     if (!booking) return;
+    if (booking.is_deleted || (booking as any).isDeleted) return;
+    if (!booking.appointment_date || booking.appointment_date.trim() === '') return;
 
-    // Cancelamento ou Exclusão na Regulação
-    const isCancelledInRegulacao = 
-      booking.status === 'Cancelado' || 
-      booking.status === 'Excluído' || 
-      booking.is_deleted === true;
+    const statusBooking = (booking.status || '').trim();
+    if (statusExcluidos.has(statusBooking)) return;
 
-    if (isCancelledInRegulacao && demanda.statusTransporte !== 'Cancelado') {
-      demanda.statusTransporte = 'Cancelado';
-      demanda.observacoes = (demanda.observacoes ? demanda.observacoes + ' | ' : '') + 'Cancelado automaticamente via Regulação.';
-      demanda.updatedAt = new Date().toISOString();
-      modified = true;
-    }
-
-    // Remarcação de Data / Horário na Regulação
-    if (booking.appointment_date && booking.appointment_date !== demanda.dataAtendimento) {
-      demanda.dataAtendimento = booking.appointment_date;
-      if (booking.appointment_time) {
-        demanda.horaAtendimento = booking.appointment_time.substring(0, 5);
-      }
-      if (demanda.viagemId) {
-        demanda.viagemId = undefined;
-        demanda.veiculoId = undefined;
-        demanda.motoristaId = undefined;
-        demanda.statusTransporte = 'Aguardando vaga';
-      }
-      demanda.updatedAt = new Date().toISOString();
-      modified = true;
-    }
-
-    // Atualiza apelido ou código se estiverem vazios
     const pac = booking.paciente;
-    if (pac?.nickname && !demanda.pacienteApelido) {
-      demanda.pacienteApelido = pac.nickname;
-      modified = true;
-    }
     const proc = booking.procedimento;
-    if (proc?.code && !demanda.procedimentoCodigo) {
-      demanda.procedimentoCodigo = proc.code;
-      modified = true;
+
+    // Destino: se não informado, não inventar cidade. Exibir "Destino não informado"
+    const destinoRaw = (booking.municipio || booking.prestador || '').trim();
+    let destinoFinal = 'Destino não informado';
+    if (destinoRaw) {
+      destinoFinal = destinoRaw.toUpperCase().includes('MG') ? destinoRaw : `${destinoRaw} — MG`;
     }
+
+    // Verificar se já existia demanda vinculada a este agendamento real
+    const existente = mapaDemandasExistentes.get(booking.id);
+
+    // Se houve remarcação de data na Regulação, atualiza data e desvincula se estava alocado em data diferente
+    let statusTransporte = existente?.statusTransporte || 'Aguardando vaga';
+    let viagemId = existente?.viagemId;
+    let veiculoId = existente?.veiculoId;
+    let motoristaId = existente?.motoristaId;
+
+    if (existente && existente.dataAtendimento !== booking.appointment_date) {
+      viagemId = undefined;
+      veiculoId = undefined;
+      motoristaId = undefined;
+      statusTransporte = 'Aguardando vaga';
+    }
+
+    const demanda: TransporteDemanda = {
+      id: existente?.id || `dem_${booking.id}`,
+      agendamentoId: booking.id,
+      pacienteId: booking.patient_id || pac?.id || '',
+      pacienteNome: pac?.name || 'Paciente Não Identificado',
+      pacienteApelido: pac?.nickname || 'Não informado',
+      pacienteCpf: pac?.cpf || 'Não informado',
+      pacienteDataNascimento: pac?.birth_date || (pac as any)?.birthDate || '',
+      pacienteTelefone: pac?.phone || '',
+      procedimentoId: booking.procedimento_id || proc?.id || '',
+      procedimentoNome: proc?.name || 'Procedimento',
+      procedimentoCodigo: proc?.code || '',
+      especialista: proc?.especialista?.nome || (proc?.especialista as any)?.name || '',
+      tipoProcedimento: (proc?.type as any) || 'Consulta',
+      // REGRA OBRIGATÓRIA: Utilizar exclusivamente a data do agendamento (appointment_date), NUNCA da solicitação
+      dataAtendimento: booking.appointment_date,
+      horaAtendimento: booking.appointment_time ? booking.appointment_time.substring(0, 5) : '08:00',
+      municipioDestino: destinoFinal,
+      estabelecimentoSaude: booking.prestador || booking.convenio || '',
+      enderecoAtendimento: '',
+      necessitaAcompanhante: existente ? existente.necessitaAcompanhante : false,
+      qtdAcompanhantes: existente ? existente.qtdAcompanhantes : 0,
+      necessitaVeiculoAdaptado: existente ? existente.necessitaVeiculoAdaptado : false,
+      observacoes: existente?.observacoes || '',
+      prioridade: (booking.priority as any) || 'Normal',
+      statusTransporte,
+      viagemId,
+      veiculoId,
+      motoristaId,
+      alocadoEm: existente?.alocadoEm,
+      alocadoPor: existente?.alocadoPor,
+      historicoConfirmacao: existente?.historicoConfirmacao || [],
+      createdAt: existente?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    demandasResultado.push(demanda);
   });
 
-  // 2. Criar novas demandas para agendamentos confirmados que ainda não possuem demanda
-  const idsDemandasExistentes = new Set(list.map(d => d.agendamentoId));
-
-  agendamentosLista.forEach(booking => {
-    if (!idsDemandasExistentes.has(booking.id)) {
-      const isValido = 
-        booking.appointment_date && 
-        booking.status !== 'Cancelado' && 
-        booking.status !== 'Excluído' && 
-        booking.status !== 'Fila de espera' &&
-        booking.status !== 'Aguardando Data';
-
-      if (isValido) {
-        const pac = booking.paciente;
-        const proc = booking.procedimento;
-        const destinoRaw = booking.municipio || booking.prestador || 'BELO HORIZONTE — MG';
-        const destinoFinal = destinoRaw.toUpperCase().includes('MG') ? destinoRaw : `${destinoRaw} — MG`;
-
-        const nova: TransporteDemanda = {
-          id: `td_${booking.id}_${Date.now()}`,
-          agendamentoId: booking.id,
-          pacienteId: booking.patient_id || pac?.id || 'pac_desconhecido',
-          pacienteNome: pac?.name || 'Paciente da Regulação',
-          pacienteApelido: pac?.nickname || (pac?.name ? pac.name.split(' ')[0] : 'Não informado'),
-          pacienteCpf: pac?.cpf || '000.000.000-00',
-          pacienteDataNascimento: pac?.birth_date || '',
-          pacienteTelefone: pac?.phone || '',
-          procedimentoId: booking.procedimento_id || proc?.id || 'proc_geral',
-          procedimentoNome: proc?.name || 'Consulta Médica',
-          procedimentoCodigo: proc?.code || '0001',
-          tipoProcedimento: (proc?.type as any) || 'Consulta',
-          dataAtendimento: booking.appointment_date,
-          horaAtendimento: booking.appointment_time ? booking.appointment_time.substring(0, 5) : '08:00',
-          municipioDestino: destinoFinal,
-          estabelecimentoSaude: booking.prestador || booking.convenio || '',
-          necessitaAcompanhante: Boolean(booking.transporte_acompanhantes && booking.transporte_acompanhantes > 0),
-          qtdAcompanhantes: booking.transporte_acompanhantes || 0,
-          necessitaVeiculoAdaptado: Boolean(booking.transporte_adaptado),
-          observacoes: booking.transporte_observacoes || '',
-          prioridade: booking.priority || 'Normal',
-          statusTransporte: 'Aguardando vaga',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-
-        list.push(nova);
-        idsDemandasExistentes.add(booking.id);
-        modified = true;
-      }
-    }
-  });
-
-  if (modified) {
-    saveLocalDemandas(list);
-  }
-
-  return list;
+  saveLocalDemandas(demandasResultado);
+  return demandasResultado;
 };

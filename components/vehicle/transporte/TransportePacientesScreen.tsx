@@ -62,139 +62,6 @@ interface TransportePacientesScreenProps {
   onOpenNewTripModal?: (defaultDate?: string, defaultDestination?: string) => void;
 }
 
-// Veículos e Viagens padrão para complementar a exibição fiel à imagem de referência
-const VIAGENS_PADRAO_REFERENCIA: {
-  schedule: VehicleSchedule;
-  vehicle: Vehicle;
-  driver: Person;
-}[] = [
-  {
-    schedule: {
-      id: 'trip_qxv_4b21',
-      protocol: 'VIAG-2026-1120-01',
-      requesterId: 'req_saude_01',
-      createdAt: '2026-11-15T08:00:00Z',
-      vehicleId: 'veh_qxv_4b21',
-      driverId: 'drv_helton',
-      departureDateTime: '2026-11-20T06:00:00',
-      returnDateTime: '2026-11-20T17:00:00',
-      destination: 'Ipatinga — MG',
-      purpose: 'Transporte de Pacientes e Acompanhantes - Consultas e Exames Especializados',
-      status: 'confirmado',
-      patientCount: 8,
-      companionCount: 2,
-      passengers: Array.from({ length: 10 }, (_, i) => ({
-        id: `pax_ref_${i}`,
-        name: `Passageiro Alocado ${i + 1}`,
-        type: i % 4 === 0 ? 'Acompanhante' : 'Paciente'
-      }))
-    },
-    vehicle: {
-      id: 'veh_qxv_4b21',
-      plate: 'QXV-4B21',
-      brand: 'RENAULT',
-      model: 'MASTER MINIBUS',
-      type: 'leve',
-      vehicleCategory: 'Van',
-      year: '2024',
-      color: 'Branco',
-      renavam: '12345678901',
-      chassis: '9BWZZZ377VT004251',
-      sectorId: 'sec_saude',
-      passengerCapacity: 17, // 16 lugares passageiros + 1 motorista
-      status: 'operacional',
-      maintenanceStatus: 'em_dia'
-    },
-    driver: {
-      id: 'drv_helton',
-      name: 'Helton Vieira Marques',
-      role: 'Motorista Oficial'
-    }
-  },
-  {
-    schedule: {
-      id: 'trip_rfb_7c32',
-      protocol: 'VIAG-2026-1120-02',
-      requesterId: 'req_saude_01',
-      createdAt: '2026-11-15T08:00:00Z',
-      vehicleId: 'veh_rfb_7c32',
-      driverId: 'drv_jose',
-      departureDateTime: '2026-11-20T07:00:00',
-      returnDateTime: '2026-11-20T18:00:00',
-      destination: 'Ipatinga — MG',
-      purpose: 'Transporte Sanitário Eletivo Municipal',
-      status: 'confirmado',
-      patientCount: 12,
-      companionCount: 4,
-      passengers: Array.from({ length: 16 }, (_, i) => ({
-        id: `pax_micro_${i}`,
-        name: `Passageiro Micro ${i + 1}`,
-        type: i % 3 === 0 ? 'Acompanhante' : 'Paciente'
-      }))
-    },
-    vehicle: {
-      id: 'veh_rfb_7c32',
-      plate: 'RFB-7C32',
-      brand: 'VOLARE',
-      model: 'MICRO-ÔNIBUS V8L',
-      type: 'pesado',
-      vehicleCategory: 'Ônibus',
-      year: '2023',
-      color: 'Branco',
-      renavam: '98765432109',
-      chassis: '9BWZZZ377VT004252',
-      sectorId: 'sec_saude',
-      passengerCapacity: 29, // 28 lugares passageiros + 1 motorista
-      status: 'operacional',
-      maintenanceStatus: 'em_dia'
-    },
-    driver: {
-      id: 'drv_jose',
-      name: 'José Antônio Silva',
-      role: 'Motorista Oficial'
-    }
-  },
-  {
-    schedule: {
-      id: 'trip_qxz_9d10',
-      protocol: 'VIAG-2026-1120-03',
-      requesterId: 'req_saude_01',
-      createdAt: '2026-11-15T08:00:00Z',
-      vehicleId: 'veh_qxz_9d10',
-      driverId: 'drv_paulo',
-      departureDateTime: '2026-11-20T10:00:00',
-      returnDateTime: '2026-11-20T19:00:00',
-      destination: 'Ipatinga — MG',
-      purpose: 'Transporte Vespertino de Pacientes',
-      status: 'confirmado',
-      patientCount: 0,
-      companionCount: 0,
-      passengers: []
-    },
-    vehicle: {
-      id: 'veh_qxz_9d10',
-      plate: 'QXZ-9D10',
-      brand: 'MERCEDES-BENZ',
-      model: 'SPRINTER VAN',
-      type: 'leve',
-      vehicleCategory: 'Van',
-      year: '2024',
-      color: 'Prata',
-      renavam: '45678912304',
-      chassis: '9BWZZZ377VT004253',
-      sectorId: 'sec_saude',
-      passengerCapacity: 17, // 16 passageiros + 1 motorista
-      status: 'operacional',
-      maintenanceStatus: 'em_dia'
-    },
-    driver: {
-      id: 'drv_paulo',
-      name: 'Paulo Henrique Costa',
-      role: 'Motorista Oficial'
-    }
-  }
-];
-
 export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps> = ({
   onBack,
   vehicles = [],
@@ -210,6 +77,7 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
   const [demandas, setDemandas] = useState<TransporteDemanda[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Filtros combinados em linha única (iniciam limpos)
   const [filterDate, setFilterDate] = useState<string>('');
@@ -268,11 +136,16 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
 
   // Carregar Demandas da base compartilhada
   const carregarDemandas = async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
       const data = await transporteDb.getDemandas();
       setDemandas(data);
-    } catch (err) {
-      console.error('[TransportePacientesScreen] Erro ao carregar demandas:', err);
+    } catch (err: any) {
+      console.error('[TransportePacientesScreen] Erro ao carregar demandas da Regulação:', err);
+      const msg = err?.message || 'Falha de comunicação ao consultar os agendamentos da Regulação.';
+      setLoadError(msg);
+      setDemandas([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -295,12 +168,15 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
   // Ação de Sincronização com a Regulação
   const handleSincronizarRegulacao = async () => {
     setRefreshing(true);
+    setLoadError(null);
     try {
       const atualizadas = await transporteDb.sincronizarComRegulacao();
       setDemandas(atualizadas);
       showToast('Sincronização com o módulo de Regulação realizada com sucesso!', 'success');
     } catch (e: any) {
-      showToast('Erro ao sincronizar com a Regulação: ' + (e?.message || 'Falha de conexão'), 'error');
+      const msg = e?.message || 'Falha de conexão com a Regulação';
+      setLoadError(msg);
+      showToast('Erro ao sincronizar com a Regulação: ' + msg, 'error');
     } finally {
       setRefreshing(false);
     }
@@ -377,34 +253,7 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
     return Array.from(set).sort();
   }, [demandas]);
 
-  // Indicadores Principais (Respeitam filtros ativos)
-  const indicadores = useMemo(() => {
-    const escopo = filterDate ? demandas.filter(d => d.dataAtendimento === filterDate) : demandas;
-    const totalPacientes = escopo.length || 58;
-    const aguardando = escopo.filter(d => d.statusTransporte === 'Aguardando vaga').length;
-    const alocados = escopo.filter(d => d.statusTransporte === 'Alocado').length;
-    const confirmados = escopo.filter(d => d.statusTransporte === 'Confirmado').length || 26;
-
-    // Veículos e Vagas
-    let totalVagas = 14;
-    let veiculosDisponiveis = 8;
-
-    return {
-      totalPacientes: totalPacientes || 58,
-      aguardando: aguardando !== undefined ? aguardando : 32,
-      alocados: alocados !== undefined ? alocados : 26,
-      confirmados: confirmados !== undefined ? confirmados : 26,
-      vagasDisponiveis: totalVagas,
-      veiculosDisponiveis: veiculosDisponiveis
-    };
-  }, [demandas, filterDate]);
-
-  // Agrupamento Hierárquico Obrigatório: DATA -> DESTINO -> PACIENTES
-  const gruposHierarquicos = useMemo(() => {
-    return agruparHierarquicoDataDestino(demandasFiltradas);
-  }, [demandasFiltradas]);
-
-  // Lista de Viagens Unificadas (Combina schedules reais com viagens padrão de referência)
+  // Lista de Viagens Reais (Exclusivamente de vehicle_schedules)
   const viagensDisponiveis = useMemo(() => {
     const lista: {
       schedule: VehicleSchedule;
@@ -415,67 +264,100 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
       ocupados: number;
     }[] = [];
 
-    // Viagens de referência padrão da imagem
-    VIAGENS_PADRAO_REFERENCIA.forEach(ref => {
-      // Atualiza passageiros e ocupação se houver demandas alocadas para esta viagem
-      const demandasAlocadasAqui = demandas.filter(d => d.viagemId === ref.schedule.id);
-      const capPassageiros = Math.max(1, (ref.vehicle.passengerCapacity || 16) - 1);
-      
-      let passageirosBase = ref.schedule.passengers || [];
-      // Se houver demandas alocadas, conta pacientes + acompanhantes
-      const ocupadosCalculados = passageirosBase.length + demandasAlocadasAqui.reduce((acc, curr) => acc + 1 + (curr.qtdAcompanhantes || 0), 0);
-      const ocupadosFinal = Math.min(capPassageiros, Math.max(ref.schedule.passengers?.length || 0, ocupadosCalculados));
-      const vagas = Math.max(0, capPassageiros - ocupadosFinal);
-
-      lista.push({
-        schedule: {
-          ...ref.schedule,
-          passengers: passageirosBase
-        },
-        vehicle: ref.vehicle,
-        driver: ref.driver,
-        vagasLivres: vagas,
-        capacidadePassageiros: capPassageiros,
-        ocupados: ocupadosFinal
-      });
-    });
-
-    // Viagens reais vindas por props
+    // Viagens reais vindas de schedules
     schedules.forEach(sch => {
       if (sch.status === 'cancelado') return;
-      if (lista.some(l => l.schedule.id === sch.id)) return;
 
-      const veic = vehicles.find(v => v.id === sch.vehicleId) || {
-        id: sch.vehicleId,
-        plate: (sch as any).vehiclePlate || 'ABC-1234',
-        brand: 'VEÍCULO',
-        model: (sch as any).vehicleModel || 'VAN MUNICIPAL',
-        passengerCapacity: 16,
-        capacity: 16,
-        status: 'Ativo'
-      };
+      const veic = vehicles.find(v => v.id === sch.vehicleId);
+      const mot = persons.find(p => p.id === sch.driverId);
 
-      const mot = persons.find(p => p.id === sch.driverId) || {
-        id: sch.driverId,
-        name: (sch as any).driverName || 'Motorista Oficial'
-      };
-
-      const capPassageiros = Math.max(1, (veic.passengerCapacity || (veic as any).capacity || 16) - 1);
+      const capTotal = veic?.passengerCapacity || (veic as any)?.capacity || 5;
+      const capPassageiros = Math.max(1, capTotal - 1);
       const ocupados = (sch.passengers || []).length;
       const vagas = Math.max(0, capPassageiros - ocupados);
 
       lista.push({
         schedule: sch,
-        vehicle: veic as Vehicle,
-        driver: mot as Person,
+        vehicle: (veic || {
+          id: sch.vehicleId,
+          plate: (sch as any).vehiclePlate || 'Sem placa',
+          brand: 'Veículo',
+          model: (sch as any).vehicleModel || 'Municipal',
+          passengerCapacity: capTotal,
+          capacity: capTotal,
+          status: 'operacional'
+        }) as Vehicle,
+        driver: mot || ({
+          id: sch.driverId,
+          name: (sch as any).driverName || 'Motorista Oficial'
+        } as Person),
         vagasLivres: vagas,
         capacidadePassageiros: capPassageiros,
         ocupados
       });
     });
 
-    return lista;
-  }, [schedules, vehicles, persons, demandas]);
+    // Priorização conforme especificação:
+    // "Ao selecionar uma data e um destino na coluna esquerda, a coluna direita deverá apresentar prioritariamente as viagens correspondentes."
+    return lista.sort((a, b) => {
+      const dataAlvo = focoData || filterDate;
+      const destAlvo = focoDestino || (filterDestino !== 'TODOS' ? filterDestino : '');
+
+      const normDestAlvo = destAlvo ? normalizeCityTransporte(destAlvo) : '';
+      const normDestA = normalizeCityTransporte(a.schedule.destination);
+      const normDestB = normalizeCityTransporte(b.schedule.destination);
+
+      const matchDataA = dataAlvo ? a.schedule.departureDateTime.startsWith(dataAlvo) : false;
+      const matchDataB = dataAlvo ? b.schedule.departureDateTime.startsWith(dataAlvo) : false;
+
+      const matchDestA = normDestAlvo ? normDestA.includes(normDestAlvo) || normDestAlvo.includes(normDestA) : false;
+      const matchDestB = normDestAlvo ? normDestB.includes(normDestAlvo) || normDestAlvo.includes(normDestB) : false;
+
+      const scoreA = (matchDataA ? 2 : 0) + (matchDestA ? 2 : 0);
+      const scoreB = (matchDataB ? 2 : 0) + (matchDestB ? 2 : 0);
+
+      if (scoreA !== scoreB) {
+        return scoreB - scoreA;
+      }
+
+      return (a.schedule.departureDateTime || '').localeCompare(b.schedule.departureDateTime || '');
+    });
+  }, [schedules, vehicles, persons, focoData, focoDestino, filterDate, filterDestino]);
+
+  // Indicadores Principais (Respeitam estritamente dados reais e filtros ativos; se 0, exibem 0)
+  const indicadores = useMemo(() => {
+    const escopo = filterDate ? demandas.filter(d => d.dataAtendimento === filterDate) : demandas;
+    const totalPacientes = escopo.length;
+    const aguardando = escopo.filter(d => d.statusTransporte === 'Aguardando vaga').length;
+    const alocados = escopo.filter(d => d.statusTransporte === 'Alocado').length;
+    const confirmados = escopo.filter(d => d.statusTransporte === 'Confirmado').length;
+
+    // Vagas disponíveis calculadas exclusivamente a partir das viagens reais ativas no escopo
+    const viagensEscopo = filterDate
+      ? viagensDisponiveis.filter(v => v.schedule.departureDateTime.startsWith(filterDate))
+      : viagensDisponiveis;
+    const vagasDisponiveis = viagensEscopo.reduce((acc, curr) => acc + curr.vagasLivres, 0);
+
+    // Veículos disponíveis operacionais da frota real
+    const veiculosDisponiveis = vehicles.filter(v => {
+      const st = (v.status || '').toLowerCase();
+      return st === 'operacional' || st === 'ativo' || st === '';
+    }).length || vehicles.length;
+
+    return {
+      totalPacientes,
+      aguardando,
+      alocados,
+      confirmados,
+      vagasDisponiveis,
+      veiculosDisponiveis
+    };
+  }, [demandas, filterDate, viagensDisponiveis, vehicles]);
+
+  // Agrupamento Hierárquico Obrigatório: DATA -> DESTINO -> PACIENTES
+  const gruposHierarquicos = useMemo(() => {
+    return agruparHierarquicoDataDestino(demandasFiltradas);
+  }, [demandasFiltradas]);
 
   // Pacientes atualmente selecionados (objetos completos)
   const pacientesSelecionados = useMemo(() => {
@@ -922,17 +804,57 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
 
           {/* Acordeão Hierárquico: DATA -> DESTINO -> PACIENTES (Expandido por padrão) */}
           <div className="flex-1 overflow-y-auto p-2 sm:p-2.5 space-y-2 custom-scrollbar">
-            {gruposHierarquicos.length === 0 ? (
+            {loading ? (
+              <div className="py-20 text-center space-y-3">
+                <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight">
+                  Consultando Agendamentos da Regulação...
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  Carregando dados oficiais diretamente do banco de dados municipal.
+                </p>
+              </div>
+            ) : loadError ? (
+              <div className="p-4 my-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span className="text-xs font-black uppercase">Falha ao consultar a Regulação</span>
+                </div>
+                <p className="text-[11px] text-rose-700 font-medium">
+                  {loadError}
+                </p>
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={carregarDemandas}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-lg inline-flex items-center gap-1.5 cursor-pointer transition-all shadow-xs active:scale-95"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Tentar novamente</span>
+                  </button>
+                </div>
+              </div>
+            ) : gruposHierarquicos.length === 0 ? (
               <div className="py-16 text-center space-y-2.5">
                 <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
                   <UsersRound className="w-5 h-5" />
                 </div>
                 <h4 className="text-xs font-black text-slate-700 uppercase">
-                  Nenhuma Demanda Encontrada
+                  Nenhum Agendamento Confirmado Encontrado
                 </h4>
                 <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
-                  Não foram encontradas demandas para os filtros informados.
+                  Não foram localizados agendamentos com data confirmada na Regulação para os filtros ativos.
                 </p>
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={handleSincronizarRegulacao}
+                    className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-xs rounded-lg border border-indigo-200 inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Sincronizar Regulação</span>
+                  </button>
+                </div>
               </div>
             ) : (
               gruposHierarquicos.map((grupoData) => {
@@ -1184,78 +1106,103 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
 
           {/* Lista Compacta de Veículos Disponíveis com Rádio Button */}
           <div className="flex-1 overflow-y-auto p-2 sm:p-2.5 space-y-2 custom-scrollbar">
-            {viagensDisponiveis.map((item) => {
-              const isSelected = selectedViagemId === item.schedule.id;
-              const isMicro = item.vehicle.vehicleCategory === 'Ônibus' || (item.vehicle.passengerCapacity || 0) > 20;
-
-              return (
-                <div
-                  key={item.schedule.id}
-                  onClick={() => setSelectedViagemId(item.schedule.id)}
-                  className={`p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
-                    isSelected
-                      ? 'border-indigo-600 bg-indigo-50/40 ring-2 ring-indigo-500/20 shadow-xs'
-                      : 'border-slate-200/90 bg-white hover:border-slate-300 hover:shadow-2xs'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    {/* Radio Button Customizado */}
-                    <div className="shrink-0">
-                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${
-                        isSelected 
-                          ? 'border-indigo-600 bg-white' 
-                          : 'border-slate-300 bg-white'
-                      }`}>
-                        {isSelected && (
-                          <div className="w-2 h-2 rounded-full bg-indigo-600" />
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Foto / Ícone do Veículo */}
-                    <div className="w-11 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 shrink-0 overflow-hidden">
-                      <Car className="w-4 h-4 text-slate-600" />
-                    </div>
-
-                    {/* Informações Textuais */}
-                    <div className="min-w-0">
-                      <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight">
-                        {isMicro ? 'MICRO-ÔNIBUS' : 'VAN'} — {item.vehicle.plate}
-                      </h3>
-                      <p className="text-[10.5px] text-slate-500 font-semibold truncate">
-                        Motorista: {item.driver?.name || 'Helton Vieira Marques'}
-                      </p>
-                      <div className="text-[9.5px] text-slate-500 font-bold mt-0.5 flex items-center gap-2 flex-wrap">
-                        <span>Saída: {new Date(item.schedule.departureDateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-                        <span>•</span>
-                        <span>Destino: {item.schedule.destination}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Métricas e Vagas na Lateral Direita do Card */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="hidden sm:flex flex-col items-end text-[9.5px] font-bold text-slate-500 space-y-0.5">
-                      <span className="flex items-center gap-1">
-                        <Armchair className="w-3 h-3 text-slate-400" /> Capacidade <strong className="text-slate-800">{item.capacidadePassageiros} lugares</strong>
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <User className="w-3 h-3 text-slate-400" /> Ocupados <strong className="text-slate-800">{item.ocupados}</strong>
-                      </span>
-                    </div>
-
-                    {/* Badge Verde de Vagas */}
-                    <div className="px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-1 shadow-2xs">
-                      <Accessibility className="w-3.5 h-3.5 text-emerald-600" />
-                      <div className="text-right leading-none">
-                        <span className="text-[8.5px] font-black uppercase block text-emerald-700">Vagas</span>
-                        <span className="text-xs font-black text-emerald-950">{item.vagasLivres}</span>
-                      </div>
-                    </div>
-                  </div>
+            {viagensDisponiveis.length === 0 ? (
+              <div className="py-16 text-center space-y-2.5">
+                <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                  <Car className="w-5 h-5" />
                 </div>
-              );
-            })}
+                <h4 className="text-xs font-black text-slate-700 uppercase">
+                  Nenhuma Viagem Cadastrada
+                </h4>
+                <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+                  Não foram encontradas viagens municipais registradas no módulo de veículos.
+                </p>
+                {onOpenNewTripModal && (
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => onOpenNewTripModal(filterDate || undefined, focoDestino !== 'TODOS' ? focoDestino : undefined)}
+                      className="px-3 py-1.5 bg-[#5433FF] hover:bg-[#4628df] text-white font-extrabold text-xs rounded-lg inline-flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                    >
+                      <span>+ Nova Viagem</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              viagensDisponiveis.map((item) => {
+                const isSelected = selectedViagemId === item.schedule.id;
+                const categoriaVeic = item.vehicle.vehicleCategory || item.vehicle.type || 'Veículo';
+
+                return (
+                  <div
+                    key={item.schedule.id}
+                    onClick={() => setSelectedViagemId(item.schedule.id)}
+                    className={`p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
+                      isSelected
+                        ? 'border-indigo-600 bg-indigo-50/40 ring-2 ring-indigo-500/20 shadow-xs'
+                        : 'border-slate-200/90 bg-white hover:border-slate-300 hover:shadow-2xs'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {/* Radio Button Customizado */}
+                      <div className="shrink-0">
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${
+                          isSelected 
+                            ? 'border-indigo-600 bg-white' 
+                            : 'border-slate-300 bg-white'
+                        }`}>
+                          {isSelected && (
+                            <div className="w-2 h-2 rounded-full bg-indigo-600" />
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Foto / Ícone do Veículo */}
+                      <div className="w-11 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 shrink-0 overflow-hidden">
+                        <Car className="w-4 h-4 text-slate-600" />
+                      </div>
+
+                      {/* Informações Textuais */}
+                      <div className="min-w-0">
+                        <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight">
+                          {categoriaVeic.toUpperCase()} — {item.vehicle.plate || 'SEM PLACA'}
+                        </h3>
+                        <p className="text-[10.5px] text-slate-500 font-semibold truncate">
+                          Motorista: {item.driver?.name || 'Não informado'}
+                        </p>
+                        <div className="text-[9.5px] text-slate-500 font-bold mt-0.5 flex items-center gap-2 flex-wrap">
+                          <span>Saída: {item.schedule.departureDateTime ? new Date(item.schedule.departureDateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '07:00'}</span>
+                          <span>•</span>
+                          <span>Destino: {item.schedule.destination}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Métricas e Vagas na Lateral Direita do Card */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="hidden sm:flex flex-col items-end text-[9.5px] font-bold text-slate-500 space-y-0.5">
+                        <span className="flex items-center gap-1">
+                          <Armchair className="w-3 h-3 text-slate-400" /> Capacidade <strong className="text-slate-800">{item.capacidadePassageiros} lugares</strong>
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <User className="w-3 h-3 text-slate-400" /> Ocupados <strong className="text-slate-800">{item.ocupados}</strong>
+                        </span>
+                      </div>
+
+                      {/* Badge Verde de Vagas */}
+                      <div className="px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-1 shadow-2xs">
+                        <Accessibility className="w-3.5 h-3.5 text-emerald-600" />
+                        <div className="text-right leading-none">
+                          <span className="text-[8.5px] font-black uppercase block text-emerald-700">Vagas</span>
+                          <span className="text-xs font-black text-emerald-950">{item.vagasLivres}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
 
         </div>
