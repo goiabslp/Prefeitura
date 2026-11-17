@@ -549,6 +549,7 @@ export interface CrewMember {
   name: string;
   cpf?: string;
   birthDate?: string;
+  nickname?: string;
   phone?: string;
   departureLocation?: string;
   appointmentTime?: string;
