@@ -750,17 +750,6 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
 
         {/* Direita: Ações */}
         <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={handleSincronizarRegulacao}
-            disabled={refreshing}
-            className="px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
-            title="Sincronizar dados em tempo real com a Regulação"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 text-slate-500 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
-            <span className="hidden sm:inline">Sincronizar Regulação</span>
-          </button>
-
           {onOpenNewTripModal && (
             <button
               type="button"
