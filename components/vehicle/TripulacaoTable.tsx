@@ -254,11 +254,11 @@ export const TripulacaoTable: React.FC<TripulacaoTableProps> = ({
                                 {p.name}
                               </span>
 
-                              {p.nickname && p.nickname !== 'Não informado' && (
-                                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-md border border-indigo-100/80">
-                                  "{p.nickname}"
-                                </span>
-                              )}
+                                            {p.nickname && p.nickname !== 'Não informado' && (
+                                              <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-md border border-indigo-100/80">
+                                                "{p.nickname}"
+                                              </span>
+                                            )}
 
                               {isMenor && (
                                 <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 text-[9px] font-black uppercase tracking-wider border border-amber-200">
