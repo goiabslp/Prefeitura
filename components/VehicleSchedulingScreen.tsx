@@ -554,6 +554,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   const [tripulacaoModalStep, setTripulacaoModalStep] = useState<1 | 2>(1);
   const [selectedSpecialOption, setSelectedSpecialOption] = useState<'sim' | 'nao' | ''>('');
   const [newPassengerType, setNewPassengerType] = useState<'paciente' | 'acompanhante' | 'passageiro'>('paciente');
+  const [tripulacaoFilterSearch, setTripulacaoFilterSearch] = useState('');
 
   // Integração da base de Pacientes na Aba Tripulação
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
@@ -2461,9 +2462,41 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                 })}
               </div>
 
-              {/* Status do Modo da Viagem na MESMA LINHA das abas (compacto, apenas ícone) */}
+              {/* Ações da Aba Tripulação na MESMA LINHA das abas (Pesquisa, + Novo Passageiro e Modo) */}
               {modalActiveTab === 'tripulacao' && formData.vehicleId && isTripulacaoUnlocked && (
                 <div className="flex items-center gap-2 pb-1.5 md:pb-2 self-end md:self-auto shrink-0 animate-fade-in flex-wrap justify-end">
+                  {/* Campo de Pesquisa Instantânea */}
+                  <div className="relative w-44 sm:w-60">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={tripulacaoFilterSearch}
+                      onChange={e => setTripulacaoFilterSearch(e.target.value)}
+                      placeholder="Pesquisar passageiro por nome ou CPF..."
+                      className="w-full pl-8 pr-7 py-1 bg-white hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-600 rounded-xl text-xs font-semibold text-slate-800 outline-none transition-all placeholder:text-slate-400 shadow-2xs h-8"
+                    />
+                    {tripulacaoFilterSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setTripulacaoFilterSearch('')}
+                        className="w-3.5 h-3.5 rounded-full text-slate-400 hover:text-slate-600 absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center cursor-pointer text-xs"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Botão Roxo: + Novo Passageiro */}
+                  <button
+                    type="button"
+                    onClick={handleOpenNewPassengerModal}
+                    className="h-8 px-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-xs shadow-indigo-500/25 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shrink-0"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>+ Novo Passageiro</span>
+                  </button>
+
+                  {/* Status do Modo da Viagem Compacto (Apenas Ícone) */}
                   {isSpecialTreatmentTrip ? (
                     isHemodialysisVan ? (
                       /* MODO VAN DE HEMODIÁLISE COMPACTO (APENAS ÍCONE E VAGAS) */
@@ -2690,7 +2723,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                     </div>
                   ) : (
                     /* ESTADO LIBERADO DA TRIPULAÇÃO — TABELA FULL-WIDTH OCUPANDO O ESPAÇO MÁXIMO DO GRID */
-                    <div className="flex-1 flex flex-col min-h-0 h-full animate-fade-in space-y-3.5">
+                    <div className="flex-1 flex flex-col min-h-0 h-full animate-fade-in">
                       {/* TABELA DE TRIPULAÇÃO FULL-WIDTH (CONFORME NOVO DESIGN MODERNO) */}
                       <TripulacaoTable
                         passengers={formData.passengers || []}
@@ -2699,6 +2732,8 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                         onOpenNewPassengerModal={handleOpenNewPassengerModal}
                         onEditPassenger={handleEditPassengerFromTable}
                         onRemovePassenger={handleRemovePassengerFromTable}
+                        filterSearch={tripulacaoFilterSearch}
+                        hideTopToolbar={true}
                       />
                     </div>
                   )
