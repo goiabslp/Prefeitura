@@ -2557,33 +2557,26 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                   ) : (
                     /* ESTADO LIBERADO DA TRIPULAÇÃO */
                     <div className="space-y-5 animate-fade-in">
-                      {/* Banner Informativo do Tipo de Viagem */}
+                      {/* BANNER / STATUS DA VIAGEM (CONVENCIONAL VS ONCOLÓGICA) — ELEMENTOS NA MESMA LINHA */}
                       {isSpecialTreatmentTrip ? (
                         isHemodialysisVan ? (
-                          /* BANNER ESPECÍFICO DA VAN DE HEMODIÁLISE (UEA1J55) */
-                          <div className="p-4 md:p-5 rounded-2xl bg-gradient-to-r from-teal-500/10 via-indigo-500/10 to-purple-500/10 border border-teal-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-xl bg-teal-500/20 text-teal-700 flex items-center justify-center shrink-0 border border-teal-500/30">
-                                <HeartPulse className="w-5 h-5 text-teal-600" />
+                          /* BANNER DE VAN DE HEMODIÁLISE */
+                          <div className="p-3 px-4 rounded-2xl bg-gradient-to-r from-teal-500/10 via-indigo-500/10 to-purple-500/10 border border-teal-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-2xs">
+                            <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+                              <div className="w-8 h-8 rounded-xl bg-teal-500/20 text-teal-700 flex items-center justify-center shrink-0 border border-teal-500/30">
+                                <HeartPulse className="w-4 h-4 text-teal-600" />
                               </div>
-                              <div>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <h4 className="text-xs md:text-sm font-black text-slate-900 uppercase tracking-tight">Van Exclusiva de Hemodiálise</h4>
-                                  <span className="px-2 py-0.5 rounded-md bg-teal-100 text-teal-800 font-black text-[9px] uppercase tracking-wider border border-teal-200">
-                                    Placa: {selectedVehicle?.plate || 'UEA1J55'}
-                                  </span>
-                                  <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 font-black text-[9px] uppercase tracking-wider border border-indigo-200">
-                                    Múltiplos Pacientes Liberados
-                                  </span>
-                                </div>
-                                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                                  Van destinada exclusivamente ao transporte conjunto de pacientes de hemodiálise e acompanhantes autorizados.
-                                </p>
+                              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                <span className="text-xs font-black text-slate-900 uppercase tracking-tight whitespace-nowrap">Van Exclusiva de Hemodiálise</span>
+                                <span className="text-slate-300 hidden sm:inline">•</span>
+                                <span className="text-[11px] text-slate-500 font-medium">
+                                  Transporte conjunto de pacientes de hemodiálise e acompanhantes autorizados.
+                                </span>
                               </div>
                             </div>
 
-                            {/* Contadores da Van de Hemodiálise */}
-                            <div className="flex items-center gap-2 flex-wrap self-stretch md:self-auto justify-end">
+                            {/* Contadores da Van de Hemodiálise e Botão Alterar Modo na mesma linha */}
+                            <div className="flex items-center gap-2 flex-wrap justify-end shrink-0">
                               <div className="px-2.5 py-1 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5">
                                 <HeartPulse className="w-3 h-3" /> Pacientes: {patientCount}
                               </div>
@@ -2598,33 +2591,32 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                               <button
                                 type="button"
                                 onClick={handleOpenTripulacaoModal}
-                                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline uppercase tracking-wider ml-1 cursor-pointer"
+                                className="px-3 py-1.5 rounded-xl border border-teal-200 hover:border-teal-300 bg-white hover:bg-teal-50 text-teal-700 font-black text-[10px] uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95 shrink-0"
                                 title="Reabrir triagem de tripulação"
                               >
-                                Alterar Modo
+                                <ArrowRightLeft className="w-3.5 h-3.5" />
+                                <span>Alterar Modo</span>
                               </button>
                             </div>
                           </div>
                         ) : (
                           /* BANNER DE VEÍCULO CONVENCIONAL EXCLUSIVO */
-                          <div className="p-4 md:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-purple-500/10 border border-amber-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-700 flex items-center justify-center shrink-0 border border-amber-500/30">
-                                <HeartPulse className="w-5 h-5 text-amber-600" />
+                          <div className="p-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-purple-500/10 border border-amber-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-2xs">
+                            <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+                              <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-700 flex items-center justify-center shrink-0 border border-amber-500/30">
+                                <HeartPulse className="w-4 h-4 text-amber-600" />
                               </div>
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <h4 className="text-xs md:text-sm font-black text-slate-900 uppercase tracking-tight">Viagem Exclusiva: Oncológico / Hemodiálise</h4>
-                                  <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-black text-[9px] uppercase tracking-wider border border-amber-200">Uso Exclusivo</span>
-                                </div>
-                                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                <span className="text-xs font-black text-slate-900 uppercase tracking-tight whitespace-nowrap">Viagem Exclusiva: Oncológico / Hemodiálise</span>
+                                <span className="text-slate-300 hidden sm:inline">•</span>
+                                <span className="text-[11px] text-slate-500 font-medium">
                                   Veículo restrito ao paciente e acompanhantes autorizados.
-                                </p>
+                                </span>
                               </div>
                             </div>
 
-                            {/* Contadores da Viagem Especial Convencional */}
-                            <div className="flex items-center gap-2 flex-wrap self-stretch md:self-auto justify-end">
+                            {/* Contadores da Viagem Especial Convencional e Botão na mesma linha */}
+                            <div className="flex items-center gap-2 flex-wrap justify-end shrink-0">
                               <div className={`px-2.5 py-1 rounded-xl border text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 ${
                                 patientCount >= 1 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-600 border-slate-200'
                               }`}>
@@ -2643,31 +2635,41 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                               <button
                                 type="button"
                                 onClick={handleOpenTripulacaoModal}
-                                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline uppercase tracking-wider ml-1 cursor-pointer"
+                                className="px-3 py-1.5 rounded-xl border border-amber-200 hover:border-amber-300 bg-white hover:bg-amber-50 text-amber-800 font-black text-[10px] uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95 shrink-0"
                                 title="Reabrir triagem de tripulação"
                               >
-                                Alterar Modo
+                                <ArrowRightLeft className="w-3.5 h-3.5" />
+                                <span>Alterar Modo</span>
                               </button>
                             </div>
                           </div>
                         )
                       ) : (
-                        <div className="p-3.5 px-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2.5">
+                        /* BANNER VIAGEM CONVENCIONAL PADRÃO — NA MESMA LINHA */
+                        <div className="p-3 px-4 rounded-2xl bg-slate-50/90 border border-slate-200 flex items-center justify-between gap-3 shadow-2xs">
+                          <div className="flex items-center gap-2.5 flex-wrap min-w-0">
                             <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
                               <Users className="w-4 h-4" />
                             </div>
-                            <div>
-                              <span className="text-xs font-black text-slate-800 uppercase tracking-tight">Viagem Convencional</span>
-                              <p className="text-[10px] text-slate-400 font-medium">Sem restrição oncológica/hemodiálise aplicada.</p>
+                            <div className="flex items-center gap-2 flex-wrap min-w-0">
+                              <span className="text-xs font-black text-slate-900 uppercase tracking-tight whitespace-nowrap">
+                                Viagem Convencional
+                              </span>
+                              <span className="text-slate-300 hidden sm:inline">•</span>
+                              <span className="text-[11px] text-slate-500 font-medium">
+                                Sem restrição oncológica/hemodiálise aplicada.
+                              </span>
                             </div>
                           </div>
+
                           <button
                             type="button"
                             onClick={handleOpenTripulacaoModal}
-                            className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline uppercase tracking-wider cursor-pointer"
+                            className="px-3.5 py-1.5 rounded-xl border border-slate-200 hover:border-indigo-300 bg-white hover:bg-indigo-50/70 text-indigo-600 font-black text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95 shrink-0"
+                            title="Alterar modo da viagem"
                           >
-                            Alterar Modo
+                            <ArrowRightLeft className="w-3.5 h-3.5" />
+                            <span>Alterar Modo</span>
                           </button>
                         </div>
                       )}
