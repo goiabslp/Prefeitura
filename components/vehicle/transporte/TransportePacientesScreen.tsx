@@ -161,10 +161,14 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
     const handleDataChanged = () => carregarDemandas();
     window.addEventListener('transporte-demandas-changed', handleDataChanged);
     window.addEventListener('transporte-alocacao-changed', handleDataChanged);
+    window.addEventListener('consultas-agendamentos-changed', handleDataChanged);
+    window.addEventListener('consultas-vagas-changed', handleDataChanged);
 
     return () => {
       window.removeEventListener('transporte-demandas-changed', handleDataChanged);
       window.removeEventListener('transporte-alocacao-changed', handleDataChanged);
+      window.removeEventListener('consultas-agendamentos-changed', handleDataChanged);
+      window.removeEventListener('consultas-vagas-changed', handleDataChanged);
     };
   }, []);
 
@@ -255,6 +259,11 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
     });
     return Array.from(set).sort();
   }, [demandas]);
+
+  // Total de Pacientes Únicos no escopo filtrado (distinguindo agendamentos de pessoas físicas)
+  const totalPacientesUnicosFiltrados = useMemo(() => {
+    return new Set(demandasFiltradas.map(d => d.pacienteId || d.pacienteCpf || d.pacienteNome || d.id)).size;
+  }, [demandasFiltradas]);
 
   // Agrupamento Hierárquico Obrigatório: DATA -> DESTINO -> PACIENTES
   const gruposHierarquicos = useMemo(() => {
@@ -748,10 +757,10 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
               </div>
               <div>
                 <h2 className="text-xs font-black text-slate-900 uppercase tracking-tight">
-                  DEMANDAS DA REGULAÇÃO ({demandasFiltradas.length} pacientes)
+                  DEMANDAS DA REGULAÇÃO ({demandasFiltradas.length} {demandasFiltradas.length === 1 ? 'DEMANDA' : 'DEMANDAS'})
                 </h2>
                 <p className="text-[10px] text-slate-400 font-bold leading-none mt-0.5">
-                  Agendamentos organizados por data e destino
+                  {totalPacientesUnicosFiltrados} paciente(s) único(s) • Agendamentos organizados por data e destino
                 </p>
               </div>
             </div>

@@ -39,14 +39,15 @@ export type { GrupoDataHierarquico, GrupoDestinoHierarquico };
 export const normalizeCity = normalizeCityTransporte;
 
 // Chave única de persistência do cache offline das demandas reais
-const STORAGE_KEY = 'prefeitura_transporte_demandas_v2';
+// Versão v3: Purga registros históricos com status 'Realizado' e preserva estritamente os agendamentos ativos
+const STORAGE_KEY = 'prefeitura_transporte_demandas_v3';
 
 // Cache em memória para ambientes sem window (ex.: testes unitários ou SSR)
 let memoryCacheDemandas: TransporteDemanda[] = [];
 
 /**
  * Recupera demandas locais como cache e persistência de alocação/status.
- * Purga estritamente quaisquer registros fictícios, mockados ou solicitações não agendadas gravadas em versões anteriores.
+ * Purga estritamente quaisquer registros fictícios, mockados, solicitações não agendadas ou atendimentos históricos ('Realizado').
  * NUNCA retorna dados inventados ou simulados.
  */
 export const getLocalDemandas = (): TransporteDemanda[] => {
@@ -54,9 +55,12 @@ export const getLocalDemandas = (): TransporteDemanda[] => {
     return memoryCacheDemandas;
   }
   try {
-    // Purga imediata do cache de versões anteriores com dados não filtrados ou solicitações da fila
+    // Purga imediata do cache de versões anteriores com dados não filtrados ou históricos
     if (localStorage.getItem('prefeitura_transporte_demandas_v1')) {
       localStorage.removeItem('prefeitura_transporte_demandas_v1');
+    }
+    if (localStorage.getItem('prefeitura_transporte_demandas_v2')) {
+      localStorage.removeItem('prefeitura_transporte_demandas_v2');
     }
 
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -496,8 +500,9 @@ export const registrarContatoConfirmacao = async (
 
 /**
  * Critério Positivo e Estrito de Inclusão da Central de Transporte:
- * Somente procedimentos com AGENDAMENTO EFETIVAMENTE REALIZADO no sistema geram demandas.
+ * Somente procedimentos com status AGENDADO ativo geram demandas.
  * NÃO gera demandas para:
+ * - Procedimentos históricos já realizados ('Realizado').
  * - Solicitações em fila de espera sem agendamento ('Solicitado', 'Fila de espera', 'Aguardando Data').
  * - Agendamentos cancelados, pausados, excluídos ou não realizados.
  * - Registros fictícios ou sem data definida de atendimento.
@@ -509,8 +514,9 @@ export const isAgendamentoEfetivo = (booking: any): boolean => {
 
   const statusBooking = (booking.status || '').trim();
 
-  // 1. Proibição expressa de solicitações em fila, pausas, cancelamentos e exclusões
+  // 1. Proibição expressa de solicitações em fila, pausas, cancelamentos, exclusões e atendimentos históricos já realizados
   const statusProibidos = new Set([
+    'Realizado', // Procedimentos passados já atendidos NÃO devem gerar demandas de transporte vigentes
     'Solicitado',
     'Fila de espera',
     'Aguardando Data',
@@ -525,11 +531,13 @@ export const isAgendamentoEfetivo = (booking: any): boolean => {
 
   if (statusProibidos.has(statusBooking)) return false;
 
-  // 2. Critério Positivo: Deve ter status de agendado efetivamente realizado ou histórico
-  if (statusBooking !== 'Agendado' && statusBooking !== 'Realizado') return false;
+  // 2. Critério Positivo e Estrito: Somente solicitações com status 'Agendado'
+  if (statusBooking !== 'Agendado') return false;
 
-  // 3. Critério de Data: Exige appointment_date preenchido e válido
-  if (!booking.appointment_date || typeof booking.appointment_date !== 'string' || booking.appointment_date.trim() === '') {
+  // 3. Critério de Data: Exige appointment_date preenchido e válido no formato YYYY-MM-DD
+  const rawData = (booking.appointment_date || '').trim();
+  const dataAgendamento = rawData.includes('T') ? rawData.split('T')[0].trim() : rawData;
+  if (!dataAgendamento || !/^\d{4}-\d{2}-\d{2}$/.test(dataAgendamento)) {
     return false;
   }
 
@@ -538,16 +546,16 @@ export const isAgendamentoEfetivo = (booking: any): boolean => {
 
 /**
  * Sincronização automática com a Regulação (/Regulacao/Acompanhar)
- * Consulta os agendamentos reais existentes no Supabase e deriva as demandas de transporte.
+ * Consulta os agendamentos reais existentes no Supabase com status 'Agendado' e deriva as demandas de transporte.
  * NÃO inventa cidades, NÃO usa data de solicitação e NÃO gera dados fictícios.
  */
 export const sincronizarComRegulacao = async (agendamentosFornecidos?: ConsultaAgendamento[]): Promise<TransporteDemanda[]> => {
   let agendamentosLista = agendamentosFornecidos;
 
-  // Se não foi fornecida lista em memória, consulta os agendamentos reais do módulo de Regulação
+  // Se não foi fornecida lista em memória, consulta os agendamentos reais com status 'Agendado' do módulo de Regulação
   if (!agendamentosLista || agendamentosLista.length === 0) {
     try {
-      const ags = await getAgendamentos();
+      const ags = await getAgendamentos({ status: 'Agendado' });
       if (Array.isArray(ags) && ags.length > 0) {
         agendamentosLista = ags;
       }
@@ -564,7 +572,7 @@ export const sincronizarComRegulacao = async (agendamentosFornecidos?: ConsultaA
           paciente:consultas_pacientes(id, name, cpf, nickname, birth_date, phone),
           procedimento:consultas_procedimentos(id, name, code, type)
         `)
-        .in('status', ['Agendado', 'Realizado'])
+        .eq('status', 'Agendado')
         .not('appointment_date', 'is', null);
 
       if (error) {

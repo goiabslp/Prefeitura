@@ -93,10 +93,12 @@ test('3. Agrupamento hierárquico ordena pacientes pelo horário do agendamento'
   assert.equal(pacientesOrdenados[1].horaAtendimento, '14:30');
 });
 
-test('4. isAgendamentoEfetivo inclui estritamente status Agendado/Realizado e rejeita solicitações', () => {
-  // Casos válidos
+test('4. isAgendamentoEfetivo inclui estritamente status Agendado e rejeita histórico Realizado e solicitações', () => {
+  // Caso válido: Somente status 'Agendado' com appointment_date válida
   assert.equal(isAgendamentoEfetivo({ status: 'Agendado', appointment_date: '2026-11-20' }), true);
-  assert.equal(isAgendamentoEfetivo({ status: 'Realizado', appointment_date: '2026-11-20' }), true);
+
+  // Rejeição estrita de atendimentos históricos já realizados (evita os 495 registros excedentes)
+  assert.equal(isAgendamentoEfetivo({ status: 'Realizado', appointment_date: '2026-02-27' }), false);
 
   // Rejeição estrita de solicitações e filas (mesmo com datas residuais da solicitação)
   assert.equal(isAgendamentoEfetivo({ status: 'Solicitado', appointment_date: '2026-09-11', solicitation_date: '2026-09-11' }), false);
@@ -454,4 +456,43 @@ test('14. Sem destino selecionado (ou "Destino não informado"), não cria veíc
   });
 
   assert.equal(resNaoInformado.veiculosLaranja.length, 0, 'Destino não informado não pode misturar viagens de cidades específicas');
+});
+
+test('15. Auditoria de divergência: 148 agendamentos com status Agendado vs 495 Realizados gera exatamente 148 demandas', async () => {
+  const agendamentosMistos = [];
+
+  // 148 agendamentos ativos na Regulação com status 'Agendado'
+  for (let i = 1; i <= 148; i++) {
+    agendamentosMistos.push({
+      id: `ag_ativo_${i}`,
+      patient_id: `pac_${i}`,
+      status: 'Agendado',
+      appointment_date: '2026-11-27',
+      appointment_time: '07:30',
+      municipio: 'Ipatinga - MG',
+      paciente: { id: `pac_${i}`, name: `Paciente Ativo ${i}`, cpf: `000.000.${String(i).padStart(3, '0')}-00` },
+      procedimento: { id: `proc_${i}`, name: 'Consulta Médica', code: '0749' }
+    });
+  }
+
+  // 495 atendimentos passados com status 'Realizado' (histórico que causava a contagem de 643)
+  for (let j = 1; j <= 495; j++) {
+    agendamentosMistos.push({
+      id: `ag_historico_${j}`,
+      patient_id: `pac_hist_${j}`,
+      status: 'Realizado',
+      appointment_date: '2026-02-27',
+      appointment_time: '08:00',
+      municipio: 'Belo Horizonte - MG',
+      paciente: { id: `pac_hist_${j}`, name: `Paciente Passado ${j}` },
+      procedimento: { id: `proc_hist_${j}`, name: 'Consulta Psiquiatria', code: '8822' }
+    });
+  }
+
+  // Sincronização estrita da Central de Transporte
+  const demandas = await sincronizarComRegulacao(agendamentosMistos);
+
+  // A Central deve retornar EXATAMENTE 148 demandas, descartando todos os 495 atendimentos passados
+  assert.equal(demandas.length, 148, 'Deve conter rigorosamente 148 demandas correspondentes aos 148 agendamentos ativos');
+  assert.equal(demandas.every(d => d.dataAtendimento === '2026-11-27'), true, 'Todas as 148 demandas devem ser de agendamentos futuros válidos');
 });
