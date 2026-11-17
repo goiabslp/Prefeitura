@@ -228,17 +228,17 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
   const [selectedViagemId, setSelectedViagemId] = useState<string>('trip_qxv_4b21');
 
   // Estados de expansão do Acordeão
-  // Data expandida por padrão: 2026-11-20
+  // Por padrão, todas as datas e destinos iniciam expandidos para priorizar visualização do grid
   const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({
     '2026-11-20': true,
-    '2026-11-21': false,
-    '2026-11-24': false
+    '2026-11-21': true,
+    '2026-11-24': true
   });
 
-  // Destinos expandidos por padrão: Ipatinga expandido para mostrar a tabela
+  // Destinos expandidos por padrão para exibir o grid imediatamente
   const [expandedDestinos, setExpandedDestinos] = useState<Record<string, boolean>>({
     '2026-11-20__Ipatinga — MG': true,
-    '2026-11-20__Ponte Nova — MG': false
+    '2026-11-20__Ponte Nova — MG': true
   });
 
   // Destino e data ativos em foco para a coluna direita
@@ -593,22 +593,28 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
     showToast(`${sucessoCount} paciente(s) vinculado(s) com sucesso ao veículo ${veiculo.model}!`, 'success');
   };
 
-  // Alternar Expansão de Data
+  // Alternar Expansão de Data (aberto por padrão)
   const toggleDataExpanded = (dataKey: string) => {
-    setExpandedDates(prev => ({
-      ...prev,
-      [dataKey]: !prev[dataKey]
-    }));
+    setExpandedDates(prev => {
+      const current = prev[dataKey] !== undefined ? prev[dataKey] : true;
+      return {
+        ...prev,
+        [dataKey]: !current
+      };
+    });
     setFocoData(dataKey);
   };
 
-  // Alternar Expansão de Destino
+  // Alternar Expansão de Destino (aberto por padrão para expor o grid)
   const toggleDestinoExpanded = (dataKey: string, destKey: string) => {
     const key = `${dataKey}__${destKey}`;
-    setExpandedDestinos(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
+    setExpandedDestinos(prev => {
+      const current = prev[key] !== undefined ? prev[key] : true;
+      return {
+        ...prev,
+        [key]: !current
+      };
+    });
     setFocoData(dataKey);
     setFocoDestino(destKey.replace(/—\s*MG/g, '').trim());
   };
@@ -635,112 +641,112 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
       )}
 
       {/* ========================================================================= */}
-      {/* CABEÇALHO UNIFICADO COM INDICADORES NA MESMA LINHA (SEM TÍTULO) */}
+      {/* CABEÇALHO UNIFICADO COM INDICADORES NA MESMA LINHA (COMPACTO) */}
       {/* ========================================================================= */}
-      <header className="bg-white border-b border-slate-200 px-3 md:px-5 py-2.5 flex items-center justify-between gap-2.5 shrink-0 z-10 overflow-x-auto custom-scrollbar">
+      <header className="bg-white border-b border-slate-200 px-3 md:px-4 py-1.5 flex items-center justify-between gap-2 shrink-0 z-10 overflow-x-auto custom-scrollbar">
         {/* Esquerda: Botão Voltar + Ícone de Transporte */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={onBack}
-            className="w-9 h-9 rounded-xl bg-white hover:bg-slate-50 flex items-center justify-center text-slate-500 hover:text-indigo-600 border border-slate-200/90 shadow-2xs transition-all active:scale-95 group shrink-0 cursor-pointer"
+            className="w-8 h-8 rounded-lg bg-white hover:bg-slate-50 flex items-center justify-center text-slate-500 hover:text-indigo-600 border border-slate-200/90 shadow-2xs transition-all active:scale-95 group shrink-0 cursor-pointer"
             title="Voltar ao Módulo de Veículos"
           >
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
           </button>
 
-          <div className="w-9 h-9 rounded-xl bg-[#5433FF] text-white flex items-center justify-center shadow-xs shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-[#5433FF] text-white flex items-center justify-center shadow-xs shrink-0">
             <Car className="w-4 h-4" />
           </div>
         </div>
 
         {/* Centro: Os 6 Cards de Indicadores na Mesma Linha */}
-        <div className="flex items-center gap-2 flex-1 justify-center min-w-0">
+        <div className="flex items-center gap-1.5 flex-1 justify-center min-w-0">
           
           {/* 1. Total de Pacientes */}
-          <div className="bg-white px-2.5 py-1 rounded-xl border border-slate-200/90 shadow-2xs flex items-center gap-2 shrink-0">
-            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-              <Users className="w-3.5 h-3.5" />
+          <div className="bg-white px-2 py-0.5 rounded-lg border border-slate-200/90 shadow-2xs flex items-center gap-1.5 shrink-0">
+            <div className="w-6 h-6 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+              <Users className="w-3 h-3" />
             </div>
             <div className="min-w-0">
-              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block truncate leading-none">
+              <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-400 block truncate leading-none">
                 TOTAL DE PACIENTES
               </span>
-              <span className="text-sm md:text-base font-black text-slate-900 leading-tight block mt-0.5">
+              <span className="text-sm font-black text-slate-900 leading-tight block mt-0.5">
                 {indicadores.totalPacientes}
               </span>
             </div>
           </div>
 
           {/* 2. Aguardando */}
-          <div className="bg-amber-50/70 px-2.5 py-1 rounded-xl border border-amber-200/80 shadow-2xs flex items-center gap-2 shrink-0">
-            <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-              <Clock3 className="w-3.5 h-3.5" />
+          <div className="bg-amber-50/70 px-2 py-0.5 rounded-lg border border-amber-200/80 shadow-2xs flex items-center gap-1.5 shrink-0">
+            <div className="w-6 h-6 rounded-md bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <Clock3 className="w-3 h-3" />
             </div>
             <div className="min-w-0">
-              <span className="text-[9px] font-black uppercase tracking-wider text-amber-800 block truncate leading-none">
+              <span className="text-[8.5px] font-black uppercase tracking-wider text-amber-800 block truncate leading-none">
                 AGUARDANDO
               </span>
-              <span className="text-sm md:text-base font-black text-amber-900 leading-tight block mt-0.5">
+              <span className="text-sm font-black text-amber-900 leading-tight block mt-0.5">
                 {indicadores.aguardando}
               </span>
             </div>
           </div>
 
           {/* 3. Alocados */}
-          <div className="bg-indigo-50/70 px-2.5 py-1 rounded-xl border border-indigo-200/80 shadow-2xs flex items-center gap-2 shrink-0">
-            <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
-              <UsersRound className="w-3.5 h-3.5" />
+          <div className="bg-indigo-50/70 px-2 py-0.5 rounded-lg border border-indigo-200/80 shadow-2xs flex items-center gap-1.5 shrink-0">
+            <div className="w-6 h-6 rounded-md bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+              <UsersRound className="w-3 h-3" />
             </div>
             <div className="min-w-0">
-              <span className="text-[9px] font-black uppercase tracking-wider text-indigo-800 block truncate leading-none">
+              <span className="text-[8.5px] font-black uppercase tracking-wider text-indigo-800 block truncate leading-none">
                 ALOCADOS
               </span>
-              <span className="text-sm md:text-base font-black text-indigo-900 leading-tight block mt-0.5">
+              <span className="text-sm font-black text-indigo-900 leading-tight block mt-0.5">
                 {indicadores.alocados}
               </span>
             </div>
           </div>
 
           {/* 4. Confirmados */}
-          <div className="bg-emerald-50/70 px-2.5 py-1 rounded-xl border border-emerald-200/80 shadow-2xs flex items-center gap-2 shrink-0">
-            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-              <Check className="w-3.5 h-3.5 stroke-[3]" />
+          <div className="bg-emerald-50/70 px-2 py-0.5 rounded-lg border border-emerald-200/80 shadow-2xs flex items-center gap-1.5 shrink-0">
+            <div className="w-6 h-6 rounded-md bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+              <Check className="w-3 h-3 stroke-[3]" />
             </div>
             <div className="min-w-0">
-              <span className="text-[9px] font-black uppercase tracking-wider text-emerald-800 block truncate leading-none">
+              <span className="text-[8.5px] font-black uppercase tracking-wider text-emerald-800 block truncate leading-none">
                 CONFIRMADOS
               </span>
-              <span className="text-sm md:text-base font-black text-emerald-900 leading-tight block mt-0.5">
+              <span className="text-sm font-black text-emerald-900 leading-tight block mt-0.5">
                 {indicadores.confirmados}
               </span>
             </div>
           </div>
 
           {/* 5. Vagas Disponíveis */}
-          <div className="bg-cyan-50/70 px-2.5 py-1 rounded-xl border border-cyan-200/80 shadow-2xs flex items-center gap-2 shrink-0">
-            <div className="w-7 h-7 rounded-lg bg-cyan-100 text-cyan-700 flex items-center justify-center shrink-0">
-              <Armchair className="w-3.5 h-3.5" />
+          <div className="bg-cyan-50/70 px-2 py-0.5 rounded-lg border border-cyan-200/80 shadow-2xs flex items-center gap-1.5 shrink-0">
+            <div className="w-6 h-6 rounded-md bg-cyan-100 text-cyan-700 flex items-center justify-center shrink-0">
+              <Armchair className="w-3 h-3" />
             </div>
             <div className="min-w-0">
-              <span className="text-[9px] font-black uppercase tracking-wider text-cyan-800 block truncate leading-none">
+              <span className="text-[8.5px] font-black uppercase tracking-wider text-cyan-800 block truncate leading-none">
                 VAGAS DISPONÍVEIS
               </span>
-              <span className="text-sm md:text-base font-black text-cyan-950 leading-tight block mt-0.5">
+              <span className="text-sm font-black text-cyan-950 leading-tight block mt-0.5">
                 {indicadores.vagasDisponiveis}
               </span>
             </div>
           </div>
 
           {/* 6. Veículos Disponíveis */}
-          <div className="bg-purple-50/70 px-2.5 py-1 rounded-xl border border-purple-200/80 shadow-2xs flex items-center gap-2 shrink-0">
-            <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
-              <Car className="w-3.5 h-3.5" />
+          <div className="bg-purple-50/70 px-2 py-0.5 rounded-lg border border-purple-200/80 shadow-2xs flex items-center gap-1.5 shrink-0">
+            <div className="w-6 h-6 rounded-md bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+              <Car className="w-3 h-3" />
             </div>
             <div className="min-w-0">
-              <span className="text-[9px] font-black uppercase tracking-wider text-purple-800 block truncate leading-none">
+              <span className="text-[8.5px] font-black uppercase tracking-wider text-purple-800 block truncate leading-none">
                 VEÍCULOS DISPONÍVEIS
               </span>
-              <span className="text-sm md:text-base font-black text-purple-900 leading-tight block mt-0.5">
+              <span className="text-sm font-black text-purple-900 leading-tight block mt-0.5">
                 {indicadores.veiculosDisponiveis}
               </span>
             </div>
@@ -754,7 +760,7 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
             <button
               type="button"
               onClick={() => onOpenNewTripModal(filterDate || undefined, focoDestino !== 'TODOS' ? focoDestino : undefined)}
-              className="px-3.5 py-1.5 bg-[#5433FF] hover:bg-[#4628df] text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-sm shadow-indigo-500/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+              className="px-3 py-1 bg-[#5433FF] hover:bg-[#4628df] text-white font-black text-[11px] uppercase tracking-wider rounded-lg shadow-sm shadow-indigo-500/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
             >
               <span>+ NOVA VIAGEM</span>
             </button>
@@ -763,14 +769,14 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
       </header>
 
       {/* ========================================================================= */}
-      {/* ÁREA 3 — FILTROS EM UMA ÚNICA LINHA NO DESKTOP */}
+      {/* ÁREA 3 — FILTROS EM UMA ÚNICA LINHA NO DESKTOP (COMPACTO) */}
       {/* ========================================================================= */}
-      <section className="bg-white border-b border-slate-200/80 px-4 md:px-6 py-2.5 shrink-0">
-        <div className="flex flex-wrap lg:flex-nowrap items-center gap-2.5">
+      <section className="bg-white border-b border-slate-200/80 px-3 md:px-4 py-1.5 shrink-0">
+        <div className="flex flex-wrap lg:flex-nowrap items-center gap-2">
           
           {/* 1. Data */}
-          <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 shrink-0">
-            <Calendar className="w-4 h-4 text-slate-400" />
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 shrink-0 h-8">
+            <Calendar className="w-3.5 h-3.5 text-slate-400" />
             <input
               type="date"
               value={filterDate}
@@ -781,7 +787,7 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
               <button
                 type="button"
                 onClick={() => setFilterDate('')}
-                className="text-[10px] font-black text-slate-400 hover:text-slate-600 px-1 ml-1"
+                className="text-[10px] font-black text-slate-400 hover:text-slate-600 px-1 ml-0.5"
                 title="Limpar filtro de data"
               >
                 ✕
@@ -790,11 +796,11 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
           </div>
 
           {/* 2. Destino */}
-          <div className="shrink-0 min-w-[170px]">
+          <div className="shrink-0 min-w-[160px]">
             <select
               value={filterDestino}
               onChange={(e) => setFilterDestino(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer"
+              className="w-full px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none cursor-pointer h-8"
             >
               <option value="TODOS">Todos os Destinos</option>
               {destinosDisponiveis.map((dest, i) => (
@@ -804,11 +810,11 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
           </div>
 
           {/* 3. Situação */}
-          <div className="shrink-0 min-w-[160px]">
+          <div className="shrink-0 min-w-[150px]">
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as any)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer"
+              className="w-full px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none cursor-pointer h-8"
             >
               <option value="TODOS">Todas as Situações</option>
               <option value="Aguardando vaga">Aguardando</option>
@@ -818,11 +824,11 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
           </div>
 
           {/* 4. Procedimento */}
-          <div className="shrink-0 min-w-[180px]">
+          <div className="shrink-0 min-w-[170px]">
             <select
               value={filterProcedimento}
               onChange={(e) => setFilterProcedimento(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer"
+              className="w-full px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none cursor-pointer h-8"
             >
               <option value="TODOS">Todos os Procedimentos</option>
               {procedimentosDisponiveis.map((proc, i) => (
@@ -832,20 +838,20 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
           </div>
 
           {/* 5. Pesquisa Textual */}
-          <div className="relative flex-1 min-w-[220px]">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Pesquisar por paciente ou CPF..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-slate-800 outline-none transition-all placeholder:text-slate-400"
+              className="w-full pl-8 pr-3 py-1 bg-slate-50 border border-slate-200 focus:bg-white focus:border-indigo-500 rounded-lg text-xs font-semibold text-slate-800 outline-none transition-all placeholder:text-slate-400 h-8"
             />
             {searchTerm && (
               <button
                 type="button"
                 onClick={() => setSearchTerm('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
               >
                 ✕
               </button>
@@ -884,145 +890,154 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
       </div>
 
       {/* ========================================================================= */}
-      {/* ÁREA PRINCIPAL — DUAS COLUNAS (52% / 48%) */}
+      {/* ÁREA PRINCIPAL — DUAS COLUNAS (58% GRID DE DEMANDAS / 42% VEÍCULOS) */}
       {/* ========================================================================= */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden p-3 md:p-5 gap-4">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden p-2 sm:p-2.5 md:p-3 gap-2.5 md:gap-3">
 
         {/* --------------------------------------------------------------------- */}
-        {/* COLUNA ESQUERDA — DEMANDAS DA REGULAÇÃO (52%) */}
+        {/* COLUNA ESQUERDA — DEMANDAS DA REGULAÇÃO / GRID PRIORITÁRIO (58%) */}
         {/* --------------------------------------------------------------------- */}
-        <div className={`w-full lg:w-[52%] flex flex-col bg-white rounded-3xl border border-slate-200/90 shadow-2xs overflow-hidden ${
+        <div className={`w-full lg:w-[58%] flex flex-col bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden ${
           mobileTab === 'veiculos' ? 'hidden lg:flex' : 'flex'
         }`}>
           {/* Header da Coluna Esquerda */}
-          <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between gap-3 shrink-0">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-purple-50 text-indigo-600 flex items-center justify-center font-black">
-                <Calendar className="w-4 h-4" />
+          <div className="px-3.5 py-2 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between gap-2.5 shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-purple-50 text-indigo-600 flex items-center justify-center font-black">
+                <Calendar className="w-3.5 h-3.5" />
               </div>
               <div>
-                <h2 className="text-xs md:text-sm font-black text-slate-900 uppercase tracking-tight">
+                <h2 className="text-xs font-black text-slate-900 uppercase tracking-tight">
                   DEMANDAS DA REGULAÇÃO ({demandasFiltradas.length} pacientes)
                 </h2>
-                <p className="text-[10px] text-slate-400 font-bold">
+                <p className="text-[10px] text-slate-400 font-bold leading-none mt-0.5">
                   Agendamentos organizados por data e destino
                 </p>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleSelecionarMultiplosVisiveis}
-              className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 font-extrabold text-[11px] flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-2xs"
-            >
-              <CheckSquare className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Selecionar Múltiplos</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {selectedDemandaIds.length > 0 && (
+                <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 border border-indigo-200/80 px-2 py-0.5 rounded-lg">
+                  {selectedDemandaIds.length} selecionado(s)
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleSelecionarMultiplosVisiveis}
+                className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 font-extrabold text-[11px] flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-2xs"
+              >
+                <CheckSquare className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Selecionar Múltiplos</span>
+              </button>
+            </div>
           </div>
 
-          {/* Acordeão Hierárquico: DATA -> DESTINO -> PACIENTES */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+          {/* Acordeão Hierárquico: DATA -> DESTINO -> PACIENTES (Expandido por padrão) */}
+          <div className="flex-1 overflow-y-auto p-2 sm:p-2.5 space-y-2 custom-scrollbar">
             {gruposHierarquicos.length === 0 ? (
-              <div className="py-20 text-center space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
-                  <UsersRound className="w-6 h-6" />
+              <div className="py-16 text-center space-y-2.5">
+                <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                  <UsersRound className="w-5 h-5" />
                 </div>
-                <h4 className="text-sm font-black text-slate-700 uppercase">
+                <h4 className="text-xs font-black text-slate-700 uppercase">
                   Nenhuma Demanda Encontrada
                 </h4>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
                   Não foram encontradas demandas para os filtros informados.
                 </p>
               </div>
             ) : (
               gruposHierarquicos.map((grupoData) => {
-                const isDataExpanded = expandedDates[grupoData.data] ?? false;
+                // Por padrão aberto para priorizar a visualização direta do grid
+                const isDataExpanded = expandedDates[grupoData.data] !== undefined ? expandedDates[grupoData.data] : true;
 
                 return (
                   <div
                     key={grupoData.data}
-                    className="rounded-2xl border border-slate-200/90 overflow-hidden bg-white shadow-2xs"
+                    className="rounded-xl border border-slate-200/90 overflow-hidden bg-white shadow-2xs"
                   >
                     {/* Barra de Data (Nível 1 do Acordeão) */}
                     <button
                       type="button"
                       onClick={() => toggleDataExpanded(grupoData.data)}
-                      className="w-full px-4 py-3 bg-slate-50/80 hover:bg-slate-100/80 border-b border-slate-200/60 flex items-center justify-between gap-3 text-left transition-colors cursor-pointer"
+                      className="w-full px-3 py-2 bg-slate-50/90 hover:bg-slate-100/90 border-b border-slate-200/60 flex items-center justify-between gap-2.5 text-left transition-colors cursor-pointer"
                     >
                       <div className="flex items-center gap-2">
-                        <CalendarDays className="w-4 h-4 text-indigo-600 shrink-0" />
+                        <CalendarDays className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                         <span className="text-xs font-black text-slate-900 uppercase">
                           {grupoData.dataLabel}
                         </span>
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <span className="px-2.5 py-0.5 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-700 text-[11px] font-black">
+                        <span className="px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-100 text-indigo-700 text-[10.5px] font-black">
                           {grupoData.totalPacientes} pacientes
                         </span>
                         {isDataExpanded ? (
-                          <ChevronDown className="w-4 h-4 text-slate-400" />
+                          <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                         ) : (
-                          <ChevronRight className="w-4 h-4 text-slate-400" />
+                          <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                         )}
                       </div>
                     </button>
 
                     {/* Conteúdo da Data: Lista de Municípios de Destino */}
                     {isDataExpanded && (
-                      <div className="p-3 space-y-3 bg-slate-50/30">
+                      <div className="p-2 space-y-2 bg-slate-50/30">
                         {grupoData.destinos.map((dest) => {
                           const destKey = `${grupoData.data}__${dest.destino}`;
-                          const isDestExpanded = expandedDestinos[destKey] ?? false;
+                          // Por padrão aberto para priorizar a visualização direta do grid
+                          const isDestExpanded = expandedDestinos[destKey] !== undefined ? expandedDestinos[destKey] : true;
                           const todosDestinoSelecionados = dest.demandas.every(d => selectedDemandaIds.includes(d.id));
 
                           return (
                             <div
                               key={destKey}
-                              className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-2xs"
+                              className="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-2xs"
                             >
                               {/* Card do Município (Nível 2 do Acordeão) */}
                               <div
                                 onClick={() => toggleDestinoExpanded(grupoData.data, dest.destino)}
-                                className="px-4 py-3 flex items-center justify-between gap-3 cursor-pointer hover:bg-slate-50/60 transition-colors"
+                                className="px-3 py-2 flex items-center justify-between gap-2.5 cursor-pointer hover:bg-slate-50/60 transition-colors"
                               >
-                                <div className="flex items-start gap-2.5">
-                                  <MapPin className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                                <div className="flex items-start gap-2">
+                                  <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
                                   <div>
                                     <h3 className="text-xs font-black text-slate-900 uppercase">
                                       {dest.destino}
                                     </h3>
-                                    <p className="text-[11px] text-slate-500 font-medium">
+                                    <p className="text-[10.5px] text-slate-500 font-medium">
                                       {dest.totalPacientes} pacientes • {dest.resumoProcedimentos} • {dest.horarioMin} às {dest.horarioMax}
                                     </p>
                                   </div>
                                 </div>
 
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5">
                                   {dest.aguardando > 0 ? (
-                                    <span className="px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold">
+                                    <span className="px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[9.5px] font-bold">
                                       {dest.aguardando} aguardando
                                     </span>
                                   ) : (
-                                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold">
+                                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[9.5px] font-bold">
                                       {dest.alocados} alocados
                                     </span>
                                   )}
                                   {isDestExpanded ? (
-                                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                                   ) : (
-                                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                                    <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                                   )}
                                 </div>
                               </div>
 
-                              {/* Tabela Compacta de Pacientes (Quando o Destino está expandido) */}
+                              {/* Grid Compacto de Pacientes (Tabela com Prioridade Total) */}
                               {isDestExpanded && (
                                 <div className="border-t border-slate-100 overflow-x-auto">
                                   <table className="w-full text-left border-collapse text-xs">
                                     <thead>
-                                      <tr className="bg-slate-50/70 border-b border-slate-100 text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                                        <th className="py-2 px-3 w-8 text-center">
+                                      <tr className="bg-slate-50/90 border-b border-slate-200/60 text-[9.5px] font-black uppercase text-slate-500 tracking-wider sticky top-0 z-10">
+                                        <th className="py-1.5 px-2.5 w-7 text-center">
                                           <input
                                             type="checkbox"
                                             checked={todosDestinoSelecionados && dest.demandas.length > 0}
@@ -1031,12 +1046,12 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
                                             title="Selecionar / desmarcar todos deste destino"
                                           />
                                         </th>
-                                        <th className="py-2 px-3 font-black text-slate-500">PACIENTE</th>
-                                        <th className="py-2 px-3 font-black text-slate-500">PROCEDIMENTO</th>
-                                        <th className="py-2 px-2 font-black text-slate-500 text-center">HORÁRIO</th>
-                                        <th className="py-2 px-2 font-black text-slate-500 text-center">ACOMP.</th>
-                                        <th className="py-2 px-2 font-black text-slate-500 text-center">ADAPT.</th>
-                                        <th className="py-2 px-3 font-black text-slate-500 text-center">SITUAÇÃO</th>
+                                        <th className="py-1.5 px-2.5 font-black text-slate-600">PACIENTE</th>
+                                        <th className="py-1.5 px-2 font-black text-slate-600">PROCEDIMENTO</th>
+                                        <th className="py-1.5 px-1.5 font-black text-slate-600 text-center w-16">HORÁRIO</th>
+                                        <th className="py-1.5 px-1 font-black text-slate-600 text-center w-12">ACOMP.</th>
+                                        <th className="py-1.5 px-1 font-black text-slate-600 text-center w-12">ADAPT.</th>
+                                        <th className="py-1.5 px-2.5 font-black text-slate-600 text-center w-24">SITUAÇÃO</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
@@ -1055,48 +1070,47 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
                                             }`}
                                           >
                                             {/* Checkbox */}
-                                            <td className="py-2.5 px-3 text-center align-top">
+                                            <td className="py-1.5 px-2.5 text-center align-middle">
                                               <input
                                                 type="checkbox"
                                                 checked={isSelected}
                                                 onChange={() => toggleSelectPaciente(demanda.id)}
-                                                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer mt-0.5"
+                                                className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                                               />
                                             </td>
 
                                             {/* Paciente (Nome + Apelido + CPF) */}
-                                            <td className="py-2.5 px-3 align-top">
-                                              <div className="font-bold text-slate-900 leading-snug">
+                                            <td className="py-1.5 px-2.5 align-middle">
+                                              <div className="font-bold text-slate-900 leading-tight">
                                                 {demanda.pacienteNome}
                                               </div>
-                                              <div className="text-[10px] text-slate-400 font-medium">
-                                                Apelido: {demanda.pacienteApelido || 'Não informado'}
-                                              </div>
-                                              <div className="text-[10px] text-slate-400 font-medium">
-                                                CPF: {demanda.pacienteCpf || 'Não informado'}
+                                              <div className="text-[10px] text-slate-500 font-medium flex items-center gap-1.5 flex-wrap mt-0.5">
+                                                <span>Apelido: <strong className="text-slate-700 font-bold">{demanda.pacienteApelido || 'Não informado'}</strong></span>
+                                                <span className="text-slate-300">•</span>
+                                                <span>CPF: {demanda.pacienteCpf || 'Não informado'}</span>
                                               </div>
                                             </td>
 
                                             {/* Procedimento (Nome + Código) */}
-                                            <td className="py-2.5 px-3 align-top">
-                                              <div className="font-bold text-slate-800 leading-snug">
+                                            <td className="py-1.5 px-2 align-middle">
+                                              <div className="font-bold text-slate-800 leading-tight">
                                                 {demanda.procedimentoNome}
                                               </div>
-                                              <div className="text-[10px] text-slate-400 font-mono">
+                                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
                                                 Cód. {demanda.procedimentoCodigo || '0000'}
                                               </div>
                                             </td>
 
                                             {/* Horário */}
-                                            <td className="py-2.5 px-2 text-center align-top font-bold text-slate-700">
+                                            <td className="py-1.5 px-1.5 text-center align-middle font-bold text-slate-700 text-xs">
                                               {demanda.horaAtendimento}
                                             </td>
 
                                             {/* Acompanhante */}
-                                            <td className="py-2.5 px-2 text-center align-top">
+                                            <td className="py-1.5 px-1 text-center align-middle">
                                               {demanda.necessitaAcompanhante || demanda.qtdAcompanhantes > 0 ? (
                                                 <div className="inline-flex items-center justify-center text-indigo-600" title={`Acompanhante (${demanda.qtdAcompanhantes || 1})`}>
-                                                  <Users className="w-4 h-4" />
+                                                  <Users className="w-3.5 h-3.5" />
                                                 </div>
                                               ) : (
                                                 <span className="text-slate-300 font-bold">-</span>
@@ -1104,10 +1118,10 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
                                             </td>
 
                                             {/* Adaptado */}
-                                            <td className="py-2.5 px-2 text-center align-top">
+                                            <td className="py-1.5 px-1 text-center align-middle">
                                               {demanda.necessitaVeiculoAdaptado ? (
                                                 <div className="inline-flex items-center justify-center text-blue-600" title="Necessita Veículo Adaptado">
-                                                  <Accessibility className="w-4 h-4" />
+                                                  <Accessibility className="w-3.5 h-3.5" />
                                                 </div>
                                               ) : (
                                                 <span className="text-slate-300 font-bold">-</span>
@@ -1115,8 +1129,8 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
                                             </td>
 
                                             {/* Situação */}
-                                            <td className="py-2.5 px-3 text-center align-top">
-                                              <span className={`inline-block text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+                                            <td className="py-1.5 px-2.5 text-center align-middle">
+                                              <span className={`inline-block text-[9.5px] font-black uppercase px-2 py-0.5 rounded-full ${
                                                 isConfirmado
                                                   ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                                                   : isAlocado
@@ -1146,30 +1160,43 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
         </div>
 
         {/* --------------------------------------------------------------------- */}
-        {/* COLUNA DIREITA — VEÍCULOS E VIAGENS (48%) */}
+        {/* COLUNA DIREITA — VEÍCULOS E VIAGENS (42%) */}
         {/* --------------------------------------------------------------------- */}
-        <div className={`w-full lg:w-[48%] flex flex-col bg-white rounded-3xl border border-slate-200/90 shadow-2xs overflow-hidden ${
+        <div className={`w-full lg:w-[42%] flex flex-col bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden ${
           mobileTab === 'pacientes' ? 'hidden lg:flex' : 'flex'
         }`}>
           {/* Header da Coluna Direita */}
-          <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between gap-3 shrink-0">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-[#5433FF] text-white flex items-center justify-center font-black shadow-xs">
-                <Car className="w-4 h-4" />
+          <div className="px-3.5 py-2 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between gap-2 shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-[#5433FF] text-white flex items-center justify-center font-black shadow-2xs">
+                <Car className="w-3.5 h-3.5" />
               </div>
               <div>
-                <h2 className="text-xs md:text-sm font-black text-slate-900 uppercase tracking-tight">
+                <h2 className="text-xs font-black text-slate-900 uppercase tracking-tight">
                   VEÍCULOS E VIAGENS ({focoDestino} — {filterDate ? new Date(filterDate + 'T12:00:00').toLocaleDateString('pt-BR') : '20/11/2026'})
                 </h2>
-                <p className="text-[10px] text-slate-400 font-bold">
+                <p className="text-[10px] text-slate-400 font-bold leading-none mt-0.5">
                   Selecione um veículo e vincule os pacientes
                 </p>
               </div>
             </div>
+
+            {/* Ação de Vincular Imediata quando houver pacientes selecionados */}
+            {selectedDemandaIds.length > 0 && (
+              <button
+                type="button"
+                onClick={handlePrepararVinculacao}
+                className="px-3 py-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black text-[11px] uppercase tracking-wider rounded-lg shadow-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 animate-pulse"
+                title="Vincular pacientes selecionados ao veículo escolhido"
+              >
+                <Link2 className="w-3.5 h-3.5" />
+                <span>Vincular ({selectedDemandaIds.length})</span>
+              </button>
+            )}
           </div>
 
-          {/* Lista de Veículos Disponíveis com Rádio Button */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+          {/* Lista Compacta de Veículos Disponíveis com Rádio Button */}
+          <div className="flex-1 overflow-y-auto p-2 sm:p-2.5 space-y-2 custom-scrollbar">
             {viagensDisponiveis.map((item) => {
               const isSelected = selectedViagemId === item.schedule.id;
               const isMicro = item.vehicle.vehicleCategory === 'Ônibus' || (item.vehicle.passengerCapacity || 0) > 20;
@@ -1178,29 +1205,29 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
                 <div
                   key={item.schedule.id}
                   onClick={() => setSelectedViagemId(item.schedule.id)}
-                  className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                  className={`p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
                     isSelected
                       ? 'border-indigo-600 bg-indigo-50/40 ring-2 ring-indigo-500/20 shadow-xs'
                       : 'border-slate-200/90 bg-white hover:border-slate-300 hover:shadow-2xs'
                   }`}
                 >
-                  <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0">
                     {/* Radio Button Customizado */}
                     <div className="shrink-0">
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${
                         isSelected 
                           ? 'border-indigo-600 bg-white' 
                           : 'border-slate-300 bg-white'
                       }`}>
                         {isSelected && (
-                          <div className="w-2.5 h-2.5 rounded-full bg-indigo-600" />
+                          <div className="w-2 h-2 rounded-full bg-indigo-600" />
                         )}
                       </div>
                     </div>
 
                     {/* Foto / Ícone do Veículo */}
-                    <div className="w-14 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 shrink-0 overflow-hidden">
-                      <Car className="w-6 h-6 text-slate-600" />
+                    <div className="w-11 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 shrink-0 overflow-hidden">
+                      <Car className="w-4 h-4 text-slate-600" />
                     </div>
 
                     {/* Informações Textuais */}
@@ -1208,33 +1235,34 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
                       <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight">
                         {isMicro ? 'MICRO-ÔNIBUS' : 'VAN'} — {item.vehicle.plate}
                       </h3>
-                      <p className="text-[11px] text-slate-500 font-semibold truncate mt-0.5">
+                      <p className="text-[10.5px] text-slate-500 font-semibold truncate">
                         Motorista: {item.driver?.name || 'Helton Vieira Marques'}
                       </p>
-                      <div className="text-[10px] text-slate-500 font-bold mt-1 flex items-center gap-3">
+                      <div className="text-[9.5px] text-slate-500 font-bold mt-0.5 flex items-center gap-2 flex-wrap">
                         <span>Saída: {new Date(item.schedule.departureDateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span>•</span>
                         <span>Destino: {item.schedule.destination}</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Métricas e Vagas na Lateral Direita do Card */}
-                  <div className="flex items-center gap-3 shrink-0">
-                    <div className="hidden sm:flex flex-col items-end text-[10px] font-bold text-slate-500 space-y-0.5">
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="hidden sm:flex flex-col items-end text-[9.5px] font-bold text-slate-500 space-y-0.5">
                       <span className="flex items-center gap-1">
-                        <Armchair className="w-3.5 h-3.5 text-slate-400" /> Capacidade <strong className="text-slate-800">{item.capacidadePassageiros} lugares</strong>
+                        <Armchair className="w-3 h-3 text-slate-400" /> Capacidade <strong className="text-slate-800">{item.capacidadePassageiros} lugares</strong>
                       </span>
                       <span className="flex items-center gap-1">
-                        <User className="w-3.5 h-3.5 text-slate-400" /> Ocupados <strong className="text-slate-800">{item.ocupados}</strong>
+                        <User className="w-3 h-3 text-slate-400" /> Ocupados <strong className="text-slate-800">{item.ocupados}</strong>
                       </span>
                     </div>
 
                     {/* Badge Verde de Vagas */}
-                    <div className="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-1.5 shadow-2xs">
-                      <Accessibility className="w-4 h-4 text-emerald-600" />
+                    <div className="px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-1 shadow-2xs">
+                      <Accessibility className="w-3.5 h-3.5 text-emerald-600" />
                       <div className="text-right leading-none">
-                        <span className="text-[9px] font-black uppercase block text-emerald-700">Vagas</span>
-                        <span className="text-sm font-black text-emerald-950">{item.vagasLivres}</span>
+                        <span className="text-[8.5px] font-black uppercase block text-emerald-700">Vagas</span>
+                        <span className="text-xs font-black text-emerald-950">{item.vagasLivres}</span>
                       </div>
                     </div>
                   </div>
