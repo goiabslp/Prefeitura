@@ -109,11 +109,11 @@ export const TripulacaoTable: React.FC<TripulacaoTableProps> = ({
   };
 
   return (
-    <div className="w-full space-y-4">
+    <div className="w-full flex-1 flex flex-col min-h-0 space-y-3.5">
       
       {/* Alerta de Validação de Acompanhante Obrigatório */}
       {deleteWarning && (
-        <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center justify-between gap-3 animate-in fade-in">
+        <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center justify-between gap-3 animate-in fade-in shrink-0">
           <div className="flex items-center gap-2">
             <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0" />
             <span>{deleteWarning}</span>
@@ -131,7 +131,7 @@ export const TripulacaoTable: React.FC<TripulacaoTableProps> = ({
       {/* ========================================================================= */}
       {/* BARRA SUPERIOR: TÍTULO, PESQUISA E BOTÃO + NOVO PASSAGEIRO */}
       {/* ========================================================================= */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-0.5 shrink-0">
         
         {/* Título com Ícone */}
         <div className="flex items-center gap-2.5 shrink-0">
@@ -178,14 +178,14 @@ export const TripulacaoTable: React.FC<TripulacaoTableProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* TABELA DE PASSAGEIROS (100% DA LARGURA DISPONÍVEL) */}
+      {/* TABELA DE PASSAGEIROS (OCUPA O ESPAÇO MÁXIMO DISPONÍVEL DO GRID) */}
       {/* ========================================================================= */}
-      <div className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xs">
-        <div className="overflow-x-auto">
+      <div className="w-full flex-1 flex flex-col min-h-[380px] md:min-h-[460px] overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-2xs">
+        <div className="overflow-x-auto overflow-y-auto flex-1 custom-scrollbar">
           <table className="w-full text-left border-collapse">
             
-            {/* Header da Tabela */}
-            <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-black text-[10px] uppercase tracking-wider">
+            {/* Header Fixo da Tabela */}
+            <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs border-b border-slate-200 text-slate-500 font-black text-[10px] uppercase tracking-wider z-10 shadow-2xs">
               <tr>
                 <th className="py-3 px-3.5 w-12 text-center">#</th>
                 <th className="py-3 px-4 min-w-[220px]">Passageiro</th>
@@ -201,15 +201,19 @@ export const TripulacaoTable: React.FC<TripulacaoTableProps> = ({
             <tbody className="divide-y divide-slate-100 text-xs font-semibold">
               {filteredPassengers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
-                    <div className="space-y-2">
-                      <Users className="w-8 h-8 text-slate-300 mx-auto" />
-                      <p className="text-xs font-black uppercase tracking-wider text-slate-600">
-                        Nenhum passageiro adicionado à viagem
-                      </p>
-                      <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
-                        Clique no botão <strong>+ Novo Passageiro</strong> acima para pesquisar e vincular pacientes da base compartilhada.
-                      </p>
+                  <td colSpan={7} className="py-24 md:py-36 text-center text-slate-400">
+                    <div className="space-y-3 max-w-md mx-auto">
+                      <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-500 flex items-center justify-center mx-auto shadow-xs border border-indigo-100/50">
+                        <Users className="w-7 h-7 text-indigo-500" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs md:text-sm font-black uppercase tracking-wider text-slate-700">
+                          Nenhum passageiro adicionado à viagem
+                        </p>
+                        <p className="text-[11px] text-slate-400 leading-relaxed font-medium">
+                          Clique no botão <strong className="text-indigo-600 font-bold">+ Novo Passageiro</strong> acima para pesquisar e vincular pacientes da base compartilhada municipal.
+                        </p>
+                      </div>
                     </div>
                   </td>
                 </tr>

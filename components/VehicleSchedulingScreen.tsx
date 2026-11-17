@@ -2566,8 +2566,8 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
               )}
             </div>
 
-            {/* Tab Bodies com Rolagem Suave */}
-            <div className={`p-4 md:p-6 lg:p-8 flex-1 ${modalActiveTab === 'tripulacao' && (!isTripulacaoUnlocked || !formData.vehicleId) ? 'overflow-hidden flex flex-col' : 'overflow-y-auto custom-scrollbar'}`}>
+            {/* Tab Bodies com Rolagem Suave e Otimização para Grid Amplo */}
+            <div className={`p-3 md:p-5 lg:p-6 flex-1 flex flex-col min-h-0 ${modalActiveTab === 'tripulacao' && (!isTripulacaoUnlocked || !formData.vehicleId) ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
                 {modalActiveTab === 'dados_gerais' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5 animate-fade-in">
                     <div>
@@ -2744,7 +2744,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                     </div>
                   ) : (
                     /* ESTADO LIBERADO DA TRIPULAÇÃO — TABELA FULL-WIDTH OCUPANDO O ESPAÇO MÁXIMO DO GRID */
-                    <div className="space-y-4 animate-fade-in">
+                    <div className="flex-1 flex flex-col min-h-0 h-full animate-fade-in space-y-3.5">
                       {/* TABELA DE TRIPULAÇÃO FULL-WIDTH (CONFORME NOVO DESIGN MODERNO) */}
                       <TripulacaoTable
                         passengers={formData.passengers || []}
