@@ -661,6 +661,15 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     return totalCrewCount >= 3 || (patientCount >= 1 && companionCount >= 2);
   }, [isSpecialTreatmentTrip, isHemodialysisVan, totalCrewCount, maxVanCrewCapacity, patientCount, companionCount]);
 
+  // Capacidade para passageiros é a capacidade total do veículo menos 1 assento do motorista
+  const headerPassengerCapacity = useMemo(() => {
+    if (!selectedVehicle) return 15;
+    const total = selectedVehicle.passengerCapacity || (selectedVehicle as any).capacity || 5;
+    return Math.max(1, total - 1);
+  }, [selectedVehicle]);
+
+  const headerVagasDisponiveis = Math.max(0, headerPassengerCapacity - totalCrewCount);
+
   const handleOpenTripulacaoModal = () => {
     if (!formData.vehicleId) {
       showToast("Selecione o Veículo Operacional na aba 'Dados Gerais' antes de configurar a Tripulação.", "warning");
@@ -2287,9 +2296,11 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
 
     return (
       <div className="flex-1 flex flex-col overflow-hidden animate-fade-in h-full bg-slate-100/60">
-        {/* Header Compacto com Ações Integradas */}
-        <div className="bg-white border-b border-slate-200/80 px-4 md:px-6 py-2 flex flex-row items-center justify-between gap-3 shrink-0 z-20 shadow-xs">
-          <div className="flex items-center gap-2.5 min-w-0">
+        {/* Header com Título, Métricas da Viagem e Ações na Mesma Linha */}
+        <div className="bg-white border-b border-slate-200/80 px-3 md:px-6 py-2 flex items-center justify-between gap-3 shrink-0 z-20 shadow-xs">
+          
+          {/* Lado Esquerdo: Voltar + Título */}
+          <div className="flex items-center gap-2.5 min-w-0 shrink-0">
             <button 
               type="button"
               onClick={() => handleSubViewChange('calendar')} 
@@ -2307,13 +2318,83 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                   {editingSchedule ? 'Editar Agendamento' : 'Novo Agendamento'}
                 </h2>
               </div>
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 ml-0.5 truncate hidden sm:block">
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 ml-0.5 truncate hidden 2xl:block">
                 Preenchimento dos dados da nova viagem
               </p>
             </div>
           </div>
 
-          {/* Botões Cancelar e Salvar no Topo Compactos */}
+          {/* Região Central: 4 Métricas de Tripulação na Mesma Linha do Título "Novo Agendamento" */}
+          <div className="flex items-center gap-2 md:gap-2.5 overflow-x-auto custom-scrollbar py-0.5 min-w-0 flex-1 justify-center">
+            
+            {/* 1. Total de Passageiros */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:border-indigo-200 shadow-2xs shrink-0 transition-all">
+              <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                <Users className="w-4 h-4" />
+              </div>
+              <div className="leading-tight">
+                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block whitespace-nowrap">
+                  Total de Passageiros
+                </span>
+                <span className="text-sm font-black text-slate-900 leading-none">
+                  {patientCount}
+                </span>
+              </div>
+            </div>
+
+            {/* 2. Acompanhantes */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:border-purple-200 shadow-2xs shrink-0 transition-all">
+              <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                <UserPlus className="w-4 h-4" />
+              </div>
+              <div className="leading-tight">
+                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block whitespace-nowrap">
+                  Acompanhantes
+                </span>
+                <span className="text-sm font-black text-slate-900 leading-none">
+                  {companionCount}
+                </span>
+              </div>
+            </div>
+
+            {/* 3. Ocupação da Viagem */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 shadow-2xs shrink-0 transition-all">
+              <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                <Car className="w-4 h-4" />
+              </div>
+              <div className="leading-tight">
+                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block whitespace-nowrap">
+                  Ocupação da Viagem
+                </span>
+                <span className="text-sm font-black text-slate-900 leading-none whitespace-nowrap">
+                  {totalCrewCount} {totalCrewCount === 1 ? 'pessoa' : 'pessoas'}
+                </span>
+              </div>
+            </div>
+
+            {/* 4. Vagas Disponíveis */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50 shadow-2xs shrink-0 transition-all">
+              <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                <Car className="w-4 h-4" />
+              </div>
+              <div className="leading-tight">
+                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block whitespace-nowrap">
+                  Vagas Disponíveis
+                </span>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-500 text-white font-black text-xs font-mono leading-none">
+                    {headerVagasDisponiveis}
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-semibold whitespace-nowrap">
+                    de {headerPassengerCapacity} assentos
+                  </span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Lado Direito: Botões Cancelar e Salvar no Topo Compactos */}
           <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"

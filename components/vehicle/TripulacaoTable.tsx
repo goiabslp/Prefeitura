@@ -26,6 +26,7 @@ interface TripulacaoTableProps {
   onOpenNewPassengerModal: () => void;
   onEditPassenger: (index: number) => void;
   onRemovePassenger: (index: number) => void;
+  showFooterMetrics?: boolean;
 }
 
 export const TripulacaoTable: React.FC<TripulacaoTableProps> = ({
@@ -34,7 +35,8 @@ export const TripulacaoTable: React.FC<TripulacaoTableProps> = ({
   tripDate,
   onOpenNewPassengerModal,
   onEditPassenger,
-  onRemovePassenger
+  onRemovePassenger,
+  showFooterMetrics = false
 }) => {
   const [filterSearch, setFilterSearch] = useState('');
   const [deleteWarning, setDeleteWarning] = useState<string | null>(null);
@@ -357,76 +359,78 @@ export const TripulacaoTable: React.FC<TripulacaoTableProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* 4 CARDS DE INDICADORES DE OCUPAÇÃO NO RODAPÉ */}
+      {/* 4 CARDS DE INDICADORES DE OCUPAÇÃO NO RODAPÉ (OPCIONAL: EXIBIDOS NO HEADER) */}
       {/* ========================================================================= */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
-        
-        {/* 1. Total de Passageiros */}
-        <div className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-            <Users className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
-              Total de Passageiros
-            </span>
-            <span className="text-lg font-black text-slate-900 leading-tight">
-              {totalPacientes}
-            </span>
-          </div>
-        </div>
-
-        {/* 2. Acompanhantes */}
-        <div className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-            <UserPlus className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
-              Acompanhantes
-            </span>
-            <span className="text-lg font-black text-slate-900 leading-tight">
-              {totalAcompanhantes}
-            </span>
-          </div>
-        </div>
-
-        {/* 3. Ocupação da Viagem */}
-        <div className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
-            <Car className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
-              Ocupação da Viagem
-            </span>
-            <span className="text-lg font-black text-slate-900 leading-tight">
-              {ocupacaoTotal} {ocupacaoTotal === 1 ? 'pessoa' : 'pessoas'}
-            </span>
-          </div>
-        </div>
-
-        {/* 4. Vagas Disponíveis */}
-        <div className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <Car className="w-5 h-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
-              Vagas Disponíveis
-            </span>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="px-2.5 py-0.5 rounded-lg bg-emerald-500 text-white font-black text-xs font-mono">
-                {vagasDisponiveis}
+      {showFooterMetrics && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+          
+          {/* 1. Total de Passageiros */}
+          <div className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <Users className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                Total de Passageiros
               </span>
-              <span className="text-[10px] text-slate-400 font-semibold truncate">
-                de {capacidadeMaximaPassageiros} assentos
+              <span className="text-lg font-black text-slate-900 leading-tight">
+                {totalPacientes}
               </span>
             </div>
           </div>
-        </div>
 
-      </div>
+          {/* 2. Acompanhantes */}
+          <div className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+              <UserPlus className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                Acompanhantes
+              </span>
+              <span className="text-lg font-black text-slate-900 leading-tight">
+                {totalAcompanhantes}
+              </span>
+            </div>
+          </div>
+
+          {/* 3. Ocupação da Viagem */}
+          <div className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+              <Car className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                Ocupação da Viagem
+              </span>
+              <span className="text-lg font-black text-slate-900 leading-tight">
+                {ocupacaoTotal} {ocupacaoTotal === 1 ? 'pessoa' : 'pessoas'}
+              </span>
+            </div>
+          </div>
+
+          {/* 4. Vagas Disponíveis */}
+          <div className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <Car className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                Vagas Disponíveis
+              </span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="px-2.5 py-0.5 rounded-lg bg-emerald-500 text-white font-black text-xs font-mono">
+                  {vagasDisponiveis}
+                </span>
+                <span className="text-[10px] text-slate-400 font-semibold truncate">
+                  de {capacidadeMaximaPassageiros} assentos
+                </span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      )}
 
     </div>
   );
