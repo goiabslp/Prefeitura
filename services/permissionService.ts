@@ -454,6 +454,13 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
         label: 'Consultar Veículo',
         description: 'Consulta rápida de veículos livres e disponíveis por data e horário',
         routes: ['/AgendamentoVeiculos/Consultar']
+      },
+      {
+        key: 'sub_agendamento_transporte',
+        legacyKeys: ['parent_agendamento_veiculo_transporte'],
+        label: 'Transporte de Pacientes',
+        description: 'Demandas e distribuição de vagas para consultas, exames e cirurgias',
+        routes: ['/AgendamentoVeiculos/TransportePacientes']
       }
     ]
   },

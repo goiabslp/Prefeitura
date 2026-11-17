@@ -211,6 +211,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'vehicle-scheduling:vs_approvals': '/AgendamentoVeiculos/Aprovacoes',
   'vehicle-scheduling:dashboard': '/AgendamentoVeiculos/Dashboard',
   'vehicle-scheduling:vs_consultar': '/AgendamentoVeiculos/Consultar',
+  'vehicle-scheduling:vs_transporte': '/AgendamentoVeiculos/TransportePacientes',
   'abastecimento:new': '/Abastecimento/NovoAbastecimento',
   'abastecimento:management': '/Abastecimento/GestaoAbastecimento',
   'abastecimento:dashboard': '/Abastecimento/DashboardAbastecimento',
@@ -6262,6 +6263,7 @@ timestamp: ${new Date().toISOString()}`);
                   if (activeBlock === 'vs_approvals') return 'approvals';
                   if (activeBlock === 'dashboard') return 'dashboard';
                   if (activeBlock === 'vs_consultar') return 'consultar';
+                  if (activeBlock === 'vs_transporte') return 'transporte';
                   return 'menu';
                 })()}
                 onNavigate={(path) => {
@@ -6272,6 +6274,7 @@ timestamp: ${new Date().toISOString()}`);
                   else if (path === '/AgendamentoVeiculos/Aprovacoes') setActiveBlock('vs_approvals');
                   else if (path === '/AgendamentoVeiculos/Dashboard') setActiveBlock('dashboard');
                   else if (path === '/AgendamentoVeiculos/Consultar') setActiveBlock('vs_consultar');
+                  else if (path === '/AgendamentoVeiculos/TransportePacientes') setActiveBlock('vs_transporte');
                   else setActiveBlock(null); // Menu
                   window.history.pushState({}, '', path);
                 }}

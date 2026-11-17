@@ -4,12 +4,13 @@ import { ConsultaAgendamento, ConsultaVaga, ConsultaPaciente, User } from '../..
 import { 
     X, Calendar, Clock, CheckCircle2, AlertCircle, Loader2, 
     Sparkles, User as UserIcon, Activity, Stethoscope, ChevronRight,
-    ShieldCheck, Phone, Check, CalendarDays, Sun, Sunset
+    ShieldCheck, Phone, Check, CalendarDays, Sun, Sunset, Car, Users, Accessibility
 } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { formatProcedimentoLabel } from '../../services/consultasService';
 import { isTelefoneIrregularParaOperacao } from '../../utils/phoneValidation';
 import { RegularizacaoTelefoneModal } from '../common/RegularizacaoTelefoneModal';
+import { criarDemandaDeAgendamento } from '../../services/transporteService';
 
 interface DefinirDataModalProps {
     isOpen: boolean;
@@ -40,6 +41,13 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [selectedSlotId, setSelectedSlotId] = useState<string>('');
 
+    // Estado da Demanda Integrada de Transporte Municipal
+    const [necessitaTransporte, setNecessitaTransporte] = useState<boolean>(false);
+    const [necessitaAcompanhante, setNecessitaAcompanhante] = useState<boolean>(false);
+    const [qtdAcompanhantes, setQtdAcompanhantes] = useState<number>(1);
+    const [necessitaVeiculoAdaptado, setNecessitaVeiculoAdaptado] = useState<boolean>(false);
+    const [observacoesTransporte, setObservacoesTransporte] = useState<string>('');
+
     // Carregar vagas livres do procedimento
     useEffect(() => {
         if (!isOpen || !booking) {
@@ -49,8 +57,20 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
             setSuccessMsg('');
             setVagas([]);
             setConfirmedBookings([]);
+            setNecessitaTransporte(false);
+            setNecessitaAcompanhante(false);
+            setQtdAcompanhantes(1);
+            setNecessitaVeiculoAdaptado(false);
+            setObservacoesTransporte('');
             return;
         }
+
+        // Se o agendamento já tiver informação prévia de transporte, restaura
+        setNecessitaTransporte(Boolean(booking.transporte_necessario));
+        setNecessitaAcompanhante(Boolean((booking.transporte_acompanhantes || 0) > 0));
+        setQtdAcompanhantes(booking.transporte_acompanhantes || 1);
+        setNecessitaVeiculoAdaptado(Boolean(booking.transporte_adaptado));
+        setObservacoesTransporte(booking.transporte_observacoes || '');
 
         const procId = booking.procedimento_id || booking.procedimento?.id;
         if (!procId) {
@@ -161,6 +181,21 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
             if (!updated) {
                 throw new Error('Não foi possível registrar o agendamento no banco de dados.');
             }
+
+            // Se o paciente necessita de transporte, registrar automaticamente na Central de Transporte
+            if (necessitaTransporte) {
+                try {
+                    await criarDemandaDeAgendamento(updated || booking, {
+                        necessitaAcompanhante,
+                        qtdAcompanhantes: necessitaAcompanhante ? qtdAcompanhantes : 0,
+                        necessitaVeiculoAdaptado,
+                        observacoes: observacoesTransporte
+                    });
+                } catch (transpErr) {
+                    console.warn('[DefinirDataModal] Aviso ao registrar demanda de transporte:', transpErr);
+                }
+            }
+
             setSuccessMsg('Agendamento confirmado com sucesso!');
 
             if (typeof window !== 'undefined') {
@@ -429,6 +464,162 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
                                     </div>
                                 </div>
                             )}
+
+                            {/* 3. Necessidade de Transporte Municipal */}
+                            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-indigo-50/70 via-white to-slate-50 border border-indigo-100 shadow-2xs space-y-4">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                                            <Car className="w-5 h-5" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight">
+                                                Transporte Municipal de Pacientes
+                                            </h4>
+                                            <p className="text-[11px] font-bold text-slate-500">
+                                                O paciente necessita de transporte municipal?
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Botões Sim / Não */}
+                                    <div className="flex items-center gap-1.5 p-1 bg-slate-200/80 rounded-xl">
+                                        <button
+                                            type="button"
+                                            onClick={() => setNecessitaTransporte(false)}
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+                                                !necessitaTransporte 
+                                                    ? 'bg-white text-slate-800 shadow-xs' 
+                                                    : 'text-slate-500 hover:text-slate-800'
+                                            }`}
+                                        >
+                                            Não
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setNecessitaTransporte(true)}
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                                                necessitaTransporte 
+                                                    ? 'bg-indigo-600 text-white shadow-xs' 
+                                                    : 'text-slate-600 hover:text-indigo-600'
+                                            }`}
+                                        >
+                                            <Check className="w-3.5 h-3.5" />
+                                            <span>Sim</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Campos Operacionais Adicionais quando Sim */}
+                                {necessitaTransporte && (
+                                    <div className="pt-3 border-t border-indigo-100/80 space-y-3.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            {/* Acompanhante */}
+                                            <div className="bg-white p-3 rounded-xl border border-indigo-100/90 shadow-2xs space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                                                        <Users className="w-3.5 h-3.5 text-indigo-600" /> Acompanhante?
+                                                    </span>
+                                                    <div className="flex items-center gap-1">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setNecessitaAcompanhante(false)}
+                                                            className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                                                                !necessitaAcompanhante ? 'bg-slate-200 text-slate-800' : 'text-slate-400 hover:text-slate-700'
+                                                            }`}
+                                                        >
+                                                            Não
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setNecessitaAcompanhante(true)}
+                                                            className={`px-2 py-1 rounded text-[10px] font-black uppercase ${
+                                                                necessitaAcompanhante ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-indigo-600'
+                                                            }`}
+                                                        >
+                                                            Sim
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {necessitaAcompanhante && (
+                                                    <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                                                        <span className="text-[10px] font-bold text-slate-500 uppercase">Qtd. de Vagas:</span>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setQtdAcompanhantes(prev => Math.max(1, prev - 1))}
+                                                                className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs flex items-center justify-center cursor-pointer"
+                                                            >
+                                                                -
+                                                            </button>
+                                                            <span className="text-xs font-black text-slate-900 w-4 text-center">{qtdAcompanhantes}</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setQtdAcompanhantes(prev => Math.min(5, prev + 1))}
+                                                                className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs flex items-center justify-center cursor-pointer"
+                                                            >
+                                                                +
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Veículo Adaptado */}
+                                            <div className="bg-white p-3 rounded-xl border border-indigo-100/90 shadow-2xs space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                                                        <Accessibility className="w-3.5 h-3.5 text-indigo-600" /> Veículo Adaptado?
+                                                    </span>
+                                                    <div className="flex items-center gap-1">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setNecessitaVeiculoAdaptado(false)}
+                                                            className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                                                                !necessitaVeiculoAdaptado ? 'bg-slate-200 text-slate-800' : 'text-slate-400 hover:text-slate-700'
+                                                            }`}
+                                                        >
+                                                            Não
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setNecessitaVeiculoAdaptado(true)}
+                                                            className={`px-2 py-1 rounded text-[10px] font-black uppercase ${
+                                                                necessitaVeiculoAdaptado ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-indigo-600'
+                                                            }`}
+                                                        >
+                                                            Sim
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <p className="text-[10px] font-semibold text-slate-400">
+                                                    Acessibilidade para cadeirante ou mobilidade reduzida
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {/* Observações Operacionais */}
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-600 mb-1">
+                                                Observações Operacionais do Transporte:
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder="Ex: Ponto de encontro, maca/cadeira de rodas, acompanhante idoso..."
+                                                value={observacoesTransporte}
+                                                onChange={(e) => setObservacoesTransporte(e.target.value)}
+                                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 outline-none transition-all"
+                                            />
+                                        </div>
+
+                                        <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-200/80 text-[11px] text-indigo-900 font-semibold flex items-center gap-2">
+                                            <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                                            <span>Uma demanda será criada automaticamente na <strong>Central de Transporte de Pacientes</strong>.</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
 
                             {/* Resumo da Seleção Atual */}
                             {selectedDate && selectedTime && (

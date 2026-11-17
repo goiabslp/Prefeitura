@@ -208,9 +208,9 @@ export type AppPermission =
   | 'parent_diarias_historico' | 'parent_diarias_novo_evento' | 'parent_diarias_lancamentos' | 'parent_diarias_gestores'
   | 'parent_diarias_viajar' | 'parent_diarias_adiantamento' | 'parent_frotas' | 'parent_agendamento_veiculo'
   | 'parent_agendamento_veiculo_agendar' | 'parent_agendamento_veiculo_dia' | 'parent_agendamento_veiculo_meus'
-  | 'parent_agendamento_veiculo_aprovacoes' | 'parent_agendamento_veiculo_dashboard'
+  | 'parent_agendamento_veiculo_aprovacoes' | 'parent_agendamento_veiculo_dashboard' | 'parent_agendamento_veiculo_transporte'
   | 'sub_agendamento_agendar' | 'sub_agendamento_dia' | 'sub_agendamento_historico'
-  | 'sub_agendamento_aprovacoes' | 'sub_agendamento_dashboard'
+  | 'sub_agendamento_aprovacoes' | 'sub_agendamento_dashboard' | 'sub_agendamento_transporte'
   | 'parent_abastecimento' | 'parent_abastecimento_novo' | 'parent_abastecimento_gestao' | 'parent_abastecimento_dashboard'
   | 'parent_calendario'
   | 'parent_rh' | 'parent_rh_horas_extras' | 'parent_rh_historico' | 'sub_rh_horas_extras' | 'sub_rh_historico'
@@ -234,7 +234,7 @@ export type AppPermission =
   | 'parent_documentos' | 'sub_documentos_acompanhamento' | 'sub_documentos_novo' | 'sub_documentos_visualizar'
   | (string & {});
 
-export type BlockType = 'oficio' | 'compras' | 'diarias' | 'agendamento' | 'abastecimento' | 'vs_calendar' | 'vs_novo' | 'vs_day' | 'vs_history' | 'vs_approvals' | 'vs_consultar' | 'dashboard' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'licitacao' | 'consultas' | 'farmacia' | 'art' | 'documentos';
+export type BlockType = 'oficio' | 'compras' | 'diarias' | 'agendamento' | 'abastecimento' | 'vs_calendar' | 'vs_novo' | 'vs_day' | 'vs_history' | 'vs_approvals' | 'vs_consultar' | 'vs_transporte' | 'dashboard' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'licitacao' | 'consultas' | 'farmacia' | 'art' | 'documentos';
 
 export type FarmaciaOrigemEstoque = 'COMPRADO' | 'DOADO' | 'FORNECIDO PELO ESTADO';
 
@@ -544,6 +544,7 @@ export interface VehicleSchedule {
 }
 
 export interface CrewMember {
+  id?: string;
   patientId?: string;
   name: string;
   cpf?: string;
@@ -552,7 +553,19 @@ export interface CrewMember {
   departureLocation?: string;
   appointmentTime?: string;
   appointmentLocation?: string;
+  procedureName?: string;
+  destination?: string;
+  notes?: string;
   type?: 'paciente' | 'acompanhante' | 'passageiro' | string;
+  isMinor?: boolean;
+  ageOnTripDate?: number;
+  companionId?: string;
+  companionName?: string;
+  companionForPatientId?: string;
+  companionForPatientName?: string;
+  relationship?: string;
+  needsCompanion?: boolean;
+  needsAdaptedTransport?: boolean;
 }
 
 export type ProjetoStatus = 'Aguardando Admin' | 'Em Andamento' | 'Concluído' | 'Cancelado';
@@ -768,6 +781,13 @@ export interface ConsultaAgendamento {
   deleted_by?: string | null;
   deleted_by_name?: string | null;
   deletion_reason?: string | null;
+
+  // Demanda de Transporte Municipal Integrado
+  transporte_necessario?: boolean;
+  transporte_acompanhantes?: number;
+  transporte_adaptado?: boolean;
+  transporte_observacoes?: string;
+  transporte_demanda_id?: string;
   solicitacao_cancelamento?: ConsultaSolicitacaoCancelamento;
 }
 
@@ -1316,6 +1336,60 @@ export interface AutoSenhaTVPainelSnapshot {
   proximasSenhas: AutoSenhaTVItem[];
   totalAguardando: number;
   source: 'rpc' | 'select_publico' | 'fallback_local';
+}
+
+// =========================================================================
+// CENTRAL DE TRANSPORTE DE PACIENTES — MODELAGEM INTEGRADA
+// =========================================================================
+
+export type TransporteStatus = 
+  | 'Aguardando vaga'
+  | 'Alocado'
+  | 'Aguardando confirmação'
+  | 'Confirmado'
+  | 'Desistiu'
+  | 'Cancelado';
+
+export interface TransporteConfirmacaoContato {
+  id: string;
+  dataHora: string;
+  usuarioId?: string;
+  usuarioNome: string;
+  meioContato: 'Telefone' | 'WhatsApp' | 'Pessoalmente' | 'Outro';
+  resultado: 'Confirmado' | 'Ausente / Não atendeu' | 'Desistiu';
+  observacao?: string;
+}
+
+export interface TransporteDemanda {
+  id: string;
+  agendamentoId: string;
+  pacienteId: string;
+  pacienteNome: string;
+  pacienteCpf: string;
+  pacienteDataNascimento?: string;
+  pacienteTelefone?: string;
+  procedimentoId: string;
+  procedimentoNome: string;
+  tipoProcedimento: 'Consulta' | 'Exame' | 'Cirurgia';
+  dataAtendimento: string; // YYYY-MM-DD
+  horaAtendimento: string; // HH:mm
+  municipioDestino: string;
+  estabelecimentoSaude?: string;
+  enderecoAtendimento?: string;
+  necessitaAcompanhante: boolean;
+  qtdAcompanhantes: number;
+  necessitaVeiculoAdaptado: boolean;
+  observacoes?: string;
+  prioridade: 'Normal' | 'Urgência' | 'Especial';
+  statusTransporte: TransporteStatus;
+  viagemId?: string; // id do agendamento em vehicle_schedules
+  veiculoId?: string;
+  motoristaId?: string;
+  alocadoEm?: string;
+  alocadoPor?: string;
+  historicoConfirmacao?: TransporteConfirmacaoContato[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 declare const __LATEST_COMMIT__: string;

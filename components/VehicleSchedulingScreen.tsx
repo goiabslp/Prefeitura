@@ -11,7 +11,8 @@ import {
   UserCheck, ShieldCheck, XCircle, ChevronRight as ChevronRightIcon,
   PackageCheck, Sparkles, Truck, CheckCircle, Activity, Flame,
   Building2, ArrowRightLeft, UserCircle, Landmark, Users, Briefcase,
-  HeartPulse, ShieldAlert, UserPlus, Unlock, HelpCircle, RotateCcw
+  HeartPulse, ShieldAlert, UserPlus, Unlock, HelpCircle, RotateCcw,
+  UsersRound
 } from 'lucide-react';
 import { DateTimePickerModal } from './DateTimePickerModal';
 import { VehicleScheduleHistory } from './VehicleScheduleHistory';
@@ -19,13 +20,18 @@ import { VehicleScheduleApprovals } from './VehicleScheduleApprovals';
 import { SelectionModal } from './SelectionModal';
 import { VehicleScheduleDashboard } from './VehicleScheduleDashboard';
 import { ConsultarVeiculoScreen } from './vehicle/ConsultarVeiculoScreen';
+import { TransportePacientesScreen } from './vehicle/transporte/TransportePacientesScreen';
 import { FastPatientRegisterModal } from './vehicle/FastPatientRegisterModal';
+import { TripulacaoTable } from './vehicle/TripulacaoTable';
+import { PassageiroModal } from './vehicle/PassageiroModal';
+import { AcompanhanteObrigatorioModal } from './vehicle/AcompanhanteObrigatorioModal';
 import { DriverRestRestrictionModal } from './modals/DriverRestRestrictionModal';
 import { VehicleSchedulingLoadingModal } from './modals/VehicleSchedulingLoadingModal';
 import { useSystemSettings } from '../contexts/SystemSettingsContext';
 import { userCanAccessSubmodule } from '../services/permissionService';
 import { searchPacientesInteligente } from '../services/consultasService';
 import { maskCpfPartial, normalizeCpf, formatBirthDateBr } from '../utils/cpfUtils';
+import { isMenorDeIdadeNaViagem, calcularIdadeNaDataViagem } from '../utils/ageValidation';
 import { validateDriverScheduleRules, fetchSystemHolidaysFromDatabase, getUnifiedHolidaysMap, toDateStr, DriverValidationResult, SystemHoliday } from '../services/driverRestRulesService';
 import { getSectors } from '../services/entityService';
 import { DEFAULT_SECTORS } from '../constants';
@@ -46,7 +52,7 @@ interface VehicleSchedulingScreenProps {
   currentUserPermissions?: AppPermission[];
   currentUserSector?: string;
   currentUserSectorId?: string;
-  requestedView?: 'menu' | 'calendar' | 'novo' | 'history' | 'approvals' | 'dashboard' | 'day' | 'consultar';
+  requestedView?: 'menu' | 'calendar' | 'novo' | 'history' | 'approvals' | 'dashboard' | 'day' | 'consultar' | 'transporte';
   onNavigate?: (path: string) => void;
   state: AppState;
 }
@@ -156,7 +162,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   onNavigate,
   state
 }) => {
-  const [activeSubView, setActiveSubView] = useState<'menu' | 'calendar' | 'novo' | 'history' | 'approvals' | 'dashboard' | 'day' | 'consultar'>('menu');
+  const [activeSubView, setActiveSubView] = useState<'menu' | 'calendar' | 'novo' | 'history' | 'approvals' | 'dashboard' | 'day' | 'consultar' | 'transporte'>('menu');
   const [isLoadingModalOpen, setIsLoadingModalOpen] = useState(true);
 
   const [dynamicSectors, setDynamicSectors] = useState<Sector[]>(() => {
@@ -319,6 +325,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   const canAccessAprovacoes = userCanAccessSubmodule(userObj, 'parent_agendamento_veiculo', 'sub_agendamento_aprovacoes', activeGlobalStatus);
   const canAccessDashboard = userCanAccessSubmodule(userObj, 'parent_agendamento_veiculo', 'sub_agendamento_dashboard', activeGlobalStatus);
   const canAccessConsultar = userCanAccessSubmodule(userObj, 'parent_agendamento_veiculo', 'sub_agendamento_consultar', activeGlobalStatus);
+  const canAccessTransporte = userCanAccessSubmodule(userObj, 'parent_agendamento_veiculo', 'sub_agendamento_transporte', activeGlobalStatus);
 
 
   useEffect(() => {
@@ -342,7 +349,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     }
   }, [activeSubView]);
 
-  const handleSubViewChange = (view: 'menu' | 'calendar' | 'novo' | 'history' | 'approvals' | 'dashboard' | 'day' | 'consultar') => {
+  const handleSubViewChange = (view: 'menu' | 'calendar' | 'novo' | 'history' | 'approvals' | 'dashboard' | 'day' | 'consultar' | 'transporte') => {
     setActiveSubView(view);
     if (onNavigate) {
       const paths = {
@@ -353,7 +360,8 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         'history': '/AgendamentoVeiculos/Historico',
         'approvals': '/AgendamentoVeiculos/Aprovacoes',
         'dashboard': '/AgendamentoVeiculos/Dashboard',
-        'consultar': '/AgendamentoVeiculos/Consultar'
+        'consultar': '/AgendamentoVeiculos/Consultar',
+        'transporte': '/AgendamentoVeiculos/TransportePacientes'
       };
       onNavigate(paths[view]);
     }
@@ -555,6 +563,17 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   const [isFastPatientModalOpen, setIsFastPatientModalOpen] = useState(false);
   const [isManualPassengerOpen, setIsManualPassengerOpen] = useState(false);
 
+  // Estados dos novos Modais da Aba Tripulação (layout moderno e regras obrigatórias)
+  const [isNewPassengerModalOpen, setIsNewPassengerModalOpen] = useState(false);
+  const [editingPassengerIndex, setEditingPassengerIndex] = useState<number | null>(null);
+  const [minorDetectedForCompanion, setMinorDetectedForCompanion] = useState<CrewMember | null>(null);
+
+  // Data de referência da viagem (para cálculo de menoridade e regras operacionais)
+  const currentTripDate = useMemo(() => {
+    if (formData.departureDateTime) return formData.departureDateTime;
+    return selectedCalendarDate;
+  }, [formData.departureDateTime, selectedCalendarDate]);
+
   // Debounce para pesquisa inteligente de pacientes na base integrada Supabase
   useEffect(() => {
     const trimmed = patientSearchTerm.trim();
@@ -686,6 +705,161 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       setIsTripulacaoModalOpen(false);
       showToast("Tripulação liberada para paciente oncológico/hemodiálise com veículo de uso exclusivo.", "success");
     }
+  };
+
+  // =========================================================================
+  // HANDLERS DA NOVA TRIPULAÇÃO (DESIGN MODERNO, TABELA E MODAIS)
+  // =========================================================================
+
+  // Abertura do modal + Novo Passageiro
+  const handleOpenNewPassengerModal = () => {
+    if (!formData.vehicleId) {
+      showToast("Selecione o Veículo Operacional na aba 'Dados Gerais' antes de adicionar passageiros à tripulação.", "warning");
+      setModalActiveTab('dados_gerais');
+      setActiveSelectionField('vehicle');
+      return;
+    }
+
+    if (!isTripulacaoUnlocked) {
+      showToast("Clique no botão ADICIONAR TRIPULAÇÃO ou configure o modo para liberar a inclusão de passageiros.", "warning");
+      return;
+    }
+
+    setEditingPassengerIndex(null);
+    setIsNewPassengerModalOpen(true);
+  };
+
+  // Salvar passageiro vindo do PassageiroModal
+  const handleSavePassenger = (passengerData: CrewMember) => {
+    const currentPassengers = [...(formData.passengers || [])];
+
+    if (editingPassengerIndex !== null && editingPassengerIndex >= 0) {
+      currentPassengers[editingPassengerIndex] = passengerData;
+      showToast(`Passageiro ${passengerData.name} atualizado com sucesso!`, "success");
+    } else {
+      // Prevenção de duplicidade
+      const alreadyExists = currentPassengers.some(
+        p => (p.patientId && passengerData.patientId && p.patientId === passengerData.patientId) ||
+             (p.cpf && passengerData.cpf && normalizeCpf(p.cpf) === normalizeCpf(passengerData.cpf))
+      );
+      if (alreadyExists) {
+        showToast(`O paciente ${passengerData.name} já foi adicionado a esta viagem.`, "warning");
+        return;
+      }
+
+      // Restrições de viagem oncológica / hemodiálise
+      if (isSpecialTreatmentTrip) {
+        if (isHemodialysisVan) {
+          if (currentPassengers.length >= maxVanCrewCapacity) {
+            showToast(`Capacidade máxima da Van (${maxVanCrewCapacity} passageiros) atingida.`, "warning");
+            return;
+          }
+        } else {
+          if (currentPassengers.length >= 3) {
+            showToast("Limite máximo de 03 pessoas atingido nesta viagem exclusiva.", "warning");
+            return;
+          }
+        }
+      }
+
+      currentPassengers.push(passengerData);
+      showToast(`Passageiro ${passengerData.name} adicionado à tripulação!`, "success");
+    }
+
+    const pCount = currentPassengers.filter(p => p.type === 'paciente').length;
+    const cCount = currentPassengers.filter(p => p.type === 'acompanhante' || Boolean(p.companionForPatientId)).length;
+
+    setFormData(prev => ({
+      ...prev,
+      passengers: currentPassengers,
+      patientCount: pCount,
+      companionCount: cCount
+    }));
+
+    setIsNewPassengerModalOpen(false);
+    setEditingPassengerIndex(null);
+  };
+
+  // Detecção de menor de idade pelo PassageiroModal -> abre modal de acompanhante obrigatório
+  const handleMinorDetectedInModal = (menorData: CrewMember) => {
+    setIsNewPassengerModalOpen(false);
+    setMinorDetectedForCompanion(menorData);
+  };
+
+  // Confirmação conjunta de menor de idade e seu acompanhante obrigatório
+  const handleConfirmMinorAndCompanion = (pacienteAtualizado: CrewMember, acompanhanteMembro: CrewMember) => {
+    const currentPassengers = [...(formData.passengers || [])];
+
+    if (editingPassengerIndex !== null && editingPassengerIndex >= 0) {
+      currentPassengers[editingPassengerIndex] = pacienteAtualizado;
+      const existingAcompIdx = currentPassengers.findIndex(
+        p => p.companionForPatientId === pacienteAtualizado.patientId || p.id === pacienteAtualizado.companionId
+      );
+      if (existingAcompIdx >= 0) {
+        currentPassengers[existingAcompIdx] = acompanhanteMembro;
+      } else {
+        currentPassengers.push(acompanhanteMembro);
+      }
+    } else {
+      // Prevenção de duplicidade
+      const alreadyExists = currentPassengers.some(
+        p => (p.patientId && pacienteAtualizado.patientId && p.patientId === pacienteAtualizado.patientId) ||
+             (p.cpf && pacienteAtualizado.cpf && normalizeCpf(p.cpf) === normalizeCpf(pacienteAtualizado.cpf))
+      );
+      if (alreadyExists) {
+        showToast(`O paciente ${pacienteAtualizado.name} já foi adicionado a esta viagem.`, "warning");
+        setMinorDetectedForCompanion(null);
+        return;
+      }
+
+      currentPassengers.push(pacienteAtualizado);
+      currentPassengers.push(acompanhanteMembro);
+    }
+
+    const pCount = currentPassengers.filter(p => p.type === 'paciente').length;
+    const cCount = currentPassengers.filter(p => p.type === 'acompanhante' || Boolean(p.companionForPatientId)).length;
+
+    setFormData(prev => ({
+      ...prev,
+      passengers: currentPassengers,
+      patientCount: pCount,
+      companionCount: cCount
+    }));
+
+    setMinorDetectedForCompanion(null);
+    setEditingPassengerIndex(null);
+    showToast(`Paciente menor e acompanhante adicionados com sucesso à viagem!`, "success");
+  };
+
+  // Edição vinda da tabela
+  const handleEditPassengerFromTable = (index: number) => {
+    setEditingPassengerIndex(index);
+    setIsNewPassengerModalOpen(true);
+  };
+
+  // Remoção vinda da tabela
+  const handleRemovePassengerFromTable = (index: number) => {
+    const target = (formData.passengers || [])[index];
+    if (!target) return;
+
+    let nextPassengers = (formData.passengers || []).filter((_, i) => i !== index);
+
+    // Se remover o menor de idade, remove também o acompanhante vinculado exclusivamente a ele
+    if (target.isMinor && target.companionId) {
+      nextPassengers = nextPassengers.filter(p => p.id !== target.companionId && p.companionForPatientId !== (target.patientId || target.id));
+    }
+
+    const pCount = nextPassengers.filter(p => p.type === 'paciente').length;
+    const cCount = nextPassengers.filter(p => p.type === 'acompanhante' || Boolean(p.companionForPatientId)).length;
+
+    setFormData(prev => ({
+      ...prev,
+      passengers: nextPassengers,
+      patientCount: pCount,
+      companionCount: cCount
+    }));
+
+    showToast(`Passageiro ${target.name} removido da viagem.`, "success");
   };
 
   const handleAddPassenger = () => {
@@ -1232,6 +1406,35 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       return;
     }
 
+    // REGRA OBRIGATÓRIA 1: Nenhum paciente poderá ser adicionado à viagem sem cadastro na base compartilhada
+    for (const p of (formData.passengers || [])) {
+      if ((p.type === 'paciente' || (!p.type && !p.companionForPatientId)) && !p.patientId) {
+        showToast(`O passageiro "${p.name}" não possui cadastro na base municipal compartilhada. Cadastre-o antes de salvar.`, "error");
+        return;
+      }
+    }
+
+    // REGRA OBRIGATÓRIA 2: Todo paciente menor de 18 anos na data da viagem deve ter acompanhante maior de 18 anos
+    for (const p of (formData.passengers || [])) {
+      const isMinor = p.isMinor || (p.birthDate ? isMenorDeIdadeNaViagem(p.birthDate, currentTripDate) : false);
+      if (isMinor) {
+        const companion = (formData.passengers || []).find(
+          a => (a.type === 'acompanhante' || Boolean(a.companionForPatientId)) &&
+               (a.companionForPatientId === p.patientId || a.companionForPatientId === p.id || a.id === p.companionId || a.companionForPatientName === p.name)
+        );
+
+        if (!companion) {
+          showToast(`O paciente menor de 18 anos "${p.name}" necessita obrigatoriamente de um acompanhante maior de 18 anos vinculado à viagem.`, "error");
+          return;
+        }
+
+        if (companion.birthDate && isMenorDeIdadeNaViagem(companion.birthDate, currentTripDate)) {
+          showToast(`O acompanhante "${companion.name}" vinculado ao menor "${p.name}" não pode ser menor de 18 anos na data da viagem.`, "error");
+          return;
+        }
+      }
+    }
+
     if (isSpecialTreatmentTrip) {
       const pCount = (formData.passengers || []).filter(p => p.type === 'paciente').length;
       const cCount = (formData.passengers || []).filter(p => p.type === 'acompanhante').length;
@@ -1442,10 +1645,13 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                 canAccessAgendar,
                 canAccessMeus,
                 canAccessAprovacoes,
-                canAccessDashboard
+                canAccessDashboard,
+                canAccessTransporte
               ].filter(Boolean).length;
 
-              const gridClass = visibleCount >= 5
+              const gridClass = visibleCount >= 6
+                ? "w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 desktop:gap-4 max-w-7xl"
+                : visibleCount >= 5
                 ? "w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 desktop:gap-4 max-w-6xl"
                 : "w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 desktop:gap-4 max-w-5xl";
 
@@ -1547,7 +1753,26 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                     </button>
                   )}
 
-                  {!canAccessAgendar && !canAccessMeus && !canAccessAprovacoes && !canAccessDashboard && !canAccessConsultar && (
+                  {/* Card 6: Transporte de Pacientes (Demandas e Distribuição de Vagas) */}
+                  {canAccessTransporte && (
+                    <button
+                      onClick={() => handleSubViewChange('transporte')}
+                      className="group relative w-full min-h-[110px] md:min-h-[135px] py-4 md:py-5 px-3 md:px-4 rounded-[2rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-rose-500/30 hover:border-rose-200 hover:from-white hover:to-rose-50/30 transition-all duration-300 ease-spring hover:-translate-y-1.5 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0"
+                      style={{ animationDelay: '300ms' }}
+                    >
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                      <div className="absolute bottom-0 left-0 w-24 h-24 bg-rose-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                      <div className="relative w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center mb-2.5 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-md shadow-rose-500/30 ring-4 ring-white">
+                        <UsersRound className="w-5 h-5 md:w-6 md:h-6 drop-shadow-md" />
+                      </div>
+
+                      <h3 className="text-sm md:text-base lg:text-lg font-bold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight text-center">Transporte de Pacientes</h3>
+                      <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-rose-600 transition-colors uppercase tracking-wider text-center">Demandas e Distribuição de Vagas</p>
+                    </button>
+                  )}
+
+                  {!canAccessAgendar && !canAccessMeus && !canAccessAprovacoes && !canAccessDashboard && !canAccessConsultar && !canAccessTransporte && (
                     <div className="col-span-full text-center p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm max-w-md mx-auto">
                       <Car className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                       <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Gestão de Veículos</h3>
@@ -2447,379 +2672,15 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                         </div>
                       )}
 
-                      {/* PESQUISA INSTANTÂNEA NA BASE INTEGRADA DE PACIENTES */}
-                      <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200/90 shadow-xs space-y-3 relative">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <label className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                            <HeartPulse className="w-4 h-4 text-emerald-600" />
-                            <span>Pesquisar Paciente na Base Integrada (SUS / Regulação / Farmácia)</span>
-                          </label>
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">
-                            Busca em tempo real por Nome ou CPF
-                          </span>
-                        </div>
-
-                        {/* Campo de Busca com Dropdown Inteligente */}
-                        <div className="relative">
-                          <div className="relative">
-                            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                            <input
-                              type="text"
-                              value={patientSearchTerm}
-                              onChange={e => {
-                                setPatientSearchTerm(e.target.value);
-                                if (!isPatientDropdownOpen) setIsPatientDropdownOpen(true);
-                              }}
-                              onFocus={() => {
-                                if (patientSearchTerm.trim().length >= 3) setIsPatientDropdownOpen(true);
-                              }}
-                              placeholder="Pesquisar paciente por nome ou CPF..."
-                              className={`${inputClass} pl-10 pr-10 bg-slate-50 focus:bg-white text-xs font-bold`}
-                            />
-                            {isSearchingPatient ? (
-                              <Loader2 className="w-4 h-4 text-indigo-600 animate-spin absolute right-3.5 top-1/2 -translate-y-1/2" />
-                            ) : patientSearchTerm ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setPatientSearchTerm('');
-                                  setIsPatientDropdownOpen(false);
-                                }}
-                                className="w-5 h-5 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center cursor-pointer transition-colors"
-                                title="Limpar pesquisa"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            ) : null}
-                          </div>
-
-                          {/* Dropdown de Resultados da Pesquisa Instantânea */}
-                          {isPatientDropdownOpen && patientSearchTerm.trim().length >= 3 && (
-                            <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-2xl shadow-2xl border border-slate-200 z-30 max-h-72 overflow-y-auto custom-scrollbar animate-fade-in p-2 divide-y divide-slate-100">
-                              {isSearchingPatient ? (
-                                <div className="py-6 text-center text-slate-400 flex items-center justify-center gap-2">
-                                  <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
-                                  <span className="text-xs font-bold uppercase tracking-wider">Consultando base integrada municipal...</span>
-                                </div>
-                              ) : patientSearchResults.length > 0 ? (
-                                patientSearchResults.map(paciente => {
-                                  const isAlreadyAdded = (formData.passengers || []).some(
-                                    p => (p.patientId && p.patientId === paciente.id) ||
-                                         (p.cpf && paciente.cpf && normalizeCpf(p.cpf) === normalizeCpf(paciente.cpf))
-                                  );
-
-                                  return (
-                                    <div
-                                      key={paciente.id}
-                                      className="p-3 hover:bg-slate-50/80 rounded-xl transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                                    >
-                                      <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                          <span className="text-xs font-black text-slate-900 uppercase truncate">
-                                            {paciente.name}
-                                          </span>
-                                          {isAlreadyAdded && (
-                                            <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-black text-[9px] uppercase tracking-wider border border-emerald-200">
-                                              Já Adicionado
-                                            </span>
-                                          )}
-                                        </div>
-                                        <div className="flex items-center gap-2.5 text-[11px] text-slate-500 font-medium mt-1 flex-wrap">
-                                          <span>CPF: <strong className="text-slate-800">{maskCpfPartial(paciente.cpf)}</strong></span>
-                                          <span>•</span>
-                                          <span>Nasc: <strong className="text-slate-800">{formatBirthDateBr(paciente.birth_date)}</strong></span>
-                                          {paciente.phone && (
-                                            <>
-                                              <span>•</span>
-                                              <span>Tel: <strong className="text-slate-800">{paciente.phone}</strong></span>
-                                            </>
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      <button
-                                        type="button"
-                                        disabled={isAlreadyAdded}
-                                        onClick={() => handleAddPatientToCrew(paciente)}
-                                        className={`px-3.5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shrink-0 ${
-                                          isAlreadyAdded
-                                            ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                                            : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer active:scale-95'
-                                        }`}
-                                      >
-                                        <Plus className="w-3.5 h-3.5" />
-                                        <span>{isAlreadyAdded ? 'Na Viagem' : '+ Adicionar'}</span>
-                                      </button>
-                                    </div>
-                                  );
-                                })
-                              ) : (
-                                /* Estado Paciente Não Encontrado com Botão de Cadastro Rápido */
-                                <div className="py-6 px-4 text-center space-y-3">
-                                  <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
-                                    <AlertCircle className="w-5 h-5" />
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-black text-slate-900 uppercase tracking-tight">Nenhum paciente encontrado.</p>
-                                    <p className="text-[11px] text-slate-500 font-medium mt-0.5 max-w-sm mx-auto">
-                                      Nenhum registro coincide com "{patientSearchTerm}". Você pode cadastrá-lo agora na base municipal compartilhada.
-                                    </p>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setIsPatientDropdownOpen(false);
-                                      setIsFastPatientModalOpen(true);
-                                    }}
-                                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-md shadow-emerald-600/25 inline-flex items-center gap-2 cursor-pointer hover:scale-[1.02] active:scale-95"
-                                  >
-                                    <UserPlus className="w-4 h-4" />
-                                    <span>+ Cadastrar Novo Paciente</span>
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Atalhos Rápidos Abaixo do Campo de Pesquisa */}
-                        <div className="flex items-center justify-between pt-1 gap-2 flex-wrap">
-                          <button
-                            type="button"
-                            onClick={() => setIsManualPassengerOpen(!isManualPassengerOpen)}
-                            className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 cursor-pointer uppercase tracking-wider transition-colors"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            <span>{isManualPassengerOpen ? 'Ocultar Inclusão Avulsa' : '+ Adicionar Acompanhante ou Passageiro Avulso'}</span>
-                            {isManualPassengerOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setIsFastPatientModalOpen(true)}
-                            className="text-[11px] font-bold text-emerald-600 hover:text-emerald-800 flex items-center gap-1.5 cursor-pointer uppercase tracking-wider transition-colors"
-                          >
-                            <UserPlus className="w-3.5 h-3.5" />
-                            <span>+ Cadastrar Novo Paciente</span>
-                          </button>
-                        </div>
-
-                        {/* Formulário Retrátil de Inclusão de Acompanhante / Passageiro Avulso */}
-                        {isManualPassengerOpen && (
-                          <div className="pt-3 border-t border-slate-100 space-y-3 animate-fade-in">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Tipo de Integrante:</span>
-                              <button
-                                type="button"
-                                onClick={() => setNewPassengerType('acompanhante')}
-                                className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border cursor-pointer transition-all ${
-                                  newPassengerType === 'acompanhante' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200'
-                                }`}
-                              >
-                                Acompanhante
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setNewPassengerType('passageiro')}
-                                className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border cursor-pointer transition-all ${
-                                  newPassengerType === 'passageiro' ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-600 border-slate-200'
-                                }`}
-                              >
-                                Passageiro Geral
-                              </button>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                              <input
-                                type="text"
-                                value={newPassenger.name}
-                                onChange={e => setNewPassenger({ ...newPassenger, name: e.target.value })}
-                                placeholder="Nome completo do acompanhante/passageiro..."
-                                className={inputClass}
-                              />
-                              <input
-                                type="text"
-                                value={newPassenger.departureLocation}
-                                onChange={e => setNewPassenger({ ...newPassenger, departureLocation: e.target.value })}
-                                placeholder="Local de embarque / partida..."
-                                className={inputClass}
-                              />
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                              <input
-                                type="time"
-                                value={newPassenger.appointmentTime}
-                                onChange={e => setNewPassenger({ ...newPassenger, appointmentTime: e.target.value })}
-                                className={inputClass}
-                              />
-                              <input
-                                type="text"
-                                value={newPassenger.appointmentLocation}
-                                onChange={e => setNewPassenger({ ...newPassenger, appointmentLocation: e.target.value })}
-                                placeholder="Hospital / Local de destino..."
-                                className={inputClass}
-                              />
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={handleAddPassenger}
-                              className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border border-indigo-200 cursor-pointer"
-                            >
-                              <Plus className="w-3.5 h-3.5" /> Adicionar Integrante Avulso
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* SEÇÃO: PACIENTES ADICIONADOS (X) */}
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-black uppercase tracking-wider text-slate-800">
-                              PACIENTES ADICIONADOS ({formData.passengers?.length || 0})
-                            </span>
-                            <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-wider border border-indigo-200">
-                              Tripulação da Viagem
-                            </span>
-                          </div>
-
-                          {isSpecialTreatmentTrip && (
-                            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600">
-                              {isHemodialysisVan
-                                ? `Lotação: ${formData.passengers?.length || 0} de ${maxVanCrewCapacity} máx.`
-                                : `Lotação: ${formData.passengers?.length || 0} de 3 máx.`}
-                            </span>
-                          )}
-                        </div>
-
-                        {formData.passengers && formData.passengers.length > 0 ? (
-                          <div className="grid grid-cols-1 gap-3">
-                            {formData.passengers.map((p, idx) => (
-                              <div
-                                key={idx}
-                                className="p-4 rounded-2xl border border-slate-200/90 bg-white hover:border-slate-300 shadow-xs transition-all space-y-3"
-                              >
-                                {/* Linha 1: Identificação do Paciente / Tripulante */}
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <p className="font-black text-slate-900 text-sm tracking-tight uppercase truncate">
-                                        {p.name}
-                                      </p>
-                                      {p.type === 'paciente' && (
-                                        <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-black text-[9px] uppercase tracking-wider border border-emerald-200 inline-flex items-center gap-1">
-                                          <HeartPulse className="w-2.5 h-2.5" /> Paciente
-                                        </span>
-                                      )}
-                                      {p.type === 'acompanhante' && (
-                                        <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 font-black text-[9px] uppercase tracking-wider border border-indigo-200 inline-flex items-center gap-1">
-                                          <Users className="w-2.5 h-2.5" /> Acompanhante
-                                        </span>
-                                      )}
-                                      {(p.type === 'passageiro' || !p.type) && (
-                                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-black text-[9px] uppercase tracking-wider border border-slate-200">
-                                          Passageiro
-                                        </span>
-                                      )}
-                                      {p.patientId && (
-                                        <span className="px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 font-bold text-[9px] uppercase tracking-wider border border-teal-200">
-                                          Base Integrada
-                                        </span>
-                                      )}
-                                    </div>
-
-                                    {/* CPF, Data de Nascimento e Telefone */}
-                                    <div className="flex items-center gap-3 text-[11px] text-slate-500 font-medium mt-1 flex-wrap">
-                                      {p.cpf ? (
-                                        <span>CPF: <strong className="text-slate-800">{maskCpfPartial(p.cpf)}</strong></span>
-                                      ) : (
-                                        <span className="text-slate-400">CPF não informado</span>
-                                      )}
-                                      {p.birthDate && (
-                                        <>
-                                          <span>•</span>
-                                          <span>Nascimento: <strong className="text-slate-800">{formatBirthDateBr(p.birthDate)}</strong></span>
-                                        </>
-                                      )}
-                                      {p.phone && (
-                                        <>
-                                          <span>•</span>
-                                          <span>Contato: <strong className="text-slate-800">{p.phone}</strong></span>
-                                        </>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemovePassenger(idx)}
-                                    className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer shrink-0"
-                                    title="Remover integrante da viagem"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-
-                                {/* Linha 2: Dados Operacionais da Viagem Editáveis */}
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-slate-100 text-xs">
-                                  <div>
-                                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                                      <MapPin className="w-3 h-3 inline mr-1 text-indigo-500" />
-                                      Local de Embarque
-                                    </label>
-                                    <input
-                                      type="text"
-                                      value={p.departureLocation || ''}
-                                      onChange={e => handleUpdatePassenger(idx, 'departureLocation', e.target.value)}
-                                      placeholder="Ex: São José do Goiabal / Centro"
-                                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-semibold text-xs focus:bg-white focus:border-indigo-600 outline-none transition-all"
-                                    />
-                                  </div>
-
-                                  <div>
-                                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                                      <Clock className="w-3 h-3 inline mr-1 text-indigo-500" />
-                                      Horário do Agendamento
-                                    </label>
-                                    <input
-                                      type="time"
-                                      value={p.appointmentTime || ''}
-                                      onChange={e => handleUpdatePassenger(idx, 'appointmentTime', e.target.value)}
-                                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-semibold text-xs focus:bg-white focus:border-indigo-600 outline-none transition-all"
-                                    />
-                                  </div>
-
-                                  <div>
-                                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                                      <Building2 className="w-3 h-3 inline mr-1 text-indigo-500" />
-                                      Hospital / Destino
-                                    </label>
-                                    <input
-                                      type="text"
-                                      value={p.appointmentLocation || ''}
-                                      onChange={e => handleUpdatePassenger(idx, 'appointmentLocation', e.target.value)}
-                                      placeholder="Ex: Hospital Municipal / CISAMAPI"
-                                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-semibold text-xs focus:bg-white focus:border-indigo-600 outline-none transition-all"
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50 space-y-1.5">
-                            <Users className="w-7 h-7 text-slate-300 mx-auto" />
-                            <p className="text-xs font-black text-slate-500 uppercase tracking-wider">
-                              Nenhum passageiro adicionado ainda
-                            </p>
-                            <p className="text-[11px] text-slate-400 font-medium max-w-xs mx-auto">
-                              Pesquise pelo nome ou CPF no campo acima para vincular os pacientes a esta viagem.
-                            </p>
-                          </div>
-                        )}
-                      </div>
+                      {/* TABELA DE TRIPULAÇÃO FULL-WIDTH (CONFORME NOVO DESIGN MODERNO) */}
+                      <TripulacaoTable
+                        passengers={formData.passengers || []}
+                        selectedVehicle={selectedVehicle}
+                        tripDate={currentTripDate}
+                        onOpenNewPassengerModal={handleOpenNewPassengerModal}
+                        onEditPassenger={handleEditPassengerFromTable}
+                        onRemovePassenger={handleRemovePassengerFromTable}
+                      />
                     </div>
                   )
                 )}
@@ -2937,6 +2798,29 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
               handleOpenModal(undefined, new Date(), vehicleId);
               handleSubViewChange('novo');
             }
+          }}
+        />
+      ) : renderAccessDenied())}
+      {activeSubView === 'transporte' && (canAccessTransporte ? (
+        <TransportePacientesScreen
+          onBack={() => handleSubViewChange('menu')}
+          vehicles={vehicles}
+          persons={persons}
+          schedules={schedules}
+          sectors={effectiveSectors}
+          currentUserId={currentUserId}
+          currentUserName={currentUserName}
+          onNavigate={onNavigate}
+          onOpenNewTripModal={(date, dest) => {
+            const initialDate = date ? new Date(date + 'T12:00:00') : new Date();
+            handleOpenModal(undefined, initialDate);
+            if (dest) {
+              setFormData(prev => ({
+                ...prev,
+                destination: dest
+              }));
+            }
+            handleSubViewChange('novo');
           }}
         />
       ) : renderAccessDenied())}
@@ -3974,6 +3858,29 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         initialQuery={patientSearchTerm}
         onClose={() => setIsFastPatientModalOpen(false)}
         onSuccess={handlePatientRegistered}
+      />
+
+      {/* MODAL CENTRALIZADO - NOVO PASSAGEIRO (COM PESQUISA NA BASE COMPARTILHADA) */}
+      <PassageiroModal
+        isOpen={isNewPassengerModalOpen}
+        onClose={() => {
+          setIsNewPassengerModalOpen(false);
+          setEditingPassengerIndex(null);
+        }}
+        onSavePassenger={handleSavePassenger}
+        onMinorDetected={handleMinorDetectedInModal}
+        tripDate={currentTripDate}
+        editingPassenger={editingPassengerIndex !== null && formData.passengers ? formData.passengers[editingPassengerIndex] : null}
+        existingPassengers={formData.passengers || []}
+      />
+
+      {/* MODAL DE ALERTA E VÍNCULO - ACOMPANHANTE OBRIGATÓRIO PARA MENORES DE 18 ANOS */}
+      <AcompanhanteObrigatorioModal
+        isOpen={Boolean(minorDetectedForCompanion)}
+        onClose={() => setMinorDetectedForCompanion(null)}
+        pacienteMenor={minorDetectedForCompanion}
+        tripDate={currentTripDate}
+        onConfirm={handleConfirmMinorAndCompanion}
       />
 
       {/* MODAL ANIMADO DE CARREGAMENTO E SINCRONIZAÇÃO DE DADOS */}
