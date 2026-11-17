@@ -66,6 +66,7 @@ const hasIntegratedPatientReadAccess = (
 ): boolean => {
     const perms = user.permissions || [];
     if (
+        user.role === 'admin' ||
         hasAutoSenhaPatientAccess(user, globalSettings) ||
         hasConsultasAcompanharOperationalAccess(user, globalSettings) ||
         isConsultasAcompanharReadOnly(user, globalSettings) ||
@@ -75,7 +76,11 @@ const hasIntegratedPatientReadAccess = (
         userCanAccessSubmodule(user, 'parent_farmacia', 'sub_farmacia_pacientes', globalSettings) ||
         userCanAccessSubmodule(user, 'parent_farmacia', 'sub_farmacia_retirar', globalSettings) ||
         userCanAccessSubmodule(user, 'parent_farmacia', 'sub_farmacia_consultar', globalSettings) ||
-        perms.includes('parent_farmacia')
+        perms.includes('parent_farmacia') ||
+        userCanAccessSubmodule(user, 'parent_agendamento_veiculos', 'sub_veiculos_novo', globalSettings) ||
+        userCanAccessSubmodule(user, 'parent_agendamento_veiculos', 'sub_veiculos_agendar', globalSettings) ||
+        perms.includes('parent_agendamento_veiculos') ||
+        perms.some(p => typeof p === 'string' && (p.startsWith('sub_veiculos_') || p.startsWith('parent_agendamento_veiculos')))
     ) {
         return true;
     }
@@ -161,8 +166,13 @@ const assertCanMutateRegulacao = (
             perms.includes('parent_farmacia') ||
             perms.some(p => typeof p === 'string' && (p.startsWith('sub_farmacia_') || p.startsWith('parent_farmacia_')));
         const canPacientesAutoSenha = hasAutoSenhaPatientAccess(user, globalSettings);
+        const canPacientesVeiculos =
+            userCanAccessSubmodule(user, 'parent_agendamento_veiculos', 'sub_veiculos_novo', globalSettings) ||
+            userCanAccessSubmodule(user, 'parent_agendamento_veiculos', 'sub_veiculos_agendar', globalSettings) ||
+            perms.includes('parent_agendamento_veiculos') ||
+            perms.some(p => typeof p === 'string' && (p.startsWith('sub_veiculos_') || p.startsWith('parent_agendamento_veiculos')));
 
-        if (!canPacientesRegulacao && !canPacientesFarmacia && !canPacientesAutoSenha) {
+        if (!canPacientesRegulacao && !canPacientesFarmacia && !canPacientesAutoSenha && !canPacientesVeiculos) {
             throw new Error(`Acesso negado (Modo Somente Leitura): seu usuário não possui permissão para "${actionLabel}".`);
         }
     }

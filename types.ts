@@ -544,10 +544,14 @@ export interface VehicleSchedule {
 }
 
 export interface CrewMember {
+  patientId?: string;
   name: string;
-  departureLocation: string;
-  appointmentTime: string;
-  appointmentLocation: string;
+  cpf?: string;
+  birthDate?: string;
+  phone?: string;
+  departureLocation?: string;
+  appointmentTime?: string;
+  appointmentLocation?: string;
   type?: 'paciente' | 'acompanhante' | 'passageiro' | string;
 }
 

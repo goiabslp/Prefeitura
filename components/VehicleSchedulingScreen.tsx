@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Vehicle, Person, VehicleSchedule, ScheduleStatus, Sector, AppState, UserRole, AppPermission, CrewMember } from '../types';
+import { Vehicle, Person, VehicleSchedule, ScheduleStatus, Sector, AppState, UserRole, AppPermission, CrewMember, ConsultaPaciente } from '../types';
 import {
   ArrowLeft, Plus, Search, Calendar, Clock, MapPin,
   User as UserIcon, Car, Info, Trash2, Edit3, CheckCircle2,
-  X, ChevronDown, Check, LayoutGrid, List, Filter, History,
+  X, ChevronDown, ChevronUp, Check, LayoutGrid, List, Filter, History,
   AlertCircle, Navigation, ClipboardList, Timer, Loader2, Save,
   ChevronLeft, ChevronRight, Gift, Flag, AlertTriangle, ArrowRight,
   ArrowDown, TrendingUp, CalendarDays, Lock, Eye, FileText, Network,
@@ -19,10 +19,13 @@ import { VehicleScheduleApprovals } from './VehicleScheduleApprovals';
 import { SelectionModal } from './SelectionModal';
 import { VehicleScheduleDashboard } from './VehicleScheduleDashboard';
 import { ConsultarVeiculoScreen } from './vehicle/ConsultarVeiculoScreen';
+import { FastPatientRegisterModal } from './vehicle/FastPatientRegisterModal';
 import { DriverRestRestrictionModal } from './modals/DriverRestRestrictionModal';
 import { VehicleSchedulingLoadingModal } from './modals/VehicleSchedulingLoadingModal';
 import { useSystemSettings } from '../contexts/SystemSettingsContext';
 import { userCanAccessSubmodule } from '../services/permissionService';
+import { searchPacientesInteligente } from '../services/consultasService';
+import { maskCpfPartial, normalizeCpf, formatBirthDateBr } from '../utils/cpfUtils';
 import { validateDriverScheduleRules, fetchSystemHolidaysFromDatabase, getUnifiedHolidaysMap, toDateStr, DriverValidationResult, SystemHoliday } from '../services/driverRestRulesService';
 import { getSectors } from '../services/entityService';
 import { DEFAULT_SECTORS } from '../constants';
@@ -433,7 +436,16 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   const [editingSchedule, setEditingSchedule] = useState<VehicleSchedule | null>(null);
   const [viewingSchedule, setViewingSchedule] = useState<VehicleSchedule | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [modalActiveTab, setModalActiveTab] = useState<'dados_gerais' | 'destino' | 'data' | 'objetivo' | 'tripulacao'>('dados_gerais');
+  const [modalActiveTab, setModalActiveTab] = useState<'dados_gerais' | 'destino' | 'data' | 'objetivo' | 'tripulacao'>(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname.toLowerCase();
+      if (path.includes('tripulacao')) return 'tripulacao';
+      if (path.includes('destino')) return 'destino';
+      if (path.includes('horario') || path.includes('data')) return 'data';
+      if (path.includes('objetivo')) return 'objetivo';
+    }
+    return 'dados_gerais';
+  });
 
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [dayModalDate, setDayModalDate] = useState<Date | null>(null);
@@ -534,6 +546,53 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   const [tripulacaoModalStep, setTripulacaoModalStep] = useState<1 | 2>(1);
   const [selectedSpecialOption, setSelectedSpecialOption] = useState<'sim' | 'nao' | ''>('');
   const [newPassengerType, setNewPassengerType] = useState<'paciente' | 'acompanhante' | 'passageiro'>('paciente');
+
+  // Integração da base de Pacientes na Aba Tripulação
+  const [patientSearchTerm, setPatientSearchTerm] = useState('');
+  const [patientSearchResults, setPatientSearchResults] = useState<ConsultaPaciente[]>([]);
+  const [isSearchingPatient, setIsSearchingPatient] = useState(false);
+  const [isPatientDropdownOpen, setIsPatientDropdownOpen] = useState(false);
+  const [isFastPatientModalOpen, setIsFastPatientModalOpen] = useState(false);
+  const [isManualPassengerOpen, setIsManualPassengerOpen] = useState(false);
+
+  // Debounce para pesquisa inteligente de pacientes na base integrada Supabase
+  useEffect(() => {
+    const trimmed = patientSearchTerm.trim();
+    const cleanDigits = trimmed.replace(/\D/g, '');
+
+    if (trimmed.length < 3 && cleanDigits.length < 3) {
+      setPatientSearchResults([]);
+      setIsSearchingPatient(false);
+      return;
+    }
+
+    setIsSearchingPatient(true);
+    setIsPatientDropdownOpen(true);
+    const controller = new AbortController();
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await searchPacientesInteligente(trimmed, { signal: controller.signal, limit: 15 });
+        if (!controller.signal.aborted) {
+          setPatientSearchResults(res.pacientes || []);
+        }
+      } catch (err: any) {
+        if (!controller.signal.aborted) {
+          console.error("Erro na busca integrada de pacientes para agendamento de veículos:", err);
+          setPatientSearchResults([]);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsSearchingPatient(false);
+        }
+      }
+    }, 280);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [patientSearchTerm]);
 
   // Identificação do veículo selecionado e verificação de Van de Hemodiálise (Placa UEA1J55 / UAE1J55)
   const selectedVehicle = useMemo(() => {
@@ -733,6 +792,101 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     if (isSpecialTreatmentTrip && !isHemodialysisVan && nextPCount === 0) {
       setNewPassengerType('paciente');
     }
+  };
+
+  // Atualização em linha de dados da viagem do integrante (local de embarque, horário e destino)
+  const handleUpdatePassenger = (index: number, field: keyof CrewMember, value: string) => {
+    setFormData(prev => {
+      const updated = [...(prev.passengers || [])];
+      if (updated[index]) {
+        updated[index] = { ...updated[index], [field]: value };
+      }
+      return { ...prev, passengers: updated };
+    });
+  };
+
+  // Adição direta de paciente localizado na Base Integrada Municipal de Pacientes
+  const handleAddPatientToCrew = (paciente: ConsultaPaciente) => {
+    if (!formData.vehicleId) {
+      showToast("Selecione o Veículo Operacional antes de adicionar integrantes à tripulação.", "warning");
+      setModalActiveTab('dados_gerais');
+      setActiveSelectionField('vehicle');
+      return;
+    }
+
+    if (!isTripulacaoUnlocked) {
+      showToast("Clique no botão ADICIONAR TRIPULAÇÃO para liberar os campos.", "warning");
+      return;
+    }
+
+    // Prevenção rigorosa de duplicidade do paciente na mesma viagem
+    const alreadyExists = (formData.passengers || []).some(p => 
+      (p.patientId && p.patientId === paciente.id) ||
+      (p.cpf && paciente.cpf && normalizeCpf(p.cpf) === normalizeCpf(paciente.cpf))
+    );
+
+    if (alreadyExists) {
+      showToast(`O paciente ${paciente.name} já foi adicionado a esta viagem.`, "warning");
+      return;
+    }
+
+    const currentPCount = (formData.passengers || []).filter(p => p.type === 'paciente').length;
+    const currentTotal = (formData.passengers || []).length;
+
+    // Regras de Lotação Especial Oncológica / Hemodiálise
+    if (isSpecialTreatmentTrip) {
+      if (isHemodialysisVan) {
+        if (currentTotal >= maxVanCrewCapacity) {
+          showToast(`Limite máximo da Van (${maxVanCrewCapacity} passageiros) atingido.`, "warning");
+          return;
+        }
+      } else {
+        if (currentTotal >= 3) {
+          showToast("Limite máximo de 03 pessoas atingido nesta viagem exclusiva.", "warning");
+          return;
+        }
+        if (currentPCount >= 1) {
+          showToast("Esta viagem convencional exclusiva já possui 01 paciente (limite de 1 paciente atingido).", "error");
+          return;
+        }
+      }
+    }
+
+    const memberToAdd: CrewMember = {
+      patientId: paciente.id,
+      name: paciente.name.toUpperCase(),
+      cpf: paciente.cpf,
+      birthDate: paciente.birth_date,
+      phone: paciente.phone,
+      departureLocation: 'São José do Goiabal',
+      appointmentTime: '',
+      appointmentLocation: formData.destination || '',
+      type: 'paciente'
+    };
+
+    const nextPassengers = [...(formData.passengers || []), memberToAdd];
+    const nextPCount = nextPassengers.filter(p => p.type === 'paciente').length;
+    const nextCCount = nextPassengers.filter(p => p.type === 'acompanhante').length;
+
+    setFormData(prev => ({
+      ...prev,
+      passengers: nextPassengers,
+      patientCount: nextPCount,
+      companionCount: nextCCount
+    }));
+
+    setPatientSearchTerm('');
+    setIsPatientDropdownOpen(false);
+    if (isSpecialTreatmentTrip && !isHemodialysisVan && nextCCount < 2) {
+      setNewPassengerType('acompanhante');
+    }
+    showToast(`Paciente ${paciente.name} adicionado à tripulação!`, "success");
+  };
+
+  // Callback executado após cadastro rápido de paciente com sucesso
+  const handlePatientRegistered = (novoPaciente: ConsultaPaciente) => {
+    handleAddPatientToCrew(novoPaciente);
+    setIsFastPatientModalOpen(false);
   };
 
   const showToast = (message: string, type: 'error' | 'success' | 'warning' = 'error') => {
@@ -1889,6 +2043,19 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         return;
       }
       setModalActiveTab(tabId);
+      const tabPaths: Record<string, string> = {
+        'dados_gerais': '/AgendamentoVeiculos/Agendar/Novo',
+        'destino': '/AgendamentoVeiculos/Agendar/Novo/Destino',
+        'data': '/AgendamentoVeiculos/Agendar/Novo/Horarios',
+        'objetivo': '/AgendamentoVeiculos/Agendar/Novo/Objetivo',
+        'tripulacao': '/AgendamentoVeiculos/Agendar/Novo/Tripulacao',
+      };
+      if (tabPaths[tabId]) {
+        onNavigate?.(tabPaths[tabId]);
+        if (typeof window !== 'undefined') {
+          window.history.pushState({}, '', tabPaths[tabId]);
+        }
+      }
     };
 
     const currentTabIndex = tabs.findIndex(t => t.id === modalActiveTab);
@@ -2280,83 +2447,194 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                         </div>
                       )}
 
-                      {/* Formulário de Inclusão de Integrante */}
-                      <div>
-                        <label className={labelClass}><Users className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Adicionar Passageiro / Tripulante</label>
-                        
-                        {/* Seletor de Categoria se for Viagem Especial */}
-                        {isSpecialTreatmentTrip && (
-                          <div className="mb-3 flex items-center gap-2 flex-wrap">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1">Tipo de Integrante:</span>
-                            
-                            <button
-                              type="button"
-                              disabled={isSpecialLimitReached || (!isHemodialysisVan && patientCount >= 1)}
-                              onClick={() => setNewPassengerType('paciente')}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer border ${
-                                newPassengerType === 'paciente'
-                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                                  : (!isHemodialysisVan && patientCount >= 1) || isSpecialLimitReached
-                                    ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
-                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                              }`}
-                            >
-                              <HeartPulse className="w-3.5 h-3.5" />
-                              <span>
-                                {isHemodialysisVan
-                                  ? `Paciente (${patientCount})`
-                                  : `Paciente ${patientCount >= 1 ? '(Limite 1/1 atingido)' : '(Máx. 1)'}`}
-                              </span>
-                            </button>
+                      {/* PESQUISA INSTANTÂNEA NA BASE INTEGRADA DE PACIENTES */}
+                      <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200/90 shadow-xs space-y-3 relative">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <label className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <HeartPulse className="w-4 h-4 text-emerald-600" />
+                            <span>Pesquisar Paciente na Base Integrada (SUS / Regulação / Farmácia)</span>
+                          </label>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">
+                            Busca em tempo real por Nome ou CPF
+                          </span>
+                        </div>
 
-                            <button
-                              type="button"
-                              disabled={isSpecialLimitReached || (!isHemodialysisVan && companionCount >= 2)}
-                              onClick={() => setNewPassengerType('acompanhante')}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer border ${
-                                newPassengerType === 'acompanhante'
-                                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                                  : (!isHemodialysisVan && companionCount >= 2) || isSpecialLimitReached
-                                    ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
-                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                              }`}
-                            >
-                              <Users className="w-3.5 h-3.5" />
-                              <span>
-                                {isHemodialysisVan
-                                  ? `Acompanhante (${companionCount})`
-                                  : `Acompanhante ${companionCount >= 2 ? '(Limite 2/2 atingido)' : `(${companionCount}/2)`}`}
-                              </span>
-                            </button>
+                        {/* Campo de Busca com Dropdown Inteligente */}
+                        <div className="relative">
+                          <div className="relative">
+                            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            <input
+                              type="text"
+                              value={patientSearchTerm}
+                              onChange={e => {
+                                setPatientSearchTerm(e.target.value);
+                                if (!isPatientDropdownOpen) setIsPatientDropdownOpen(true);
+                              }}
+                              onFocus={() => {
+                                if (patientSearchTerm.trim().length >= 3) setIsPatientDropdownOpen(true);
+                              }}
+                              placeholder="Pesquisar paciente por nome ou CPF..."
+                              className={`${inputClass} pl-10 pr-10 bg-slate-50 focus:bg-white text-xs font-bold`}
+                            />
+                            {isSearchingPatient ? (
+                              <Loader2 className="w-4 h-4 text-indigo-600 animate-spin absolute right-3.5 top-1/2 -translate-y-1/2" />
+                            ) : patientSearchTerm ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPatientSearchTerm('');
+                                  setIsPatientDropdownOpen(false);
+                                }}
+                                className="w-5 h-5 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center cursor-pointer transition-colors"
+                                title="Limpar pesquisa"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            ) : null}
                           </div>
-                        )}
 
-                        {isSpecialLimitReached ? (
-                          <div className={`p-4 rounded-2xl text-center space-y-1 ${
-                            isHemodialysisVan
-                              ? 'bg-teal-50/80 border border-teal-200 text-teal-900'
-                              : 'bg-amber-50/80 border border-amber-200 text-amber-900'
-                          }`}>
-                            <p className="text-xs font-black uppercase tracking-tight flex items-center justify-center gap-1.5">
-                              <ShieldCheck className={`w-4 h-4 ${isHemodialysisVan ? 'text-teal-600' : 'text-amber-600'}`} />
-                              {isHemodialysisVan
-                                ? `Limite Máximo da Van Atingido (${maxVanCrewCapacity} Passageiros)`
-                                : 'Limite Máximo da Tripulação Atingido (03 Pessoas)'}
-                            </p>
-                            <p className="text-[11px] opacity-80 font-medium">
-                              {isHemodialysisVan
-                                ? `Esta Van de Hemodiálise atingiu a lotação máxima de passageiros permitida (${maxVanCrewCapacity} pessoas). Para adicionar um novo integrante, remova um da lista abaixo.`
-                                : 'Esta viagem oncológica/hemodiálise já atingiu a lotação permitida (01 paciente e até 02 acompanhantes). Para adicionar um novo integrante, remova um da lista abaixo.'}
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 space-y-3">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {/* Dropdown de Resultados da Pesquisa Instantânea */}
+                          {isPatientDropdownOpen && patientSearchTerm.trim().length >= 3 && (
+                            <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-2xl shadow-2xl border border-slate-200 z-30 max-h-72 overflow-y-auto custom-scrollbar animate-fade-in p-2 divide-y divide-slate-100">
+                              {isSearchingPatient ? (
+                                <div className="py-6 text-center text-slate-400 flex items-center justify-center gap-2">
+                                  <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                                  <span className="text-xs font-bold uppercase tracking-wider">Consultando base integrada municipal...</span>
+                                </div>
+                              ) : patientSearchResults.length > 0 ? (
+                                patientSearchResults.map(paciente => {
+                                  const isAlreadyAdded = (formData.passengers || []).some(
+                                    p => (p.patientId && p.patientId === paciente.id) ||
+                                         (p.cpf && paciente.cpf && normalizeCpf(p.cpf) === normalizeCpf(paciente.cpf))
+                                  );
+
+                                  return (
+                                    <div
+                                      key={paciente.id}
+                                      className="p-3 hover:bg-slate-50/80 rounded-xl transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                                    >
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="text-xs font-black text-slate-900 uppercase truncate">
+                                            {paciente.name}
+                                          </span>
+                                          {isAlreadyAdded && (
+                                            <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-black text-[9px] uppercase tracking-wider border border-emerald-200">
+                                              Já Adicionado
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-2.5 text-[11px] text-slate-500 font-medium mt-1 flex-wrap">
+                                          <span>CPF: <strong className="text-slate-800">{maskCpfPartial(paciente.cpf)}</strong></span>
+                                          <span>•</span>
+                                          <span>Nasc: <strong className="text-slate-800">{formatBirthDateBr(paciente.birth_date)}</strong></span>
+                                          {paciente.phone && (
+                                            <>
+                                              <span>•</span>
+                                              <span>Tel: <strong className="text-slate-800">{paciente.phone}</strong></span>
+                                            </>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        disabled={isAlreadyAdded}
+                                        onClick={() => handleAddPatientToCrew(paciente)}
+                                        className={`px-3.5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shrink-0 ${
+                                          isAlreadyAdded
+                                            ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                                            : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer active:scale-95'
+                                        }`}
+                                      >
+                                        <Plus className="w-3.5 h-3.5" />
+                                        <span>{isAlreadyAdded ? 'Na Viagem' : '+ Adicionar'}</span>
+                                      </button>
+                                    </div>
+                                  );
+                                })
+                              ) : (
+                                /* Estado Paciente Não Encontrado com Botão de Cadastro Rápido */
+                                <div className="py-6 px-4 text-center space-y-3">
+                                  <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
+                                    <AlertCircle className="w-5 h-5" />
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-black text-slate-900 uppercase tracking-tight">Nenhum paciente encontrado.</p>
+                                    <p className="text-[11px] text-slate-500 font-medium mt-0.5 max-w-sm mx-auto">
+                                      Nenhum registro coincide com "{patientSearchTerm}". Você pode cadastrá-lo agora na base municipal compartilhada.
+                                    </p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIsPatientDropdownOpen(false);
+                                      setIsFastPatientModalOpen(true);
+                                    }}
+                                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-md shadow-emerald-600/25 inline-flex items-center gap-2 cursor-pointer hover:scale-[1.02] active:scale-95"
+                                  >
+                                    <UserPlus className="w-4 h-4" />
+                                    <span>+ Cadastrar Novo Paciente</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Atalhos Rápidos Abaixo do Campo de Pesquisa */}
+                        <div className="flex items-center justify-between pt-1 gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setIsManualPassengerOpen(!isManualPassengerOpen)}
+                            className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 cursor-pointer uppercase tracking-wider transition-colors"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>{isManualPassengerOpen ? 'Ocultar Inclusão Avulsa' : '+ Adicionar Acompanhante ou Passageiro Avulso'}</span>
+                            {isManualPassengerOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setIsFastPatientModalOpen(true)}
+                            className="text-[11px] font-bold text-emerald-600 hover:text-emerald-800 flex items-center gap-1.5 cursor-pointer uppercase tracking-wider transition-colors"
+                          >
+                            <UserPlus className="w-3.5 h-3.5" />
+                            <span>+ Cadastrar Novo Paciente</span>
+                          </button>
+                        </div>
+
+                        {/* Formulário Retrátil de Inclusão de Acompanhante / Passageiro Avulso */}
+                        {isManualPassengerOpen && (
+                          <div className="pt-3 border-t border-slate-100 space-y-3 animate-fade-in">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Tipo de Integrante:</span>
+                              <button
+                                type="button"
+                                onClick={() => setNewPassengerType('acompanhante')}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border cursor-pointer transition-all ${
+                                  newPassengerType === 'acompanhante' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200'
+                                }`}
+                              >
+                                Acompanhante
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setNewPassengerType('passageiro')}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border cursor-pointer transition-all ${
+                                  newPassengerType === 'passageiro' ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-600 border-slate-200'
+                                }`}
+                              >
+                                Passageiro Geral
+                              </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                               <input
                                 type="text"
                                 value={newPassenger.name}
                                 onChange={e => setNewPassenger({ ...newPassenger, name: e.target.value })}
-                                placeholder={isSpecialTreatmentTrip ? (newPassengerType === 'paciente' ? "Nome completo do paciente..." : "Nome do acompanhante...") : "Nome completo..."}
+                                placeholder="Nome completo do acompanhante/passageiro..."
                                 className={inputClass}
                               />
                               <input
@@ -2368,7 +2646,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                               />
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                               <input
                                 type="time"
                                 value={newPassenger.appointmentTime}
@@ -2379,7 +2657,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                                 type="text"
                                 value={newPassenger.appointmentLocation}
                                 onChange={e => setNewPassenger({ ...newPassenger, appointmentLocation: e.target.value })}
-                                placeholder={isSpecialTreatmentTrip ? "Hospital / Clínica / Destino do compromisso..." : "Local do compromisso / consulta..."}
+                                placeholder="Hospital / Local de destino..."
                                 className={inputClass}
                               />
                             </div>
@@ -2387,73 +2665,161 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                             <button
                               type="button"
                               onClick={handleAddPassenger}
-                              className="w-full py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 border border-indigo-200 cursor-pointer shadow-2xs hover:shadow-xs"
+                              className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border border-indigo-200 cursor-pointer"
                             >
-                              <Plus className="w-4 h-4" /> Adicionar à Tripulação {isSpecialTreatmentTrip && `(${newPassengerType === 'paciente' ? 'Paciente' : 'Acompanhante'})`}
+                              <Plus className="w-3.5 h-3.5" /> Adicionar Integrante Avulso
                             </button>
                           </div>
                         )}
                       </div>
 
-                      {/* Passengers List */}
-                      {formData.passengers && formData.passengers.length > 0 ? (
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                              Passageiros Confirmados ({formData.passengers.length}):
+                      {/* SEÇÃO: PACIENTES ADICIONADOS (X) */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black uppercase tracking-wider text-slate-800">
+                              PACIENTES ADICIONADOS ({formData.passengers?.length || 0})
                             </span>
-                            {isSpecialTreatmentTrip && (
-                              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600">
-                                {isHemodialysisVan
-                                  ? `Lotação: ${formData.passengers.length} de ${maxVanCrewCapacity} máx.`
-                                  : `Lotação: ${formData.passengers.length} de 3 máx.`}
-                              </span>
-                            )}
+                            <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-wider border border-indigo-200">
+                              Tripulação da Viagem
+                            </span>
                           </div>
-                          <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-xs">
+
+                          {isSpecialTreatmentTrip && (
+                            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600">
+                              {isHemodialysisVan
+                                ? `Lotação: ${formData.passengers?.length || 0} de ${maxVanCrewCapacity} máx.`
+                                : `Lotação: ${formData.passengers?.length || 0} de 3 máx.`}
+                            </span>
+                          )}
+                        </div>
+
+                        {formData.passengers && formData.passengers.length > 0 ? (
+                          <div className="grid grid-cols-1 gap-3">
                             {formData.passengers.map((p, idx) => (
-                              <div key={idx} className="p-3.5 flex items-center justify-between gap-3 text-xs hover:bg-slate-50/50 transition-colors">
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <p className="font-black text-slate-900 truncate">{p.name}</p>
-                                    {p.type === 'paciente' && (
-                                      <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-black text-[9px] uppercase tracking-wider border border-emerald-200 inline-flex items-center gap-1">
-                                        <HeartPulse className="w-2.5 h-2.5" /> Paciente
-                                      </span>
-                                    )}
-                                    {p.type === 'acompanhante' && (
-                                      <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 font-black text-[9px] uppercase tracking-wider border border-indigo-200 inline-flex items-center gap-1">
-                                        <Users className="w-2.5 h-2.5" /> Acompanhante
-                                      </span>
-                                    )}
-                                    {(p.type === 'passageiro' || !p.type) && (
-                                      <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-black text-[9px] uppercase tracking-wider border border-slate-200">
-                                        Passageiro
-                                      </span>
-                                    )}
+                              <div
+                                key={idx}
+                                className="p-4 rounded-2xl border border-slate-200/90 bg-white hover:border-slate-300 shadow-xs transition-all space-y-3"
+                              >
+                                {/* Linha 1: Identificação do Paciente / Tripulante */}
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <p className="font-black text-slate-900 text-sm tracking-tight uppercase truncate">
+                                        {p.name}
+                                      </p>
+                                      {p.type === 'paciente' && (
+                                        <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-black text-[9px] uppercase tracking-wider border border-emerald-200 inline-flex items-center gap-1">
+                                          <HeartPulse className="w-2.5 h-2.5" /> Paciente
+                                        </span>
+                                      )}
+                                      {p.type === 'acompanhante' && (
+                                        <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 font-black text-[9px] uppercase tracking-wider border border-indigo-200 inline-flex items-center gap-1">
+                                          <Users className="w-2.5 h-2.5" /> Acompanhante
+                                        </span>
+                                      )}
+                                      {(p.type === 'passageiro' || !p.type) && (
+                                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-black text-[9px] uppercase tracking-wider border border-slate-200">
+                                          Passageiro
+                                        </span>
+                                      )}
+                                      {p.patientId && (
+                                        <span className="px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 font-bold text-[9px] uppercase tracking-wider border border-teal-200">
+                                          Base Integrada
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* CPF, Data de Nascimento e Telefone */}
+                                    <div className="flex items-center gap-3 text-[11px] text-slate-500 font-medium mt-1 flex-wrap">
+                                      {p.cpf ? (
+                                        <span>CPF: <strong className="text-slate-800">{maskCpfPartial(p.cpf)}</strong></span>
+                                      ) : (
+                                        <span className="text-slate-400">CPF não informado</span>
+                                      )}
+                                      {p.birthDate && (
+                                        <>
+                                          <span>•</span>
+                                          <span>Nascimento: <strong className="text-slate-800">{formatBirthDateBr(p.birthDate)}</strong></span>
+                                        </>
+                                      )}
+                                      {p.phone && (
+                                        <>
+                                          <span>•</span>
+                                          <span>Contato: <strong className="text-slate-800">{p.phone}</strong></span>
+                                        </>
+                                      )}
+                                    </div>
                                   </div>
-                                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5 truncate">
-                                    Partida: {p.departureLocation} | Horário: {p.appointmentTime} | Local: {p.appointmentLocation}
-                                  </p>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemovePassenger(idx)}
+                                    className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer shrink-0"
+                                    title="Remover integrante da viagem"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemovePassenger(idx)}
-                                  className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer shrink-0"
-                                  title="Remover passageiro"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
+
+                                {/* Linha 2: Dados Operacionais da Viagem Editáveis */}
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-slate-100 text-xs">
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                                      <MapPin className="w-3 h-3 inline mr-1 text-indigo-500" />
+                                      Local de Embarque
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={p.departureLocation || ''}
+                                      onChange={e => handleUpdatePassenger(idx, 'departureLocation', e.target.value)}
+                                      placeholder="Ex: São José do Goiabal / Centro"
+                                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-semibold text-xs focus:bg-white focus:border-indigo-600 outline-none transition-all"
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                                      <Clock className="w-3 h-3 inline mr-1 text-indigo-500" />
+                                      Horário do Agendamento
+                                    </label>
+                                    <input
+                                      type="time"
+                                      value={p.appointmentTime || ''}
+                                      onChange={e => handleUpdatePassenger(idx, 'appointmentTime', e.target.value)}
+                                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-semibold text-xs focus:bg-white focus:border-indigo-600 outline-none transition-all"
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                                      <Building2 className="w-3 h-3 inline mr-1 text-indigo-500" />
+                                      Hospital / Destino
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={p.appointmentLocation || ''}
+                                      onChange={e => handleUpdatePassenger(idx, 'appointmentLocation', e.target.value)}
+                                      placeholder="Ex: Hospital Municipal / CISAMAPI"
+                                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-semibold text-xs focus:bg-white focus:border-indigo-600 outline-none transition-all"
+                                    />
+                                  </div>
+                                </div>
                               </div>
                             ))}
                           </div>
-                        </div>
-                      ) : (
-                        <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
-                          <Users className="w-6 h-6 text-slate-300 mx-auto mb-1.5" />
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nenhum passageiro adicionado ainda</p>
-                        </div>
-                      )}
+                        ) : (
+                          <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50 space-y-1.5">
+                            <Users className="w-7 h-7 text-slate-300 mx-auto" />
+                            <p className="text-xs font-black text-slate-500 uppercase tracking-wider">
+                              Nenhum passageiro adicionado ainda
+                            </p>
+                            <p className="text-[11px] text-slate-400 font-medium max-w-xs mx-auto">
+                              Pesquise pelo nome ou CPF no campo acima para vincular os pacientes a esta viagem.
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )
                 )}
@@ -2465,7 +2831,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                   {currentTabIndex > 0 && (
                     <button
                       type="button"
-                      onClick={() => setModalActiveTab(tabs[currentTabIndex - 1].id)}
+                      onClick={() => handleTabChange(tabs[currentTabIndex - 1].id)}
                       className="px-3.5 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
                     >
                       <ChevronLeft className="w-3.5 h-3.5" /> Anterior
@@ -2477,7 +2843,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                   {currentTabIndex < tabs.length - 1 && (
                     <button
                       type="button"
-                      onClick={() => setModalActiveTab(tabs[currentTabIndex + 1].id)}
+                      onClick={() => handleTabChange(tabs[currentTabIndex + 1].id)}
                       className="px-3.5 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
                     >
                       Próximo <ChevronRight className="w-3.5 h-3.5" />
@@ -3600,6 +3966,14 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         vehicle={driverRestModal.vehicle}
         canOverride={driverRestModal.canOverride}
         onConfirmOverride={driverRestModal.onConfirmOverride}
+      />
+
+      {/* MODAL DE CADASTRO RÁPIDO INTEGRADO DE PACIENTE */}
+      <FastPatientRegisterModal
+        isOpen={isFastPatientModalOpen}
+        initialQuery={patientSearchTerm}
+        onClose={() => setIsFastPatientModalOpen(false)}
+        onSuccess={handlePatientRegistered}
       />
 
       {/* MODAL ANIMADO DE CARREGAMENTO E SINCRONIZAÇÃO DE DADOS */}

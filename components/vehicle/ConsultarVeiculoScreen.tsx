@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   ArrowLeft, 
   Calendar as CalendarIcon, 
@@ -26,7 +27,8 @@ import {
   Check,
   ArrowRight,
   ChevronRight,
-  Compass
+  Compass,
+  Camera
 } from 'lucide-react';
 import { DateTimePickerModal } from '../DateTimePickerModal';
 import { supabase } from '../../services/supabaseClient';
@@ -59,6 +61,7 @@ interface VeiculoLivreItem {
   color?: string;
   sectorId?: string;
   sectorName?: string;
+  vehicleImageUrl?: string;
 }
 
 // Interface para viagens já agendadas que possuem vagas compatíveis
@@ -86,6 +89,7 @@ interface ViagemExistenteItem {
   occupiedSeats: number;
   remainingSeats: number;
   confirmedPassengers: CrewMember[];
+  vehicleImageUrl?: string;
 }
 
 type ResultadoConsultaItem = VeiculoLivreItem | ViagemExistenteItem;
@@ -136,6 +140,7 @@ const normalizeSectorText = (str?: string | null): string => {
 export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
   sectors: propSectors,
   persons: propPersons = [],
+  vehicles: propVehicles = [],
   onBack,
   onSelectVehicleToSchedule,
   onNavigate,
@@ -183,6 +188,21 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
   }>>([]);
   const [isInclusionSubmitting, setIsInclusionSubmitting] = useState(false);
   const [inclusionSuccessMessage, setInclusionSuccessMessage] = useState<string | null>(null);
+
+  // 6. Modal de Visualização Ampliada da Foto do Veículo (Módulo Frotas)
+  const [selectedVehiclePhoto, setSelectedVehiclePhoto] = useState<{ url: string; title: string } | null>(null);
+
+  // Listener para fechar o modal de foto com a tecla Esc
+  useEffect(() => {
+    if (!selectedVehiclePhoto) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedVehiclePhoto(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedVehiclePhoto]);
 
   // Carrega lista de setores
   useEffect(() => {
@@ -304,7 +324,7 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
       const consultaEndMs = endDateTimeLocal.getTime();
 
       // Busca veículos operacionais, setores, pessoas e agendamentos conflitantes no período
-      const vehicleQueryCols = 'id, model, brand, plate, type, vehicle_category, passenger_capacity, year, color, status, available_for_scheduling, available_for_consultation, sector_id';
+      const vehicleQueryCols = 'id, model, brand, plate, type, vehicle_category, passenger_capacity, year, color, status, available_for_scheduling, available_for_consultation, sector_id, vehicle_image_url';
       let rawVehiclesPromise = supabase
         .from('vehicles')
         .select(vehicleQueryCols)
@@ -345,7 +365,7 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
       };
 
       if (isMissingCol(vErr)) {
-        const fallbackCols = 'id, model, brand, plate, type, vehicle_category, passenger_capacity, year, color, status, available_for_scheduling, sector_id';
+        const fallbackCols = 'id, model, brand, plate, type, vehicle_category, passenger_capacity, year, color, status, available_for_scheduling, sector_id, vehicle_image_url';
         const retry = await supabase
           .from('vehicles')
           .select(fallbackCols)
@@ -357,7 +377,12 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
       if (vErr) throw vErr;
       if (sErr) throw sErr;
 
-      // Mapas auxiliares para resolução rápida de nomes
+      // Mapas auxiliares para resolução rápida de nomes e veículos
+      const propVehiclesMap = new Map<string, Vehicle>();
+      (propVehicles || []).forEach((pv: any) => {
+        if (pv && pv.id) propVehiclesMap.set(pv.id, pv);
+      });
+
       const sectorMap = new Map<string, string>();
       [...(sectorsData || []), ...availableSectors].forEach((sec: any) => {
         if (sec.id && sec.name) {
@@ -414,6 +439,10 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
         const maxPassengers = Math.max(0, totalCapacity - 1);
         const vehicleSchedules = schedulesByVehicle.get(v.id) || [];
 
+        // Imagem cadastrada no módulo Frotas (Supabase Storage / banco)
+        const propV = propVehiclesMap.get(v.id);
+        const vehicleImageUrl = v.vehicle_image_url || propV?.vehicleImageUrl || undefined;
+
         // CASO A: Veículo Totalmente Livre (Sem conflito de agendamento no período)
         // Formalmente: capacidade_total >= quantidade_passageiros + 1 (ou maxPassengers >= searchPassengerCount)
         if (vehicleSchedules.length === 0) {
@@ -431,7 +460,8 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
               year: v.year,
               color: v.color,
               sectorId: v.sector_id,
-              sectorName: sectorMap.get(v.sector_id) || sectorMap.get(normalizeSectorText(v.sector_id)) || 'Geral'
+              sectorName: sectorMap.get(v.sector_id) || sectorMap.get(normalizeSectorText(v.sector_id)) || 'Geral',
+              vehicleImageUrl
             });
           }
           return;
@@ -480,7 +510,8 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
                 maxPassengers,
                 occupiedSeats,
                 remainingSeats,
-                confirmedPassengers: Array.isArray(sched.passengers) ? sched.passengers : []
+                confirmedPassengers: Array.isArray(sched.passengers) ? sched.passengers : [],
+                vehicleImageUrl
               });
             }
           }
@@ -1024,8 +1055,30 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
                           </div>
                         </div>
 
-                        {/* Botão de Agendar Veículo Livre */}
-                        <div className="mt-5 pt-3 border-t border-slate-100">
+                        {/* Botões de Ação do Veículo Livre */}
+                        <div className="mt-5 pt-3 border-t border-slate-100 flex flex-col gap-2">
+                          {/* Botão Ver Foto do Veículo (Módulo Frotas) */}
+                          {item.vehicleImageUrl ? (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedVehiclePhoto({ url: item.vehicleImageUrl!, title: `${item.brand} ${item.model} (${item.plate})` })}
+                              className="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs hover:shadow-xs active:scale-98"
+                            >
+                              <Camera className="w-4 h-4 text-slate-500" />
+                              <span>Ver Foto do Veículo</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled
+                              className="w-full py-2 px-3 bg-slate-50 text-slate-400 border border-slate-100 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-not-allowed opacity-75"
+                              title="Este veículo não possui fotografia cadastrada no módulo Frotas"
+                            >
+                              <Camera className="w-4 h-4 text-slate-300" />
+                              <span>Foto indisponível</span>
+                            </button>
+                          )}
+
                           <button
                             type="button"
                             onClick={() => {
@@ -1150,8 +1203,30 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
                         </div>
                       </div>
 
-                      {/* Botão de Ação: Adicionar Passageiros à Viagem */}
-                      <div className="mt-5 pt-3 border-t border-slate-100">
+                      {/* Botões de Ação: Ver Foto do Veículo e Adicionar Passageiros à Viagem */}
+                      <div className="mt-5 pt-3 border-t border-slate-100 flex flex-col gap-2">
+                        {/* Botão Ver Foto do Veículo (Módulo Frotas) */}
+                        {item.vehicleImageUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedVehiclePhoto({ url: item.vehicleImageUrl!, title: `${item.vehicleBrand} ${item.vehicleModel} (${item.vehiclePlate})` })}
+                            className="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs hover:shadow-xs active:scale-98"
+                          >
+                            <Camera className="w-4 h-4 text-slate-500" />
+                            <span>Ver Foto do Veículo</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled
+                            className="w-full py-2 px-3 bg-slate-50 text-slate-400 border border-slate-100 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-not-allowed opacity-75"
+                            title="Este veículo não possui fotografia cadastrada no módulo Frotas"
+                          >
+                            <Camera className="w-4 h-4 text-slate-300" />
+                            <span>Foto indisponível</span>
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           onClick={() => handleOpenInclusionModal(item)}
@@ -1556,6 +1631,45 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
           setIsDatePickerOpen(false);
         }}
       />
+
+      {/* ========================================================================= */}
+      {/* MODAL EXCLUSIVO: VISUALIZAÇÃO AMPLIADA DA FOTOGRAFIA DO VEÍCULO */}
+      {/* ========================================================================= */}
+      {selectedVehiclePhoto && createPortal(
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 md:p-8 animate-in fade-in duration-200"
+          onClick={() => setSelectedVehiclePhoto(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Fotografia do veículo ${selectedVehiclePhoto.title}`}
+        >
+          <div
+            className="relative flex items-center justify-center max-w-[95vw] max-h-[92vh] select-none animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Botão Fechar (X) */}
+            <button
+              type="button"
+              onClick={() => setSelectedVehiclePhoto(null)}
+              className="absolute -top-3 -right-3 sm:-top-4 sm:-right-4 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-900/90 hover:bg-rose-600 text-white flex items-center justify-center shadow-2xl border-2 border-white/50 transition-all hover:scale-110 active:scale-95 cursor-pointer"
+              title="Fechar (Esc)"
+              aria-label="Fechar fotografia"
+            >
+              <X className="w-5 h-5 stroke-[2.5]" />
+            </button>
+
+            {/* Imagem Ampliada mantendo proporção original e sem cortes */}
+            <div className="rounded-3xl overflow-hidden bg-slate-900/60 shadow-2xl border-4 border-white/20 p-1 flex items-center justify-center max-w-full max-h-[88vh]">
+              <img
+                src={selectedVehiclePhoto.url}
+                alt={`Fotografia do veículo ${selectedVehiclePhoto.title}`}
+                className="max-h-[85vh] max-w-[90vw] md:max-w-4xl w-auto h-auto object-contain rounded-2xl block"
+              />
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
