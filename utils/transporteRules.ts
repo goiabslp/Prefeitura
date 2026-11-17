@@ -108,6 +108,117 @@ export const validarCapacidadeViagem = (
   };
 };
 
+export interface GrupoDestinoHierarquico {
+  destino: string;
+  totalPacientes: number;
+  aguardando: number;
+  alocados: number;
+  confirmados: number;
+  resumoProcedimentos: string;
+  horarioMin: string;
+  horarioMax: string;
+  demandas: TransporteDemanda[];
+}
+
+export interface GrupoDataHierarquico {
+  data: string;
+  dataFormatada: string;
+  diaSemana: string;
+  dataLabel: string;
+  totalPacientes: number;
+  destinos: GrupoDestinoHierarquico[];
+}
+
+/**
+ * Agrupa demandas na hierarquia estrita: DATA -> MUNICÍPIO DE DESTINO -> PACIENTES
+ */
+export const agruparHierarquicoDataDestino = (demandas: TransporteDemanda[]): GrupoDataHierarquico[] => {
+  const mapData = new Map<string, Map<string, TransporteDemanda[]>>();
+
+  demandas.forEach(d => {
+    const dataKey = d.dataAtendimento || new Date().toISOString().substring(0, 10);
+    const destKey = d.municipioDestino?.trim() || 'DESTINO NÃO INFORMADO';
+
+    if (!mapData.has(dataKey)) {
+      mapData.set(dataKey, new Map());
+    }
+    const mapDest = mapData.get(dataKey)!;
+    if (!mapDest.has(destKey)) {
+      mapDest.set(destKey, []);
+    }
+    mapDest.get(destKey)!.push(d);
+  });
+
+  const diasSemana = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+
+  const resultado: GrupoDataHierarquico[] = [];
+
+  const datasOrdenadas = Array.from(mapData.keys()).sort();
+
+  datasOrdenadas.forEach(dataStr => {
+    const mapDest = mapData.get(dataStr)!;
+    const destinosList: GrupoDestinoHierarquico[] = [];
+    let totalPacientesData = 0;
+
+    // Converte YYYY-MM-DD em partes numéricas para evitar problemas de timezone
+    const [ano, mes, dia] = dataStr.split('-').map(Number);
+    const dateObj = new Date(ano, (mes || 1) - 1, dia || 1);
+    const diaSemana = diasSemana[dateObj.getDay()] || 'Dia';
+    const dataFormatada = `${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${ano}`;
+    const dataLabel = `${dataFormatada} — ${diaSemana}`;
+
+    const destinosOrdenados = Array.from(mapDest.keys()).sort();
+
+    destinosOrdenados.forEach(destStr => {
+      const paxs = mapDest.get(destStr)!;
+      // Ordena os pacientes por horário
+      paxs.sort((a, b) => (a.horaAtendimento || '00:00').localeCompare(b.horaAtendimento || '00:00'));
+
+      totalPacientesData += paxs.length;
+
+      const aguardando = paxs.filter(p => p.statusTransporte === 'Aguardando vaga').length;
+      const alocados = paxs.filter(p => p.statusTransporte === 'Alocado').length;
+      const confirmados = paxs.filter(p => p.statusTransporte === 'Confirmado').length;
+
+      // Resumo de procedimentos
+      const tipos = new Set<string>();
+      paxs.forEach(p => {
+        if (p.tipoProcedimento) tipos.add(p.tipoProcedimento);
+      });
+      const tiposArr = Array.from(tipos);
+      const resumoProcedimentos = tiposArr.length > 0 ? tiposArr.join(' e ') : 'Consultas e Exames';
+
+      // Horários mínimo e máximo
+      const horarios = paxs.map(p => p.horaAtendimento).filter(Boolean);
+      const horarioMin = horarios.length > 0 ? (horarios[0].substring(0, 2) + 'h') : '07h';
+      const horarioMax = horarios.length > 0 ? (horarios[horarios.length - 1].substring(0, 2) + 'h') : '17h';
+
+      destinosList.push({
+        destino: destStr,
+        totalPacientes: paxs.length,
+        aguardando,
+        alocados,
+        confirmados,
+        resumoProcedimentos,
+        horarioMin,
+        horarioMax,
+        demandas: paxs
+      });
+    });
+
+    resultado.push({
+      data: dataStr,
+      dataFormatada,
+      diaSemana,
+      dataLabel,
+      totalPacientes: totalPacientesData,
+      destinos: destinosList
+    });
+  });
+
+  return resultado;
+};
+
 /**
  * Calcula os 7 indicadores do Dashboard da Central de Transporte
  */
@@ -143,13 +254,18 @@ export const calcularIndicadoresTransporte = (
     totalVagasLivres += livres;
   });
 
+  const veiculosDisponiveis = veiculos.filter(v => (v.status || 'Ativo') === 'Ativo').length || veiculos.length || veiculosDesignados;
+
   return {
     totalDemandas,
+    totalPacientes: totalDemandas,
     aguardandoVaga,
+    aguardando: aguardandoVaga,
     alocados,
     confirmados,
     aguardandoConfirmacao,
     vagasDisponiveis: totalVagasLivres,
-    veiculosDesignados
+    veiculosDesignados,
+    veiculosDisponiveis
   };
 };

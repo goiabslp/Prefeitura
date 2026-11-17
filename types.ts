@@ -1369,8 +1369,11 @@ export interface TransporteDemanda {
   pacienteCpf: string;
   pacienteDataNascimento?: string;
   pacienteTelefone?: string;
+  pacienteApelido?: string;
   procedimentoId: string;
   procedimentoNome: string;
+  procedimentoCodigo?: string;
+  especialista?: string;
   tipoProcedimento: 'Consulta' | 'Exame' | 'Cirurgia';
   dataAtendimento: string; // YYYY-MM-DD
   horaAtendimento: string; // HH:mm
