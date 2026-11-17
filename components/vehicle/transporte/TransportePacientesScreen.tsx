@@ -635,156 +635,143 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
       )}
 
       {/* ========================================================================= */}
-      {/* ÁREA 1 — CABEÇALHO DA CENTRAL DE TRANSPORTE */}
+      {/* CABEÇALHO UNIFICADO COM INDICADORES NA MESMA LINHA (SEM TÍTULO) */}
       {/* ========================================================================= */}
-      <header className="bg-white border-b border-slate-200 px-4 md:px-6 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0 z-10">
-        <div className="flex items-center gap-3">
+      <header className="bg-white border-b border-slate-200 px-3 md:px-5 py-2.5 flex items-center justify-between gap-2.5 shrink-0 z-10 overflow-x-auto custom-scrollbar">
+        {/* Esquerda: Botão Voltar + Ícone de Transporte */}
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={onBack}
-            className="w-10 h-10 rounded-2xl bg-white hover:bg-slate-50 flex items-center justify-center text-slate-500 hover:text-indigo-600 border border-slate-200/90 shadow-2xs transition-all active:scale-95 group shrink-0 cursor-pointer"
+            className="w-9 h-9 rounded-xl bg-white hover:bg-slate-50 flex items-center justify-center text-slate-500 hover:text-indigo-600 border border-slate-200/90 shadow-2xs transition-all active:scale-95 group shrink-0 cursor-pointer"
             title="Voltar ao Módulo de Veículos"
           >
-            <ArrowLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
           </button>
 
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-[#5433FF] text-white flex items-center justify-center shadow-xs shrink-0">
-              <Car className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-base md:text-lg font-black text-slate-900 uppercase tracking-tight leading-none">
-                CENTRAL DE TRANSPORTE DE PACIENTES
-              </h1>
-              <p className="text-xs text-slate-500 font-medium mt-1">
-                Distribuição de pacientes agendados na Regulação por data, destino e veículo.
-              </p>
-            </div>
+          <div className="w-9 h-9 rounded-xl bg-[#5433FF] text-white flex items-center justify-center shadow-xs shrink-0">
+            <Car className="w-4 h-4" />
           </div>
         </div>
 
-        {/* Ações do Cabeçalho */}
-        <div className="flex items-center gap-2.5 self-end md:self-auto">
-          <button
-            type="button"
-            onClick={handleSincronizarRegulacao}
-            disabled={refreshing}
-            className="px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 transition-all cursor-pointer active:scale-95"
-            title="Sincronizar dados em tempo real com a Regulação"
-          >
-            <RefreshCw className={`w-4 h-4 text-slate-500 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
-            <span>Sincronizar Regulação</span>
-          </button>
-
-          {onOpenNewTripModal && (
-            <button
-              type="button"
-              onClick={() => onOpenNewTripModal(filterDate || undefined, focoDestino !== 'TODOS' ? focoDestino : undefined)}
-              className="px-4 py-2 bg-[#5433FF] hover:bg-[#4628df] text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-sm shadow-indigo-500/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
-            >
-              <span>+ NOVA VIAGEM</span>
-            </button>
-          )}
-        </div>
-      </header>
-
-      {/* ========================================================================= */}
-      {/* ÁREA 2 — 6 INDICADORES COMPACTOS HORIZONTAIS */}
-      {/* ========================================================================= */}
-      <section className="bg-slate-50/70 border-b border-slate-200/80 px-4 md:px-6 py-3 shrink-0">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+        {/* Centro: Os 6 Cards de Indicadores na Mesma Linha */}
+        <div className="flex items-center gap-2 flex-1 justify-center min-w-0">
           
           {/* 1. Total de Pacientes */}
-          <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-2xs flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-              <Users className="w-5 h-5" />
+          <div className="bg-white px-2.5 py-1 rounded-xl border border-slate-200/90 shadow-2xs flex items-center gap-2 shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+              <Users className="w-3.5 h-3.5" />
             </div>
             <div className="min-w-0">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block truncate">
+              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block truncate leading-none">
                 TOTAL DE PACIENTES
               </span>
-              <span className="text-2xl font-black text-slate-900 leading-tight block">
+              <span className="text-sm md:text-base font-black text-slate-900 leading-tight block mt-0.5">
                 {indicadores.totalPacientes}
               </span>
             </div>
           </div>
 
           {/* 2. Aguardando */}
-          <div className="bg-amber-50/70 p-3 rounded-2xl border border-amber-200/80 shadow-2xs flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-              <Clock3 className="w-5 h-5" />
+          <div className="bg-amber-50/70 px-2.5 py-1 rounded-xl border border-amber-200/80 shadow-2xs flex items-center gap-2 shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <Clock3 className="w-3.5 h-3.5" />
             </div>
             <div className="min-w-0">
-              <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 block truncate">
+              <span className="text-[9px] font-black uppercase tracking-wider text-amber-800 block truncate leading-none">
                 AGUARDANDO
               </span>
-              <span className="text-2xl font-black text-amber-900 leading-tight block">
+              <span className="text-sm md:text-base font-black text-amber-900 leading-tight block mt-0.5">
                 {indicadores.aguardando}
               </span>
             </div>
           </div>
 
           {/* 3. Alocados */}
-          <div className="bg-indigo-50/70 p-3 rounded-2xl border border-indigo-200/80 shadow-2xs flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
-              <UsersRound className="w-5 h-5" />
+          <div className="bg-indigo-50/70 px-2.5 py-1 rounded-xl border border-indigo-200/80 shadow-2xs flex items-center gap-2 shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+              <UsersRound className="w-3.5 h-3.5" />
             </div>
             <div className="min-w-0">
-              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-800 block truncate">
+              <span className="text-[9px] font-black uppercase tracking-wider text-indigo-800 block truncate leading-none">
                 ALOCADOS
               </span>
-              <span className="text-2xl font-black text-indigo-900 leading-tight block">
+              <span className="text-sm md:text-base font-black text-indigo-900 leading-tight block mt-0.5">
                 {indicadores.alocados}
               </span>
             </div>
           </div>
 
           {/* 4. Confirmados */}
-          <div className="bg-emerald-50/70 p-3 rounded-2xl border border-emerald-200/80 shadow-2xs flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-              <Check className="w-5 h-5 stroke-[3]" />
+          <div className="bg-emerald-50/70 px-2.5 py-1 rounded-xl border border-emerald-200/80 shadow-2xs flex items-center gap-2 shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+              <Check className="w-3.5 h-3.5 stroke-[3]" />
             </div>
             <div className="min-w-0">
-              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 block truncate">
+              <span className="text-[9px] font-black uppercase tracking-wider text-emerald-800 block truncate leading-none">
                 CONFIRMADOS
               </span>
-              <span className="text-2xl font-black text-emerald-900 leading-tight block">
+              <span className="text-sm md:text-base font-black text-emerald-900 leading-tight block mt-0.5">
                 {indicadores.confirmados}
               </span>
             </div>
           </div>
 
           {/* 5. Vagas Disponíveis */}
-          <div className="bg-cyan-50/70 p-3 rounded-2xl border border-cyan-200/80 shadow-2xs flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-cyan-100 text-cyan-700 flex items-center justify-center shrink-0">
-              <Armchair className="w-5 h-5" />
+          <div className="bg-cyan-50/70 px-2.5 py-1 rounded-xl border border-cyan-200/80 shadow-2xs flex items-center gap-2 shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-cyan-100 text-cyan-700 flex items-center justify-center shrink-0">
+              <Armchair className="w-3.5 h-3.5" />
             </div>
             <div className="min-w-0">
-              <span className="text-[10px] font-black uppercase tracking-wider text-cyan-800 block truncate">
+              <span className="text-[9px] font-black uppercase tracking-wider text-cyan-800 block truncate leading-none">
                 VAGAS DISPONÍVEIS
               </span>
-              <span className="text-2xl font-black text-cyan-950 leading-tight block">
+              <span className="text-sm md:text-base font-black text-cyan-950 leading-tight block mt-0.5">
                 {indicadores.vagasDisponiveis}
               </span>
             </div>
           </div>
 
           {/* 6. Veículos Disponíveis */}
-          <div className="bg-purple-50/70 p-3 rounded-2xl border border-purple-200/80 shadow-2xs flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
-              <Car className="w-5 h-5" />
+          <div className="bg-purple-50/70 px-2.5 py-1 rounded-xl border border-purple-200/80 shadow-2xs flex items-center gap-2 shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+              <Car className="w-3.5 h-3.5" />
             </div>
             <div className="min-w-0">
-              <span className="text-[10px] font-black uppercase tracking-wider text-purple-800 block truncate">
+              <span className="text-[9px] font-black uppercase tracking-wider text-purple-800 block truncate leading-none">
                 VEÍCULOS DISPONÍVEIS
               </span>
-              <span className="text-2xl font-black text-purple-900 leading-tight block">
+              <span className="text-sm md:text-base font-black text-purple-900 leading-tight block mt-0.5">
                 {indicadores.veiculosDisponiveis}
               </span>
             </div>
           </div>
 
         </div>
-      </section>
+
+        {/* Direita: Ações */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleSincronizarRegulacao}
+            disabled={refreshing}
+            className="px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+            title="Sincronizar dados em tempo real com a Regulação"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-slate-500 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
+            <span className="hidden sm:inline">Sincronizar Regulação</span>
+          </button>
+
+          {onOpenNewTripModal && (
+            <button
+              type="button"
+              onClick={() => onOpenNewTripModal(filterDate || undefined, focoDestino !== 'TODOS' ? focoDestino : undefined)}
+              className="px-3.5 py-1.5 bg-[#5433FF] hover:bg-[#4628df] text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-sm shadow-indigo-500/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+            >
+              <span>+ NOVA VIAGEM</span>
+            </button>
+          )}
+        </div>
+      </header>
 
       {/* ========================================================================= */}
       {/* ÁREA 3 — FILTROS EM UMA ÚNICA LINHA NO DESKTOP */}
