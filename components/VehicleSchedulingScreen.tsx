@@ -2461,106 +2461,52 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                 })}
               </div>
 
-              {/* Status do Modo da Viagem na MESMA LINHA das abas (quando na aba Tripulação e desbloqueada) */}
+              {/* Status do Modo da Viagem na MESMA LINHA das abas (compacto, apenas ícone) */}
               {modalActiveTab === 'tripulacao' && formData.vehicleId && isTripulacaoUnlocked && (
                 <div className="flex items-center gap-2 pb-1.5 md:pb-2 self-end md:self-auto shrink-0 animate-fade-in flex-wrap justify-end">
                   {isSpecialTreatmentTrip ? (
                     isHemodialysisVan ? (
-                      /* BANNER DE VAN DE HEMODIÁLISE COMPACTO NA MESMA LINHA */
-                      <div className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-teal-500/10 via-indigo-500/10 to-purple-500/10 border border-teal-500/30 flex items-center gap-2.5 shadow-2xs">
-                        <div className="w-6 h-6 rounded-lg bg-teal-500/20 text-teal-700 flex items-center justify-center shrink-0 border border-teal-500/30">
-                          <HeartPulse className="w-3.5 h-3.5 text-teal-600" />
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-black text-slate-900 uppercase tracking-tight whitespace-nowrap">Van Exclusiva de Hemodiálise</span>
-                          <span className="text-slate-300 hidden lg:inline">•</span>
-                          <span className="text-[11px] text-slate-500 font-medium hidden lg:inline">
-                            Transporte conjunto liberado
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="px-2 py-0.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase">
-                            Pac: {patientCount}
-                          </span>
-                          <span className="px-2 py-0.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase">
-                            Acomp: {companionCount}
-                          </span>
-                          <span className="px-2 py-0.5 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 text-[10px] font-black uppercase">
-                            Total: {totalCrewCount}/{maxVanCrewCapacity}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleOpenTripulacaoModal}
-                          className="px-2.5 py-1 rounded-lg border border-teal-200 hover:border-teal-300 bg-white hover:bg-teal-50 text-teal-700 font-black text-[10px] uppercase tracking-wider flex items-center gap-1 transition-all shadow-2xs cursor-pointer active:scale-95 shrink-0"
-                          title="Alterar modo da viagem"
-                        >
-                          <ArrowRightLeft className="w-3 h-3" />
-                          <span>Alterar Modo</span>
-                        </button>
-                      </div>
-                    ) : (
-                      /* BANNER DE VEÍCULO EXCLUSIVO ONCOLÓGICO COMPACTO NA MESMA LINHA */
-                      <div className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-purple-500/10 border border-amber-500/30 flex items-center gap-2.5 shadow-2xs">
-                        <div className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-700 flex items-center justify-center shrink-0 border border-amber-500/30">
-                          <HeartPulse className="w-3.5 h-3.5 text-amber-600" />
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-black text-slate-900 uppercase tracking-tight whitespace-nowrap">Viagem Exclusiva Oncológica</span>
-                          <span className="text-slate-300 hidden lg:inline">•</span>
-                          <span className="text-[11px] text-slate-500 font-medium hidden lg:inline">
-                            Restrito ao paciente
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className={`px-2 py-0.5 rounded-lg border text-[10px] font-black uppercase ${
-                            patientCount >= 1 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-600 border-slate-200'
-                          }`}>
-                            Pac: {patientCount}/1
-                          </span>
-                          <span className="px-2 py-0.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase">
-                            Acomp: {companionCount}/2
-                          </span>
-                          <span className="px-2 py-0.5 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 text-[10px] font-black uppercase">
-                            Total: {totalCrewCount}/3
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleOpenTripulacaoModal}
-                          className="px-2.5 py-1 rounded-lg border border-amber-200 hover:border-amber-300 bg-white hover:bg-amber-50 text-amber-800 font-black text-[10px] uppercase tracking-wider flex items-center gap-1 transition-all shadow-2xs cursor-pointer active:scale-95 shrink-0"
-                          title="Alterar modo da viagem"
-                        >
-                          <ArrowRightLeft className="w-3 h-3" />
-                          <span>Alterar Modo</span>
-                        </button>
-                      </div>
-                    )
-                  ) : (
-                    /* BANNER VIAGEM CONVENCIONAL PADRÃO NA MESMA LINHA DAS ABAS */
-                    <div className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 flex items-center gap-2.5 shadow-2xs">
-                      <div className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
-                        <Users className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-xs font-black text-slate-900 uppercase tracking-tight whitespace-nowrap">
-                          Viagem Convencional
-                        </span>
-                        <span className="text-slate-300 hidden sm:inline">•</span>
-                        <span className="text-[11px] text-slate-500 font-medium hidden sm:inline">
-                          Sem restrição oncológica/hemodiálise aplicada.
-                        </span>
-                      </div>
+                      /* MODO VAN DE HEMODIÁLISE COMPACTO (APENAS ÍCONE E VAGAS) */
                       <button
                         type="button"
                         onClick={handleOpenTripulacaoModal}
-                        className="px-2.5 py-1 rounded-lg border border-slate-200 hover:border-indigo-300 bg-slate-50 hover:bg-indigo-50/70 text-indigo-600 font-black text-[10px] uppercase tracking-wider flex items-center gap-1 transition-all shadow-2xs cursor-pointer active:scale-95 shrink-0"
-                        title="Alterar modo da viagem"
+                        className="h-8 px-2 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-700 flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer active:scale-95 shrink-0"
+                        title={`Van Exclusiva de Hemodiálise (${patientCount} pac, ${companionCount} acomp, total ${totalCrewCount}/${maxVanCrewCapacity}) — Clique para alterar modo`}
                       >
-                        <ArrowRightLeft className="w-3 h-3" />
-                        <span>Alterar Modo</span>
+                        <div className="w-5 h-5 rounded-md bg-teal-500/20 text-teal-700 flex items-center justify-center shrink-0">
+                          <HeartPulse className="w-3.5 h-3.5 text-teal-600" />
+                        </div>
+                        <span className="text-[10px] font-black">{totalCrewCount}/{maxVanCrewCapacity}</span>
+                        <ArrowRightLeft className="w-3 h-3 text-teal-600" />
                       </button>
-                    </div>
+                    ) : (
+                      /* MODO VEÍCULO EXCLUSIVO ONCOLÓGICO COMPACTO (APENAS ÍCONE E VAGAS) */
+                      <button
+                        type="button"
+                        onClick={handleOpenTripulacaoModal}
+                        className="h-8 px-2 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer active:scale-95 shrink-0"
+                        title={`Viagem Exclusiva Oncológica (${patientCount}/1 pac, ${companionCount}/2 acomp, total ${totalCrewCount}/3) — Clique para alterar modo`}
+                      >
+                        <div className="w-5 h-5 rounded-md bg-amber-500/20 text-amber-700 flex items-center justify-center shrink-0">
+                          <HeartPulse className="w-3.5 h-3.5 text-amber-600" />
+                        </div>
+                        <span className="text-[10px] font-black">{totalCrewCount}/3</span>
+                        <ArrowRightLeft className="w-3 h-3 text-amber-600" />
+                      </button>
+                    )
+                  ) : (
+                    /* MODO VIAGEM CONVENCIONAL COMPACTO (APENAS ÍCONE) */
+                    <button
+                      type="button"
+                      onClick={handleOpenTripulacaoModal}
+                      className="h-8 px-2 rounded-xl bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 text-indigo-600 flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer active:scale-95 shrink-0"
+                      title="Viagem Convencional (Sem restrição oncológica/hemodiálise aplicada) — Clique para alterar modo"
+                    >
+                      <div className="w-5 h-5 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                        <Users className="w-3.5 h-3.5" />
+                      </div>
+                      <ArrowRightLeft className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600" />
+                    </button>
                   )}
                 </div>
               )}
