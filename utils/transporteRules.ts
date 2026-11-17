@@ -290,3 +290,204 @@ export const calcularIndicadoresTransporte = (
     veiculosDisponiveis
   };
 };
+
+export interface VeiculoElegivelFiltroParams {
+  dataAlvo: string;
+  destAlvo?: string;
+  schedules: VehicleSchedule[];
+  vehicles: Vehicle[];
+  persons?: Person[];
+}
+
+export interface VeiculoLaranjaItem {
+  id: string;
+  tipo: 'laranja';
+  schedule: VehicleSchedule;
+  vehicle: Vehicle;
+  driver?: Person;
+  vagasLivres: number;
+  capacidadePassageiros: number;
+  ocupados: number;
+  horarioSaida: string;
+  horarioRetorno?: string;
+  destino: string;
+  statusViagem?: string;
+}
+
+export interface VeiculoVerdeItem {
+  id: string;
+  tipo: 'verde';
+  vehicle: Vehicle;
+  driver?: Person;
+  vagasLivres: number;
+  capacidadePassageiros: number;
+  ocupados: number;
+  destino: string;
+  statusViagem: string;
+}
+
+export type VeiculoElegivelItem = VeiculoLaranjaItem | VeiculoVerdeItem;
+
+export interface VeiculoElegivelResultado {
+  veiculosLaranja: VeiculoLaranjaItem[];
+  veiculosVerdes: VeiculoVerdeItem[];
+  veiculosElegiveis: VeiculoElegivelItem[];
+  vagasDisponiveis: number;
+  veiculosDisponiveis: number;
+}
+
+/**
+ * Filtra e organiza os veículos elegíveis para a Central de Transporte de Pacientes:
+ * 1. LARANJA: Veículos já escalados para o destino e data selecionados, com vagas disponíveis (vagasLivres > 0).
+ * 2. VERDE: Veículos operacionais da frota disponíveis na data, sem destino definido e sem conflito de agendamento.
+ * Veículos lotados, indisponíveis ou escalados para outros destinos são rigorosamente ocultados.
+ */
+export const filtrarVeiculosElegiveisTransporte = (params: VeiculoElegivelFiltroParams): VeiculoElegivelResultado => {
+  const { dataAlvo, destAlvo, schedules = [], vehicles = [], persons = [] } = params;
+
+  if (!dataAlvo) {
+    return {
+      veiculosLaranja: [],
+      veiculosVerdes: [],
+      veiculosElegiveis: [],
+      vagasDisponiveis: 0,
+      veiculosDisponiveis: 0
+    };
+  }
+
+  const normDestAlvo = destAlvo && destAlvo !== 'TODOS' && destAlvo !== 'Destino não informado'
+    ? normalizeCityTransporte(destAlvo)
+    : '';
+
+  // =========================================================================
+  // 1. VEÍCULOS LARANJA: VIAGEM EXISTENTE PARA O DESTINO SELECIONADO COM VAGAS
+  // Regra obrigatória: Só é LARANJA se houver um destino específico definido E
+  // a viagem for para este mesmo município. É PROIBIDO misturar destinos diferentes!
+  // Se o destino for indefinido ou 'Destino não informado', nenhuma viagem pode ser laranja.
+  // =========================================================================
+  const veiculosLaranja: VeiculoLaranjaItem[] = [];
+
+  if (normDestAlvo) {
+    schedules.forEach(sch => {
+      if (sch.status === 'cancelado') return;
+
+      const depDate = (sch.departureDateTime || '').split('T')[0];
+      if (depDate !== dataAlvo) return;
+
+      // Destino: compatibilidade estrita obrigatória
+      const normDestSch = normalizeCityTransporte(sch.destination || '');
+      const match = normDestSch.includes(normDestAlvo) || normDestAlvo.includes(normDestSch);
+      if (!match) return; // PROIBIDO misturar veículos de destinos diferentes!
+
+      const veic = vehicles.find(v => v.id === sch.vehicleId);
+      const stVeic = (veic?.status || '').toLowerCase();
+      if (stVeic === 'manutencao' || stVeic === 'inativo' || stVeic === 'baixado') return;
+      if (veic?.maintenanceStatus === 'Em Manutenção') return;
+
+      const capTotal = veic?.passengerCapacity || (veic as any)?.capacity || 5;
+      const capPassageiros = Math.max(1, capTotal - 1);
+      const passageiros = sch.passengers || [];
+      const ocupados = passageiros.length;
+      const vagasLivres = Math.max(0, capPassageiros - ocupados);
+
+      // REGRA OBRIGATÓRIA: Veículos com lotação completa (0 vagas) DEVEM SER OCULTADOS!
+      if (vagasLivres <= 0) return;
+
+      const mot = persons.find(p => p.id === sch.driverId);
+
+      veiculosLaranja.push({
+        id: sch.id,
+        tipo: 'laranja',
+        schedule: sch,
+        vehicle: (veic || {
+          id: sch.vehicleId,
+          plate: (sch as any).vehiclePlate || 'Sem placa',
+          brand: 'Veículo',
+          model: (sch as any).vehicleModel || 'Municipal',
+          passengerCapacity: capTotal,
+          capacity: capTotal,
+          status: 'operacional'
+        }) as Vehicle,
+        driver: mot || ({
+          id: sch.driverId,
+          name: (sch as any).driverName || 'Motorista Oficial'
+        } as Person),
+        vagasLivres,
+        capacidadePassageiros: capPassageiros,
+        ocupados,
+        horarioSaida: sch.departureDateTime ? new Date(sch.departureDateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '07:00',
+        horarioRetorno: sch.returnDateTime ? new Date(sch.returnDateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : undefined,
+        destino: sch.destination || 'Destino não informado',
+        statusViagem: sch.status
+      });
+    });
+
+    // Ordenar Laranjas por horário de saída
+    veiculosLaranja.sort((a, b) => (a.schedule.departureDateTime || '').localeCompare(b.schedule.departureDateTime || ''));
+  }
+
+  // =========================================================================
+  // 2. VEÍCULOS VERDES: VEÍCULOS DISPONÍVEIS NA DATA SEM DESTINO DEFINIDO
+  // =========================================================================
+  const veiculosComViagemNaData = new Set<string>();
+  schedules.forEach(sch => {
+    if (sch.status === 'cancelado') return;
+    const depDate = (sch.departureDateTime || '').split('T')[0];
+    if (depDate === dataAlvo && sch.vehicleId) {
+      veiculosComViagemNaData.add(sch.vehicleId);
+    }
+  });
+
+  const veiculosVerdes: VeiculoVerdeItem[] = [];
+
+  vehicles.forEach(veic => {
+    const st = (veic.status || '').toLowerCase();
+    if (st === 'manutencao' || st === 'inativo' || st === 'baixado') return;
+    if (veic.maintenanceStatus === 'Em Manutenção') return;
+    if (veic.availableForScheduling === 'Não') return;
+    const cat = (veic.vehicleCategory || veic.type || '').toLowerCase();
+    if (cat === 'moto' || cat === 'máquina pesada' || cat === 'caminhão' || cat === 'acessórios') return;
+
+    // Veículo não pode ter nenhuma viagem cadastrada na data (sem conflito de agenda)
+    if (veiculosComViagemNaData.has(veic.id)) return;
+
+    const capTotal = veic.passengerCapacity || (veic as any)?.capacity || 5;
+    const capPassageiros = Math.max(1, capTotal - 1);
+    if (capPassageiros <= 0) return;
+
+    const mot = veic.responsiblePersonId ? persons.find(p => p.id === veic.responsiblePersonId) : undefined;
+
+    veiculosVerdes.push({
+      id: `verde_${veic.id}`,
+      tipo: 'verde',
+      vehicle: veic,
+      driver: mot,
+      vagasLivres: capPassageiros,
+      capacidadePassageiros: capPassageiros,
+      ocupados: 0,
+      destino: 'Sem destino definido',
+      statusViagem: 'Disponível'
+    });
+  });
+
+  // Ordenar Verdes por maior capacidade de passageiros
+  veiculosVerdes.sort((a, b) => b.capacidadePassageiros - a.capacidadePassageiros);
+
+  // Ordem estrita: 1º Laranjas (viagens no destino) -> 2º Verdes (livres sem destino)
+  const veiculosElegiveis: VeiculoElegivelItem[] = [...veiculosLaranja, ...veiculosVerdes];
+
+  // REGRA 8: Indicadores
+  // VAGAS DISPONÍVEIS: somar exclusivamente vagas de viagens programadas para o destino e data selecionados (Veículos Laranja)
+  const vagasDisponiveis = veiculosLaranja.reduce((acc, curr) => acc + curr.vagasLivres, 0);
+
+  // VEÍCULOS DISPONÍVEIS: total de veículos elegíveis (Laranjas com vagas + Verdes disponíveis)
+  const veiculosDisponiveis = veiculosElegiveis.length;
+
+  return {
+    veiculosLaranja,
+    veiculosVerdes,
+    veiculosElegiveis,
+    vagasDisponiveis,
+    veiculosDisponiveis
+  };
+};

@@ -29,7 +29,8 @@ import {
   Trash2,
   CalendarDays,
   ShieldAlert,
-  Armchair
+  Armchair,
+  Plus
 } from 'lucide-react';
 import { 
   TransporteDemanda, 
@@ -46,7 +47,8 @@ import {
   GrupoDataHierarquico, 
   GrupoDestinoHierarquico,
   normalizeCityTransporte,
-  normalizeTransporteText
+  normalizeTransporteText,
+  filtrarVeiculosElegiveisTransporte
 } from '../../../utils/transporteRules';
 import { ManifestoPassageirosModal } from './ManifestoPassageirosModal';
 
@@ -59,7 +61,7 @@ interface TransportePacientesScreenProps {
   currentUserId?: string;
   currentUserName?: string;
   onNavigate?: (path: string) => void;
-  onOpenNewTripModal?: (defaultDate?: string, defaultDestination?: string) => void;
+  onOpenNewTripModal?: (defaultDate?: string, defaultDestination?: string, defaultVehicleId?: string) => void;
 }
 
 export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps> = ({
@@ -89,8 +91,9 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
   // Seleção múltipla de pacientes (inicia limpa sem seleção prévia)
   const [selectedDemandaIds, setSelectedDemandaIds] = useState<string[]>([]);
 
-  // Veículo selecionado na coluna direita (inicia sem seleção)
-  const [selectedViagemId, setSelectedViagemId] = useState<string>('');
+  // Veículo/Viagem selecionada na coluna direita (inicia sem seleção)
+  const [selectedViagemId, setSelectedViagemId] = useState<string>(''); // Para veículos LARANJA (viagem existente)
+  const [selectedVeiculoVerdeId, setSelectedVeiculoVerdeId] = useState<string>(''); // Para veículos VERDE (livre sem destino)
 
   // Estados de expansão do Acordeão (datas e destinos abertos por padrão)
   const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
@@ -253,78 +256,47 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
     return Array.from(set).sort();
   }, [demandas]);
 
-  // Lista de Viagens Reais (Exclusivamente de vehicle_schedules)
-  const viagensDisponiveis = useMemo(() => {
-    const lista: {
-      schedule: VehicleSchedule;
-      vehicle: Vehicle;
-      driver?: Person;
-      vagasLivres: number;
-      capacidadePassageiros: number;
-      ocupados: number;
-    }[] = [];
+  // Agrupamento Hierárquico Obrigatório: DATA -> DESTINO -> PACIENTES
+  const gruposHierarquicos = useMemo(() => {
+    return agruparHierarquicoDataDestino(demandasFiltradas);
+  }, [demandasFiltradas]);
 
-    // Viagens reais vindas de schedules
-    schedules.forEach(sch => {
-      if (sch.status === 'cancelado') return;
+  // Primeira demanda selecionada para sincronizar data e destino automaticamente
+  const primeiraDemandaSelecionada = useMemo(() => {
+    if (selectedDemandaIds.length === 0) return null;
+    return demandas.find(d => selectedDemandaIds.includes(d.id)) || null;
+  }, [demandas, selectedDemandaIds]);
 
-      const veic = vehicles.find(v => v.id === sch.vehicleId);
-      const mot = persons.find(p => p.id === sch.driverId);
+  // Data Alvo vigente para filtrar os veículos disponíveis (Item 2)
+  // REGRA OBRIGATÓRIA: Não assumir data oculta ao entrar. Apenas define data se o usuário filtrar,
+  // selecionar um paciente ou clicar em uma data/destino no acordeão.
+  const dataAlvo = useMemo(() => {
+    if (focoData) return focoData;
+    if (filterDate) return filterDate;
+    if (primeiraDemandaSelecionada?.dataAtendimento) return primeiraDemandaSelecionada.dataAtendimento;
+    return '';
+  }, [focoData, filterDate, primeiraDemandaSelecionada]);
 
-      const capTotal = veic?.passengerCapacity || (veic as any)?.capacity || 5;
-      const capPassageiros = Math.max(1, capTotal - 1);
-      const ocupados = (sch.passengers || []).length;
-      const vagas = Math.max(0, capPassageiros - ocupados);
+  // Destino Alvo vigente para filtrar os veículos disponíveis (Item 2 & 4)
+  const destAlvo = useMemo(() => {
+    if (focoDestino && focoDestino !== 'TODOS') return focoDestino;
+    if (filterDestino && filterDestino !== 'TODOS') return filterDestino;
+    if (primeiraDemandaSelecionada?.municipioDestino) return primeiraDemandaSelecionada.municipioDestino;
+    return '';
+  }, [focoDestino, filterDestino, primeiraDemandaSelecionada]);
 
-      lista.push({
-        schedule: sch,
-        vehicle: (veic || {
-          id: sch.vehicleId,
-          plate: (sch as any).vehiclePlate || 'Sem placa',
-          brand: 'Veículo',
-          model: (sch as any).vehicleModel || 'Municipal',
-          passengerCapacity: capTotal,
-          capacity: capTotal,
-          status: 'operacional'
-        }) as Vehicle,
-        driver: mot || ({
-          id: sch.driverId,
-          name: (sch as any).driverName || 'Motorista Oficial'
-        } as Person),
-        vagasLivres: vagas,
-        capacidadePassageiros: capPassageiros,
-        ocupados
-      });
+  // Estrutura Unificada de Veículos Elegíveis (Regras 1 a 5): LARANJAS (Viagem no destino) e VERDES (Livres sem destino)
+  const { veiculosLaranja, veiculosVerdes, veiculosElegiveis } = useMemo(() => {
+    return filtrarVeiculosElegiveisTransporte({
+      dataAlvo,
+      destAlvo,
+      schedules,
+      vehicles,
+      persons
     });
+  }, [schedules, vehicles, persons, dataAlvo, destAlvo]);
 
-    // Priorização conforme especificação:
-    // "Ao selecionar uma data e um destino na coluna esquerda, a coluna direita deverá apresentar prioritariamente as viagens correspondentes."
-    return lista.sort((a, b) => {
-      const dataAlvo = focoData || filterDate;
-      const destAlvo = focoDestino || (filterDestino !== 'TODOS' ? filterDestino : '');
-
-      const normDestAlvo = destAlvo ? normalizeCityTransporte(destAlvo) : '';
-      const normDestA = normalizeCityTransporte(a.schedule.destination);
-      const normDestB = normalizeCityTransporte(b.schedule.destination);
-
-      const matchDataA = dataAlvo ? a.schedule.departureDateTime.startsWith(dataAlvo) : false;
-      const matchDataB = dataAlvo ? b.schedule.departureDateTime.startsWith(dataAlvo) : false;
-
-      const matchDestA = normDestAlvo ? normDestA.includes(normDestAlvo) || normDestAlvo.includes(normDestA) : false;
-      const matchDestB = normDestAlvo ? normDestB.includes(normDestAlvo) || normDestAlvo.includes(normDestB) : false;
-
-      const scoreA = (matchDataA ? 2 : 0) + (matchDestA ? 2 : 0);
-      const scoreB = (matchDataB ? 2 : 0) + (matchDestB ? 2 : 0);
-
-      if (scoreA !== scoreB) {
-        return scoreB - scoreA;
-      }
-
-      return (a.schedule.departureDateTime || '').localeCompare(b.schedule.departureDateTime || '');
-    });
-  }, [schedules, vehicles, persons, focoData, focoDestino, filterDate, filterDestino]);
-
-  // Indicadores Principais (Respeitam estritamente dados reais e filtros ativos; se 0, exibem 0)
+  // Indicadores Principais Dinâmicos (Regra 8: Apenas veículos elegíveis para a data e destino selecionados)
   const indicadores = useMemo(() => {
     const escopo = filterDate ? demandas.filter(d => d.dataAtendimento === filterDate) : demandas;
     const totalPacientes = new Set(escopo.map(d => d.pacienteId || d.pacienteCpf || d.pacienteNome || d.id)).size;
@@ -332,17 +304,11 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
     const alocados = escopo.filter(d => d.statusTransporte === 'Alocado').length;
     const confirmados = escopo.filter(d => d.statusTransporte === 'Confirmado').length;
 
-    // Vagas disponíveis calculadas exclusivamente a partir das viagens reais ativas no escopo
-    const viagensEscopo = filterDate
-      ? viagensDisponiveis.filter(v => v.schedule.departureDateTime.startsWith(filterDate))
-      : viagensDisponiveis;
-    const vagasDisponiveis = viagensEscopo.reduce((acc, curr) => acc + curr.vagasLivres, 0);
+    // Vagas disponíveis calculadas exclusivamente das viagens ativas com vagas para a data e destino (Laranja)
+    const vagasDisponiveis = veiculosLaranja.reduce((acc, curr) => acc + curr.vagasLivres, 0);
 
-    // Veículos disponíveis operacionais da frota real
-    const veiculosDisponiveis = vehicles.filter(v => {
-      const st = (v.status || '').toLowerCase();
-      return st === 'operacional' || st === 'ativo' || st === '';
-    }).length || vehicles.length;
+    // Veículos disponíveis elegíveis (Laranjas com vagas + Verdes disponíveis)
+    const veiculosDisponiveis = veiculosElegiveis.length;
 
     return {
       totalPacientes,
@@ -352,12 +318,7 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
       vagasDisponiveis,
       veiculosDisponiveis
     };
-  }, [demandas, filterDate, viagensDisponiveis, vehicles]);
-
-  // Agrupamento Hierárquico Obrigatório: DATA -> DESTINO -> PACIENTES
-  const gruposHierarquicos = useMemo(() => {
-    return agruparHierarquicoDataDestino(demandasFiltradas);
-  }, [demandasFiltradas]);
+  }, [demandas, filterDate, veiculosLaranja, veiculosElegiveis]);
 
   // Pacientes atualmente selecionados (objetos completos)
   const pacientesSelecionados = useMemo(() => {
@@ -410,9 +371,19 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
       return;
     }
 
-    const viagemAlvo = viagensDisponiveis.find(v => v.schedule.id === selectedViagemId);
+    // Se o usuário selecionou um veículo verde (livre sem destino), abre o fluxo de criação da viagem
+    if (selectedVeiculoVerdeId) {
+      const veiculoVerde = veiculosVerdes.find(v => v.vehicle.id === selectedVeiculoVerdeId);
+      if (onOpenNewTripModal && veiculoVerde) {
+        onOpenNewTripModal(dataAlvo, (destAlvo && destAlvo !== 'Destino não informado') ? destAlvo : undefined, veiculoVerde.vehicle.id);
+        showToast(`Criando viagem com o veículo ${veiculoVerde.vehicle.plate}. Preencha os horários e o motorista para prosseguir.`, 'info');
+        return;
+      }
+    }
+
+    const viagemAlvo = veiculosLaranja.find(v => v.schedule.id === selectedViagemId);
     if (!viagemAlvo) {
-      showToast('Selecione um veículo na coluna da direita para vincular os passageiros.', 'error');
+      showToast('Selecione um veículo com viagem ou um veículo livre na coluna da direita.', 'error');
       return;
     }
 
@@ -628,7 +599,7 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
           {onOpenNewTripModal && (
             <button
               type="button"
-              onClick={() => onOpenNewTripModal(filterDate || undefined, focoDestino !== 'TODOS' ? focoDestino : undefined)}
+              onClick={() => onOpenNewTripModal(dataAlvo || undefined, (destAlvo && destAlvo !== 'TODOS' && destAlvo !== 'Destino não informado') ? destAlvo : undefined)}
               className="px-3 py-1 bg-[#5433FF] hover:bg-[#4628df] text-white font-black text-[11px] uppercase tracking-wider rounded-lg shadow-sm shadow-indigo-500/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
             >
               <span>+ NOVA VIAGEM</span>
@@ -754,7 +725,7 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          Veículos ({viagensDisponiveis.length})
+          Veículos ({veiculosElegiveis.length})
         </button>
       </div>
 
@@ -1082,10 +1053,13 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
               </div>
               <div>
                 <h2 className="text-xs font-black text-slate-900 uppercase tracking-tight">
-                  VEÍCULOS E VIAGENS{focoDestino || filterDate ? ` (${focoDestino ? focoDestino : 'Geral'}${filterDate ? ` — ${new Date(filterDate + 'T12:00:00').toLocaleDateString('pt-BR')}` : ''})` : ''}
+                  VEÍCULOS E VIAGENS
+                  {dataAlvo ? ` (${destAlvo && destAlvo !== 'Destino não informado' ? `${destAlvo} — ` : ''}${dataAlvo.split('-').reverse().join('/')})` : ''}
                 </h2>
-                <p className="text-[10px] text-slate-400 font-bold leading-none mt-0.5">
-                  Selecione um veículo e vincule os pacientes
+                <p className="text-[10px] text-slate-500 font-bold leading-none mt-0.5">
+                  {veiculosLaranja.length > 0
+                    ? `${veiculosLaranja.length} viagem(ns) para o destino • ${veiculosVerdes.length} veículo(s) livre(s)`
+                    : dataAlvo ? `${veiculosVerdes.length} veículo(s) livre(s) sem destino nesta data` : 'Selecione uma data e destino para filtrar'}
                 </p>
               </div>
             </div>
@@ -1096,107 +1070,192 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
                 type="button"
                 onClick={handlePrepararVinculacao}
                 className="px-3 py-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black text-[11px] uppercase tracking-wider rounded-lg shadow-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 animate-pulse"
-                title="Vincular pacientes selecionados ao veículo escolhido"
+                title={selectedViagemId ? "Vincular à viagem existente selecionada" : selectedVeiculoVerdeId ? "Criar nova viagem com o veículo livre selecionado e vincular" : "Selecione um veículo"}
               >
                 <Link2 className="w-3.5 h-3.5" />
-                <span>Vincular ({selectedDemandaIds.length})</span>
+                <span>
+                  {selectedVeiculoVerdeId 
+                    ? `+ Criar Viagem (${selectedDemandaIds.length})` 
+                    : `Vincular (${selectedDemandaIds.length})`}
+                </span>
               </button>
             )}
           </div>
 
-          {/* Lista Compacta de Veículos Disponíveis com Rádio Button */}
+          {/* Lista de Veículos Elegíveis (Laranjas: com viagem no destino | Verdes: livres sem destino) */}
           <div className="flex-1 overflow-y-auto p-2 sm:p-2.5 space-y-2 custom-scrollbar">
-            {viagensDisponiveis.length === 0 ? (
-              <div className="py-16 text-center space-y-2.5">
+            {veiculosElegiveis.length === 0 ? (
+              <div className="py-16 text-center space-y-2.5 px-4">
                 <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
-                  <Car className="w-5 h-5" />
+                  {dataAlvo ? <Car className="w-5 h-5" /> : <CalendarDays className="w-5 h-5 text-indigo-500" />}
                 </div>
                 <h4 className="text-xs font-black text-slate-700 uppercase">
-                  Nenhuma Viagem Cadastrada
+                  {dataAlvo 
+                    ? 'Nenhum veículo com vagas disponíveis para a data e o destino selecionados.' 
+                    : 'Nenhuma data selecionada'}
                 </h4>
                 <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
-                  Não foram encontradas viagens municipais registradas no módulo de veículos.
+                  {dataAlvo 
+                    ? 'Não foram encontradas viagens com vagas para este destino ou veículos livres operacionais na data informada.'
+                    : 'Selecione uma data e um destino nas demandas ao lado (ou utilize os filtros acima) para consultar os veículos e viagens disponíveis.'}
                 </p>
                 {onOpenNewTripModal && (
                   <div className="pt-1">
                     <button
                       type="button"
-                      onClick={() => onOpenNewTripModal(filterDate || undefined, focoDestino !== 'TODOS' ? focoDestino : undefined)}
+                      onClick={() => onOpenNewTripModal(dataAlvo || undefined, (destAlvo && destAlvo !== 'TODOS' && destAlvo !== 'Destino não informado') ? destAlvo : undefined)}
                       className="px-3 py-1.5 bg-[#5433FF] hover:bg-[#4628df] text-white font-extrabold text-xs rounded-lg inline-flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
                     >
+                      <Plus className="w-3.5 h-3.5" />
                       <span>+ Nova Viagem</span>
                     </button>
                   </div>
                 )}
               </div>
             ) : (
-              viagensDisponiveis.map((item) => {
-                const isSelected = selectedViagemId === item.schedule.id;
+              veiculosElegiveis.map((item) => {
+                const isLaranja = item.tipo === 'laranja';
+                const isSelected = isLaranja 
+                  ? selectedViagemId === item.schedule?.id 
+                  : selectedVeiculoVerdeId === item.vehicle.id;
+
                 const categoriaVeic = item.vehicle.vehicleCategory || item.vehicle.type || 'Veículo';
 
                 return (
                   <div
-                    key={item.schedule.id}
-                    onClick={() => setSelectedViagemId(item.schedule.id)}
-                    className={`p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
-                      isSelected
-                        ? 'border-indigo-600 bg-indigo-50/40 ring-2 ring-indigo-500/20 shadow-xs'
-                        : 'border-slate-200/90 bg-white hover:border-slate-300 hover:shadow-2xs'
+                    key={item.id}
+                    onClick={() => {
+                      if (isLaranja) {
+                        setSelectedViagemId(item.schedule!.id);
+                        setSelectedVeiculoVerdeId('');
+                      } else {
+                        setSelectedVeiculoVerdeId(item.vehicle.id);
+                        setSelectedViagemId('');
+                      }
+                    }}
+                    className={`p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer flex flex-col gap-2 ${
+                      isLaranja
+                        ? isSelected
+                          ? 'border-amber-500 bg-amber-100/80 ring-2 ring-amber-500/25 shadow-xs'
+                          : 'border-amber-300/80 bg-amber-50/60 hover:bg-amber-100/50 hover:border-amber-400 shadow-2xs'
+                        : isSelected
+                          ? 'border-emerald-500 bg-emerald-100/80 ring-2 ring-emerald-500/25 shadow-xs'
+                          : 'border-emerald-300/80 bg-emerald-50/60 hover:bg-emerald-100/50 hover:border-emerald-400 shadow-2xs'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      {/* Radio Button Customizado */}
-                      <div className="shrink-0">
-                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${
-                          isSelected 
-                            ? 'border-indigo-600 bg-white' 
-                            : 'border-slate-300 bg-white'
-                        }`}>
-                          {isSelected && (
-                            <div className="w-2 h-2 rounded-full bg-indigo-600" />
-                          )}
-                        </div>
-                      </div>
+                    {/* Topo do Card: Badge de Identificação Obrigatória por Cores (Item 4) */}
+                    <div className="flex items-center justify-between gap-2">
+                      {isLaranja ? (
+                        <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-amber-100 border border-amber-300 text-amber-900 flex items-center gap-1 shadow-2xs">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
+                          VIAGEM PARA O DESTINO — VAGAS DISPONÍVEIS
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-emerald-100 border border-emerald-300 text-emerald-900 flex items-center gap-1 shadow-2xs">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                          DISPONÍVEL — SEM DESTINO
+                        </span>
+                      )}
 
-                      {/* Foto / Ícone do Veículo */}
-                      <div className="w-11 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 shrink-0 overflow-hidden">
-                        <Car className="w-4 h-4 text-slate-600" />
-                      </div>
-
-                      {/* Informações Textuais */}
-                      <div className="min-w-0">
-                        <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight">
-                          {categoriaVeic.toUpperCase()} — {item.vehicle.plate || 'SEM PLACA'}
-                        </h3>
-                        <p className="text-[10.5px] text-slate-500 font-semibold truncate">
-                          Motorista: {item.driver?.name || 'Não informado'}
-                        </p>
-                        <div className="text-[9.5px] text-slate-500 font-bold mt-0.5 flex items-center gap-2 flex-wrap">
-                          <span>Saída: {item.schedule.departureDateTime ? new Date(item.schedule.departureDateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '07:00'}</span>
-                          <span>•</span>
-                          <span>Destino: {item.schedule.destination}</span>
+                      {/* Badge de Vagas / Capacidade */}
+                      <div className={`px-2 py-0.5 rounded-lg flex items-center gap-1 border shadow-2xs ${
+                        isLaranja
+                          ? 'bg-amber-100 border-amber-300 text-amber-950'
+                          : 'bg-emerald-100 border-emerald-300 text-emerald-950'
+                      }`}>
+                        <Accessibility className={`w-3.5 h-3.5 ${isLaranja ? 'text-amber-700' : 'text-emerald-700'}`} />
+                        <div className="text-right leading-none">
+                          <span className="text-[7.5px] font-black uppercase block opacity-80">
+                            {isLaranja ? 'Vagas' : 'Lugares'}
+                          </span>
+                          <span className="text-xs font-black">{item.vagasLivres}</span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Métricas e Vagas na Lateral Direita do Card */}
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="hidden sm:flex flex-col items-end text-[9.5px] font-bold text-slate-500 space-y-0.5">
-                        <span className="flex items-center gap-1">
-                          <Armchair className="w-3 h-3 text-slate-400" /> Capacidade <strong className="text-slate-800">{item.capacidadePassageiros} lugares</strong>
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <User className="w-3 h-3 text-slate-400" /> Ocupados <strong className="text-slate-800">{item.ocupados}</strong>
-                        </span>
+                    {/* Conteúdo Central do Card */}
+                    <div className="flex items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {/* Radio Button Customizado */}
+                        <div className="shrink-0">
+                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${
+                            isSelected 
+                              ? isLaranja ? 'border-amber-600 bg-white' : 'border-emerald-600 bg-white'
+                              : 'border-slate-300 bg-white'
+                          }`}>
+                            {isSelected && (
+                              <div className={`w-2 h-2 rounded-full ${isLaranja ? 'bg-amber-600' : 'bg-emerald-600'}`} />
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Ícone do Veículo */}
+                        <div className={`w-10 h-8 rounded-lg flex items-center justify-center shrink-0 border ${
+                          isLaranja 
+                            ? 'bg-amber-100/80 border-amber-200 text-amber-800' 
+                            : 'bg-emerald-100/80 border-emerald-200 text-emerald-800'
+                        }`}>
+                          <Car className="w-4 h-4" />
+                        </div>
+
+                        {/* Informações Principais */}
+                        <div className="min-w-0">
+                          <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight">
+                            {categoriaVeic.toUpperCase()} — {item.vehicle.plate || 'SEM PLACA'}
+                          </h3>
+                          {isLaranja ? (
+                            <>
+                              <p className="text-[10.5px] text-slate-700 font-semibold truncate">
+                                Motorista: <strong className="text-slate-900 font-bold">{item.driver?.name || 'Não informado'}</strong>
+                              </p>
+                              <div className="text-[9.5px] text-slate-600 font-medium mt-0.5 flex items-center gap-1.5 flex-wrap">
+                                <span>Saída: <strong>{item.horarioSaida}</strong></span>
+                                {item.horarioRetorno && <span>• Retorno: <strong>{item.horarioRetorno}</strong></span>}
+                                <span>•</span>
+                                <span>Destino: <strong>{item.destino}</strong></span>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-[10.5px] text-emerald-800 font-semibold truncate">
+                                Veículo operacional livre • Sem conflitos de agenda na data
+                              </p>
+                              <div className="text-[9.5px] text-slate-600 font-medium mt-0.5 flex items-center gap-1.5 flex-wrap">
+                                <span>Capacidade: <strong>{item.capacidadePassageiros} lugares</strong></span>
+                                {item.driver && <span>• Motorista responsável: <strong>{item.driver.name}</strong></span>}
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Badge Verde de Vagas */}
-                      <div className="px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-1 shadow-2xs">
-                        <Accessibility className="w-3.5 h-3.5 text-emerald-600" />
-                        <div className="text-right leading-none">
-                          <span className="text-[8.5px] font-black uppercase block text-emerald-700">Vagas</span>
-                          <span className="text-xs font-black text-emerald-950">{item.vagasLivres}</span>
-                        </div>
+                      {/* Métricas e Botão de Ação na Direita */}
+                      <div className="shrink-0 flex items-center gap-2">
+                        {isLaranja ? (
+                          <div className="hidden sm:flex flex-col items-end text-[9.5px] font-bold text-slate-600 space-y-0.5">
+                            <span className="flex items-center gap-1">
+                              <Armchair className="w-3 h-3 text-amber-600" /> Total: <strong className="text-slate-900">{item.capacidadePassageiros} lugares</strong>
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <User className="w-3 h-3 text-amber-600" /> Ocupados: <strong className="text-slate-900">{item.ocupados}</strong>
+                            </span>
+                          </div>
+                        ) : (
+                          onOpenNewTripModal && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenNewTripModal(dataAlvo, (destAlvo && destAlvo !== 'Destino não informado') ? destAlvo : undefined, item.vehicle.id);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10px] uppercase tracking-wider flex items-center gap-1 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                              title="Criar nova viagem com este veículo para o destino selecionado"
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>Criar Viagem</span>
+                            </button>
+                          )
+                        )}
                       </div>
                     </div>
                   </div>

@@ -2865,13 +2865,14 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
           currentUserId={currentUserId}
           currentUserName={currentUserName}
           onNavigate={onNavigate}
-          onOpenNewTripModal={(date, dest) => {
+          onOpenNewTripModal={(date, dest, vehicleId) => {
             const initialDate = date ? new Date(date + 'T12:00:00') : new Date();
-            handleOpenModal(undefined, initialDate);
-            if (dest) {
+            handleOpenModal(undefined, initialDate, vehicleId);
+            if (dest || vehicleId) {
               setFormData(prev => ({
                 ...prev,
-                destination: dest
+                destination: dest || prev.destination,
+                vehicleId: vehicleId || prev.vehicleId
               }));
             }
             handleSubViewChange('novo');
