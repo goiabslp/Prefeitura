@@ -126,52 +126,39 @@ export const TripulacaoTable: React.FC<TripulacaoTableProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* BARRA SUPERIOR: TÍTULO, PESQUISA E BOTÃO + NOVO PASSAGEIRO */}
+      {/* BARRA SUPERIOR: PESQUISA E BOTÃO + NOVO PASSAGEIRO (SEM TÍTULO) */}
       {/* ========================================================================= */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-0.5 shrink-0">
-        
-        {/* Título com Ícone */}
-        <div className="flex items-center gap-2.5 shrink-0">
-          <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black">
-            <Users className="w-4 h-4" />
-          </div>
-          <h3 className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-tight">
-            Passageiros / Tripulação
-          </h3>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-0.5 shrink-0">
+        {/* Campo de Pesquisa Instantânea */}
+        <div className="relative flex-1 max-w-md">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={filterSearch}
+            onChange={e => setFilterSearch(e.target.value)}
+            placeholder="Pesquisar passageiro por nome ou CPF..."
+            className="w-full pl-9 pr-8 py-2 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 focus:border-indigo-600 rounded-xl text-xs font-semibold text-slate-800 outline-none transition-all placeholder:text-slate-400"
+          />
+          {filterSearch && (
+            <button
+              type="button"
+              onClick={() => setFilterSearch('')}
+              className="w-4 h-4 rounded-full text-slate-400 hover:text-slate-600 absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center justify-center cursor-pointer"
+            >
+              ✕
+            </button>
+          )}
         </div>
 
-        {/* Campo de Pesquisa Instantânea e Botão Novo Passageiro na mesma linha */}
-        <div className="flex items-center gap-2.5 flex-1 max-w-xl justify-end">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              value={filterSearch}
-              onChange={e => setFilterSearch(e.target.value)}
-              placeholder="Pesquisar passageiro por nome ou CPF..."
-              className="w-full pl-9 pr-8 py-2 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 focus:border-indigo-600 rounded-xl text-xs font-semibold text-slate-800 outline-none transition-all placeholder:text-slate-400"
-            />
-            {filterSearch && (
-              <button
-                type="button"
-                onClick={() => setFilterSearch('')}
-                className="w-4 h-4 rounded-full text-slate-400 hover:text-slate-600 absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center justify-center cursor-pointer"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-
-          {/* Botão Roxo: + Novo Passageiro */}
-          <button
-            type="button"
-            onClick={onOpenNewPassengerModal}
-            className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md shadow-indigo-500/25 flex items-center gap-2 transition-all active:scale-95 cursor-pointer shrink-0"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>+ Novo Passageiro</span>
-          </button>
-        </div>
+        {/* Botão Roxo: + Novo Passageiro */}
+        <button
+          type="button"
+          onClick={onOpenNewPassengerModal}
+          className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md shadow-indigo-500/25 flex items-center gap-2 transition-all active:scale-95 cursor-pointer shrink-0 self-end sm:self-auto"
+        >
+          <UserPlus className="w-4 h-4" />
+          <span>+ Novo Passageiro</span>
+        </button>
       </div>
 
       {/* ========================================================================= */}
