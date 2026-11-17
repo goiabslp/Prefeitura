@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../../types';
-import { Search, ClipboardList, Package, Settings, History, Pill, Users, ShieldCheck } from 'lucide-react';
+import { Search, ClipboardList, Package, Settings, History, Pill, Users, ShieldCheck, Radio } from 'lucide-react';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { userCanAccessSubmodule } from '../../services/permissionService';
 
@@ -30,6 +30,7 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
     };
 
     const isConsultarActive = isModuleActive('sub_farmacia_consultar') || isModuleActive('parent_farmacia_consultar');
+    const isListaLiveActive = isModuleActive('sub_farmacia_lista_live') || isModuleActive('parent_farmacia_lista_live');
     const isRetirarActive = isModuleActive('sub_farmacia_retirar') || isModuleActive('parent_farmacia_retirar');
     const isEstoqueActive = isModuleActive('sub_farmacia_estoque') || isModuleActive('parent_farmacia_estoque');
     const isDashboardActive = isModuleActive('sub_farmacia_dashboard') || isModuleActive('parent_farmacia_dashboard');
@@ -37,6 +38,7 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
     const isGestorActive = isModuleActive('sub_farmacia_gestor') || isModuleActive('parent_farmacia_gestor');
 
     const canAccessConsultar = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_consultar', isMobileViewport ? mobileModuleStatus : moduleStatus);
+    const canAccessListaLive = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_lista_live', isMobileViewport ? mobileModuleStatus : moduleStatus);
     const canAccessRetirar = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_retirar', isMobileViewport ? mobileModuleStatus : moduleStatus);
     const canAccessEstoque = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_estoque', isMobileViewport ? mobileModuleStatus : moduleStatus);
     const canAccessDados = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_dashboard', isMobileViewport ? mobileModuleStatus : moduleStatus);
@@ -46,6 +48,7 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
 
     const visibleCardsCount = [
         canAccessConsultar,
+        canAccessListaLive,
         canAccessRetirar,
         canAccessEstoque,
         canAccessDados,
@@ -53,7 +56,9 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
         canAccessGestor
     ].filter(Boolean).length;
 
-    const gridClass = visibleCardsCount >= 6
+    const gridClass = visibleCardsCount >= 7
+        ? "w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 desktop:gap-4 max-w-7xl"
+        : visibleCardsCount >= 6
         ? "w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 desktop:gap-4 max-w-7xl"
         : visibleCardsCount === 5
         ? "w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 desktop:gap-4 max-w-6xl"
@@ -95,6 +100,32 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
                             </h3>
                             <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-pink-600 transition-colors uppercase tracking-wider text-center">
                                 Busca de Medicamentos
+                            </p>
+                        </button>
+                    )}
+
+                    {/* Card: Lista Live (Consulta em tempo real de medicamentos disponíveis) */}
+                    {canAccessListaLive && (
+                        <button
+                            onClick={() => onNavigate('farmacia:lista-live')}
+                            className="group relative w-full min-h-[110px] md:min-h-[135px] py-4 md:py-5 px-3 md:px-4 rounded-[2rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_25px_60px_rgba(16,185,129,0.15)] hover:border-emerald-200 hover:from-white hover:to-emerald-50/20 hover:-translate-y-1.5 active:scale-95 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden cursor-pointer shrink-0"
+                        >
+                            <div className="absolute top-2.5 right-3 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[8px] font-black uppercase tracking-wider">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                LIVE
+                            </div>
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                            <div className="absolute bottom-0 left-0 w-20 h-20 bg-emerald-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                            <div className="relative w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center mb-2.5 text-white group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 shadow-md shadow-emerald-500/30 ring-4 ring-white">
+                                <Radio className="w-5.5 h-5.5" />
+                            </div>
+
+                            <h3 className="text-sm md:text-base lg:text-lg font-extrabold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight uppercase text-center">
+                                Lista Live
+                            </h3>
+                            <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-emerald-600 transition-colors uppercase tracking-wider text-center">
+                                Disponíveis ao Vivo
                             </p>
                         </button>
                     )}
@@ -210,7 +241,7 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
                         </button>
                     )}
 
-                    {!canAccessConsultar && !canAccessRetirar && !canAccessEstoque && !canAccessDados && !canAccessPacientes && !canAccessGestor && (
+                    {!canAccessConsultar && !canAccessListaLive && !canAccessRetirar && !canAccessEstoque && !canAccessDados && !canAccessPacientes && !canAccessGestor && (
                         <div className="col-span-full text-center p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm max-w-md mx-auto">
                             <Pill className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                             <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Farmácia Popular</h3>

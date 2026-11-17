@@ -270,6 +270,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'farmacia': '/FarmaciaPopular',
   'farmacia:pacientes': '/FarmaciaPopular/Pacientes',
   'farmacia:consultar': '/FarmaciaPopular/Consultar',
+  'farmacia:lista-live': '/FarmaciaPopular/ListaLive',
   'farmacia:retirar': '/FarmaciaPopular/Retirar',
   'farmacia:retirar-paciente': '/FarmaciaPopular/Retirar/Paciente',
   'farmacia:retirar-medicamentos': '/FarmaciaPopular/Retirar/Medicamentos',
@@ -2516,6 +2517,14 @@ const App: React.FC = () => {
       if (lookupPath.startsWith('/farmaciapopular/pacientes')) {
         setCurrentView('farmacia');
         setAppState(prev => ({ ...prev, view: 'pacientes' }));
+        setActiveBlock(null);
+        setIsAdminSidebarOpen(false);
+        return;
+      }
+
+      if (lookupPath === '/farmaciapopular/listalive' || lookupPath.startsWith('/farmaciapopular/listalive/')) {
+        setCurrentView('farmacia');
+        setAppState(prev => ({ ...prev, view: 'lista-live' }));
         setActiveBlock(null);
         setIsAdminSidebarOpen(false);
         return;
@@ -6802,6 +6811,9 @@ timestamp: ${new Date().toISOString()}`);
                   } else if (view === 'farmacia:consultar') {
                     setAppState(prev => ({ ...prev, view: 'consultar' }));
                     window.history.pushState({}, '', '/FarmaciaPopular/Consultar');
+                  } else if (view === 'farmacia:lista-live') {
+                    setAppState(prev => ({ ...prev, view: 'lista-live' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/ListaLive');
                   } else if (view === 'farmacia:retirar') {
                     setAppState(prev => ({ ...prev, view: 'retirar' }));
                     window.history.pushState({}, '', '/FarmaciaPopular/Retirar');

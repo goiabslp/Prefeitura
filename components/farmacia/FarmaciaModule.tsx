@@ -5,6 +5,7 @@ import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import * as db from '../../services/farmaciaService';
 import { FarmaciaDashboard } from './FarmaciaDashboard';
 import { ConsultarScreen } from './ConsultarScreen';
+import { ListaLiveScreen } from './ListaLiveScreen';
 import { RetirarScreen } from './RetirarScreen';
 import { EstoqueScreen } from './EstoqueScreen';
 import { DadosScreen } from './DadosScreen';
@@ -211,21 +212,25 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
     };
 
     const isConsultarActive = isModuleActive('sub_farmacia_consultar') || isModuleActive('parent_farmacia_consultar');
+    const isListaLiveActive = isModuleActive('sub_farmacia_lista_live') || isModuleActive('parent_farmacia_lista_live');
     const isRetirarActive = isModuleActive('sub_farmacia_retirar') || isModuleActive('parent_farmacia_retirar');
     const isEstoqueActive = isModuleActive('sub_farmacia_estoque') || isModuleActive('parent_farmacia_estoque');
     const isDashboardActive = isModuleActive('sub_farmacia_dashboard') || isModuleActive('parent_farmacia_dashboard');
     const isPacientesActive = isModuleActive('sub_farmacia_pacientes') || isModuleActive('parent_farmacia_pacientes');
     const isGestorActive = isModuleActive('sub_farmacia_gestor') || isModuleActive('parent_farmacia_gestor');
 
-    const canAccessConsultar = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_consultar', moduleStatus);
-    const canAccessRetirar = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_retirar', moduleStatus);
-    const canAccessEstoque = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_estoque', moduleStatus);
-    const canAccessDados = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_dashboard', moduleStatus);
+    const activeStatusMap = isMobileViewport ? mobileModuleStatus : moduleStatus;
+    const canAccessConsultar = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_consultar', activeStatusMap);
+    const canAccessListaLive = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_lista_live', activeStatusMap);
+    const canAccessRetirar = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_retirar', activeStatusMap);
+    const canAccessEstoque = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_estoque', activeStatusMap);
+    const canAccessDados = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_dashboard', activeStatusMap);
     const canAccessHistorico = canAccessDados;
-    const canAccessPacientes = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_pacientes', moduleStatus);
-    const canAccessGestor = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_gestor', moduleStatus);
+    const canAccessPacientes = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_pacientes', activeStatusMap);
+    const canAccessGestor = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_gestor', activeStatusMap);
 
     const showConsultar = subView === 'consultar' && canAccessConsultar;
+    const showListaLive = subView === 'lista-live' && canAccessListaLive;
     const showRetirar = (subView === 'retirar' || subView?.startsWith('retirar')) && canAccessRetirar;
     const showEstoque = subView === 'estoque' && canAccessEstoque;
     const showDashboard = subView === 'dashboard' && canAccessDados;
@@ -235,7 +240,7 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
     const showPacientes = subView === 'pacientes' && canAccessPacientes;
     const showGestor = subView === 'gestor' && canAccessGestor;
 
-    const isSubView = showConsultar || showRetirar || showEstoque || showDashboard || showDados || showHistorico || showDashboardScreen || showPacientes || showGestor;
+    const isSubView = showConsultar || showListaLive || showRetirar || showEstoque || showDashboard || showDados || showHistorico || showDashboardScreen || showPacientes || showGestor;
 
     const renderSubNavigation = () => {
         if (!isSubView) return null;
@@ -302,7 +307,7 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
         <FarmaciaAlertProvider>
         <div className="flex-1 w-full h-full bg-[#f8fafc] relative flex flex-col overflow-hidden min-h-0">
             {/* Header / Subnav container */}
-            {subView !== 'consultar' && subView !== 'pacientes' && subView !== 'estoque' && !subView?.startsWith('retirar') && (
+            {subView !== 'consultar' && subView !== 'lista-live' && subView !== 'pacientes' && subView !== 'estoque' && !subView?.startsWith('retirar') && (
                 <div className="bg-slate-50 border-b border-slate-200/60 py-2.5 px-4 md:px-6 flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0 z-40">
                     <div className="flex items-center gap-3">
                         <button
@@ -329,7 +334,7 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
                 </div>
             )}
 
-            <main className={`flex-1 ${showEstoque || showConsultar || showRetirar || showPacientes ? 'p-2 md:p-3 overflow-hidden' : 'overflow-y-auto p-4 md:p-6'} custom-scrollbar flex flex-col min-h-0`}>
+            <main className={`flex-1 ${showEstoque || showConsultar || showListaLive || showRetirar || showPacientes ? 'p-2 md:p-3 overflow-hidden' : 'overflow-y-auto p-4 md:p-6'} custom-scrollbar flex flex-col min-h-0`}>
                 {!isSubView ? (
                     <FarmaciaDashboard
                         currentUser={currentUser}
@@ -340,6 +345,11 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
                         currentUser={currentUser}
                         onBack={() => onNavigate('farmacia')}
                         appState={appState}
+                    />
+                ) : showListaLive ? (
+                    <ListaLiveScreen
+                        currentUser={currentUser}
+                        onBack={() => onNavigate('farmacia')}
                     />
                 ) : showRetirar ? (
                     <RetirarScreen

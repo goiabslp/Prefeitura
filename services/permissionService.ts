@@ -351,6 +351,13 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
         routes: ['/FarmaciaPopular/Consultar']
       },
       {
+        key: 'sub_farmacia_lista_live',
+        legacyKeys: ['parent_farmacia_lista_live'],
+        label: 'Lista Live',
+        description: 'Consulta rápida e em tempo real dos medicamentos disponíveis no estoque',
+        routes: ['/FarmaciaPopular/ListaLive']
+      },
+      {
         key: 'sub_farmacia_retirar',
         legacyKeys: ['parent_farmacia_retirar'],
         label: 'Retirar / Dispensação',
