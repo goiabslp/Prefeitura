@@ -23,6 +23,7 @@ import { getCachedImage, IMAGE_KEYS } from '../services/cacheService';
 import { supabase } from '../services/supabaseClient';
 import { auditLogService } from '../services/auditLogService';
 import { authenticateWithBiometrics, setBiometricsEnabled } from '../services/biometricService';
+import { sessionLifecycleService } from '../services/sessionLifecycleService';
 
 interface LoginScreenProps {
   onLogin: (username: string, password: string) => Promise<{ error?: any; data?: any }>;
@@ -42,6 +43,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
   const [currentModuleIdx, setCurrentModuleIdx] = useState(0);
   const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
   const [hasSavedBiometrics, setHasSavedBiometrics] = useState<boolean>(false);
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState<string | null>(null);
   const [mouseOffset, setMouseOffset] = useState({ x: 0, y: 0 });
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -73,8 +75,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
     }
   }, [isUpdatingSystem]);
 
-  // Carrega credenciais salvas ao montar o componente
+  // Carrega credenciais salvas e verifica se a sessão anterior foi expirada por limite de tempo
   useEffect(() => {
+    const expiredMsg = sessionLifecycleService.consumeSessionExpiredMessage();
+    if (expiredMsg) {
+      setSessionExpiredNotice(expiredMsg);
+    }
+
     const savedUser = localStorage.getItem('remember_user');
     const savedPass = localStorage.getItem('remember_pass');
 
@@ -103,6 +110,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
         const emailToUse = creds.user.includes('@') ? creds.user : `${creds.user}@projeto.local`;
         const { error } = await onLogin(emailToUse, creds.pass);
         if (!error) {
+          setSessionExpiredNotice(null);
           setBiometricsEnabled(true, creds.user, creds.pass);
           setIsUpdatingSystem(true);
           onLoginSuccess?.();
@@ -134,6 +142,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
       const { error } = await onLogin(emailToUse, password);
 
       if (!error) {
+        setSessionExpiredNotice(null);
         if (rememberMe) {
           localStorage.setItem('remember_user', username);
           localStorage.setItem('remember_pass', password);
@@ -527,6 +536,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
                   </span>
                 </label>
               </div>
+
+              {/* Alerta de Expiração de Sessão após 4 Horas */}
+              {sessionExpiredNotice && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold text-center flex items-center justify-center gap-2 shadow-xs">
+                  <div className="w-2 h-2 bg-amber-500 rounded-full shrink-0"></div>
+                  <span>{sessionExpiredNotice}</span>
+                </div>
+              )}
 
               {/* Feedback de Erro */}
               {error && (

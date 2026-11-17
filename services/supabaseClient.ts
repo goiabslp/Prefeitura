@@ -2,6 +2,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { egressMonitor } from './egressMonitorService';
+import { sessionLifecycleService } from './sessionLifecycleService';
 
 const supabaseUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL) || (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_URL) || '';
 const supabaseAnonKey = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_ANON_KEY) || (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_ANON_KEY) || '';
@@ -11,14 +12,43 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 /**
- * Fetch customizado que monitora Egress e tráfego com o Supabase de forma 100% não bloqueante
+ * Fetch customizado que monitora Egress e valida a vigência da sessão de 4 horas
  */
 const monitoredFetch: typeof fetch = async (input, init) => {
     const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
     const method = (init?.method || (typeof input === 'object' && 'method' in input ? (input as Request).method : 'GET') || 'GET').toUpperCase();
 
+    // SEGURANÇA EM BACKEND: Se a operação for em dados protegidos e a sessão de 4 horas tiver expirado, rejeita com 401
+    const isProtectedSupabaseResource = urlStr.includes('/rest/v1/') || urlStr.includes('/storage/v1/');
+    const isAuthGrantCall = urlStr.includes('/auth/v1/token') || urlStr.includes('/auth/v1/recover');
+
+    if (isProtectedSupabaseResource && !isAuthGrantCall) {
+        const sessionCheck = sessionLifecycleService.isSessionValid();
+        if (!sessionCheck.isValid && sessionCheck.reason === 'expired_4h') {
+            console.warn('[SupabaseClient] Requisição protegida rejeitada: sessão expirada após 4 horas.');
+            sessionLifecycleService.expireSession();
+            return new Response(
+                JSON.stringify({
+                    code: 'SESSION_EXPIRED',
+                    message: 'Sua sessão expirou após 4 horas. Faça login novamente para continuar.'
+                }),
+                {
+                    status: 401,
+                    statusText: 'Unauthorized',
+                    headers: { 'Content-Type': 'application/json' }
+                }
+            );
+        }
+    }
+
     // Executa a requisição real
     const response = await fetch(input, init);
+
+    // Sincroniza o relógio do cliente com o relógio oficial do servidor Supabase via header Date
+    const serverDateHeader = response.headers.get('date');
+    if (serverDateHeader) {
+        sessionLifecycleService.syncServerTime(serverDateHeader);
+    }
 
     // Telemetria assíncrona que não afeta performance da aplicação
     try {

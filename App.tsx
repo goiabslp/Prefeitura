@@ -98,6 +98,7 @@ import { AbastecimentoList } from './components/abastecimento/AbastecimentoList'
 import { AbastecimentoDashboard } from './components/abastecimento/AbastecimentoDashboard';
 import { ForcePasswordChangeModal } from './components/ForcePasswordChangeModal';
 import { isAuthSessionValid, recordAuthSuccess } from './services/authTimeService';
+import { sessionLifecycleService } from './services/sessionLifecycleService';
 import { NotificationProvider, useNotification } from './contexts/NotificationContext';
 import { SystemSettingsProvider, useSystemSettings } from './contexts/SystemSettingsContext';
 import { useQueryClient } from '@tanstack/react-query';
@@ -606,6 +607,29 @@ const App: React.FC = () => {
     impersonationSession?.sessionId,
     impersonationSession ? users : null
   ]);
+
+  // Monitoramento do aviso antecipado de expiração da sessão (limite de 4 horas)
+  const [sessionWarningMinutes, setSessionWarningMinutes] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setSessionWarningMinutes(null);
+      return;
+    }
+
+    const checkWarning = () => {
+      const near = sessionLifecycleService.isNearExpiration();
+      if (near.isNear) {
+        setSessionWarningMinutes(near.remainingMinutes);
+      } else {
+        setSessionWarningMinutes(null);
+      }
+    };
+
+    checkWarning();
+    const interval = setInterval(checkWarning, 15000);
+    return () => clearInterval(interval);
+  }, [currentUser?.id]);
 
   // Sincroniza o usuário atual com auditLogService e permissionService para guarda em camada de serviço
   useEffect(() => {
@@ -5630,6 +5654,19 @@ timestamp: ${new Date().toISOString()}`);
             isVisible={toast.isVisible}
             onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
           />
+
+          {/* AVISO ANTECIPADO DE EXPIRAÇÃO DE SESSÃO (5 MINUTOS RESTANTES) */}
+          {sessionWarningMinutes !== null && sessionWarningMinutes > 0 && (
+            <div className="fixed top-4 right-4 z-[9999] max-w-sm p-3.5 bg-amber-500 text-white rounded-2xl shadow-xl flex items-start gap-3 border border-amber-600 animate-fade-in">
+              <Clock className="w-5 h-5 shrink-0 mt-0.5" />
+              <div className="text-xs">
+                <strong className="block font-black uppercase tracking-tight">Sessão Expirando em Breve</strong>
+                <p className="mt-0.5 text-amber-50 leading-relaxed">
+                  Sua sessão de segurança expirará em aproximadamente {sessionWarningMinutes} {sessionWarningMinutes === 1 ? 'minuto' : 'minutos'}. Salve suas alterações.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Chat com a IA Operacional Nativa */}
           {currentUser && !activeBlock && currentView !== 'assistente-ia' && currentView !== 'chat' && (
