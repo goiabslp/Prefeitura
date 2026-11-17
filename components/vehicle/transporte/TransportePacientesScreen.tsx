@@ -327,7 +327,7 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
   // Indicadores Principais (Respeitam estritamente dados reais e filtros ativos; se 0, exibem 0)
   const indicadores = useMemo(() => {
     const escopo = filterDate ? demandas.filter(d => d.dataAtendimento === filterDate) : demandas;
-    const totalPacientes = escopo.length;
+    const totalPacientes = new Set(escopo.map(d => d.pacienteId || d.pacienteCpf || d.pacienteNome || d.id)).size;
     const aguardando = escopo.filter(d => d.statusTransporte === 'Aguardando vaga').length;
     const alocados = escopo.filter(d => d.statusTransporte === 'Alocado').length;
     const confirmados = escopo.filter(d => d.statusTransporte === 'Confirmado').length;

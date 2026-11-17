@@ -39,16 +39,26 @@ export type { GrupoDataHierarquico, GrupoDestinoHierarquico };
 export const normalizeCity = normalizeCityTransporte;
 
 // Chave única de persistência do cache offline das demandas reais
-const STORAGE_KEY = 'prefeitura_transporte_demandas_v1';
+const STORAGE_KEY = 'prefeitura_transporte_demandas_v2';
+
+// Cache em memória para ambientes sem window (ex.: testes unitários ou SSR)
+let memoryCacheDemandas: TransporteDemanda[] = [];
 
 /**
  * Recupera demandas locais como cache e persistência de alocação/status.
- * Purga estritamente quaisquer registros fictícios ou mockados gravados em versões anteriores.
+ * Purga estritamente quaisquer registros fictícios, mockados ou solicitações não agendadas gravadas em versões anteriores.
  * NUNCA retorna dados inventados ou simulados.
  */
 export const getLocalDemandas = (): TransporteDemanda[] => {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === 'undefined') {
+    return memoryCacheDemandas;
+  }
   try {
+    // Purga imediata do cache de versões anteriores com dados não filtrados ou solicitações da fila
+    if (localStorage.getItem('prefeitura_transporte_demandas_v1')) {
+      localStorage.removeItem('prefeitura_transporte_demandas_v1');
+    }
+
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
 
@@ -67,6 +77,9 @@ export const getLocalDemandas = (): TransporteDemanda[] => {
       if (pacId.startsWith('pac_ipa_') || pacId.startsWith('pac_pn_') || pacId.startsWith('pac_21_') || pacId.startsWith('pac_24_')) return false;
       if (item.pacienteNome?.includes('Paciente Sábado') || item.pacienteNome?.includes('Paciente Terça')) return false;
 
+      // Rejeita registros sem data de agendamento válida
+      if (!item.dataAtendimento || typeof item.dataAtendimento !== 'string' || item.dataAtendimento.trim() === '') return false;
+
       return true;
     });
 
@@ -74,6 +87,7 @@ export const getLocalDemandas = (): TransporteDemanda[] => {
       saveLocalDemandas(dadosReais);
     }
 
+    memoryCacheDemandas = dadosReais;
     return dadosReais;
   } catch (err) {
     console.warn('[transporteService] Erro ao ler demandas locais:', err);
@@ -83,6 +97,7 @@ export const getLocalDemandas = (): TransporteDemanda[] => {
 
 // Persiste dados locais
 export const saveLocalDemandas = (demandas: TransporteDemanda[]) => {
+  memoryCacheDemandas = demandas;
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(demandas));
@@ -264,25 +279,33 @@ export const alocarPacienteEmViagem = async (
     return { success: false, message: 'Demanda de transporte não localizada.' };
   }
 
-  // 1. Calcular ocupação atual da viagem
+  // 1. Calcular ocupação atual da viagem e verificar se o paciente já está presente
   const currentPassengers = viagem.passengers || [];
   const assentosOcupados = currentPassengers.length;
   // A capacidade para passageiros é a capacidade total do veículo menos 1 (motorista)
   const capacidadePassageiros = Math.max(1, (veiculo.passengerCapacity || (veiculo as any).capacity || 5) - 1);
 
-  // Assentos necessários para o paciente + acompanhantes
-  const assentosNecessarios = 1 + (demanda.qtdAcompanhantes || 0);
+  // REGRA OBRIGATÓRIA: Se o paciente já possui procedimento na mesma viagem, NÃO duplica passageiro nem assento
+  const jaCadastradoNaViagem = currentPassengers.some(p => 
+    (demanda.pacienteId && p.patientId === demanda.pacienteId) ||
+    (demanda.pacienteCpf && demanda.pacienteCpf !== 'Não informado' && p.cpf === demanda.pacienteCpf) ||
+    (p.name && p.name.trim().toLowerCase() === demanda.pacienteNome.trim().toLowerCase())
+  );
+
+  // Assentos necessários: 0 se o paciente já está no veículo, + acompanhantes adicionais
+  const assentosNecessarios = (jaCadastradoNaViagem ? 0 : 1) + (demanda.qtdAcompanhantes || 0);
 
   if (assentosOcupados + assentosNecessarios > capacidadePassageiros) {
     return {
       success: false,
-      message: `Capacidade insuficiente. A viagem tem ${capacidadePassageiros - assentosOcupados} assento(s) livre(s), mas são necessários ${assentosNecessarios} (1 paciente + ${demanda.qtdAcompanhantes} acompanhante(s)).`
+      message: `Capacidade insuficiente. A viagem tem ${capacidadePassageiros - assentosOcupados} assento(s) livre(s), mas são necessários ${assentosNecessarios} assento(s).`
     };
   }
 
-  // 2. Montar passageiros a adicionar
-  const novosMembros: CrewMember[] = [
-    {
+  // 2. Montar passageiros a adicionar (somente adiciona se o paciente ainda não estiver na viagem)
+  const novosMembros: CrewMember[] = [];
+  if (!jaCadastradoNaViagem) {
+    novosMembros.push({
       id: `pax_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       patientId: demanda.pacienteId,
       name: demanda.pacienteNome,
@@ -294,8 +317,18 @@ export const alocarPacienteEmViagem = async (
       procedureName: demanda.procedimentoNome,
       destination: demanda.municipioDestino,
       notes: demanda.observacoes
+    });
+  } else {
+    // Preserva agendamentos múltiplos vinculando o procedimento adicional ao passageiro já registrado
+    const paxExistente = currentPassengers.find(p => 
+      (demanda.pacienteId && p.patientId === demanda.pacienteId) ||
+      (demanda.pacienteCpf && demanda.pacienteCpf !== 'Não informado' && p.cpf === demanda.pacienteCpf) ||
+      (p.name && p.name.trim().toLowerCase() === demanda.pacienteNome.trim().toLowerCase())
+    );
+    if (paxExistente && !paxExistente.procedureName?.includes(demanda.procedimentoNome)) {
+      paxExistente.procedureName = `${paxExistente.procedureName || ''} + ${demanda.procedimentoNome}`.trim();
     }
-  ];
+  }
 
   // Adicionar acompanhantes autorizados
   for (let i = 1; i <= (demanda.qtdAcompanhantes || 0); i++) {
@@ -310,7 +343,9 @@ export const alocarPacienteEmViagem = async (
   // Atualizar a viagem
   const updatedPassengers = [...currentPassengers, ...novosMembros];
   viagem.passengers = updatedPassengers;
-  viagem.patientCount = (viagem.patientCount || 0) + 1;
+  if (!jaCadastradoNaViagem) {
+    viagem.patientCount = (viagem.patientCount || 0) + 1;
+  }
   viagem.companionCount = (viagem.companionCount || 0) + (demanda.qtdAcompanhantes || 0);
 
   // 3. Atualizar a demanda
@@ -460,6 +495,48 @@ export const registrarContatoConfirmacao = async (
 };
 
 /**
+ * Critério Positivo e Estrito de Inclusão da Central de Transporte:
+ * Somente procedimentos com AGENDAMENTO EFETIVAMENTE REALIZADO no sistema geram demandas.
+ * NÃO gera demandas para:
+ * - Solicitações em fila de espera sem agendamento ('Solicitado', 'Fila de espera', 'Aguardando Data').
+ * - Agendamentos cancelados, pausados, excluídos ou não realizados.
+ * - Registros fictícios ou sem data definida de atendimento.
+ * Exclusivamente a data do agendamento (appointment_date) é aceita, NUNCA a data de solicitação.
+ */
+export const isAgendamentoEfetivo = (booking: any): boolean => {
+  if (!booking || typeof booking !== 'object') return false;
+  if (booking.is_deleted || (booking as any).isDeleted) return false;
+
+  const statusBooking = (booking.status || '').trim();
+
+  // 1. Proibição expressa de solicitações em fila, pausas, cancelamentos e exclusões
+  const statusProibidos = new Set([
+    'Solicitado',
+    'Fila de espera',
+    'Aguardando Data',
+    'Retorno', // solicitações de retorno sem vaga agendada
+    'Pausada',
+    'Cancelado',
+    'Excluído',
+    'Cancelamento Pendente',
+    'Suspensa — Exclusão Pendente',
+    'Não Realizado'
+  ]);
+
+  if (statusProibidos.has(statusBooking)) return false;
+
+  // 2. Critério Positivo: Deve ter status de agendado efetivamente realizado ou histórico
+  if (statusBooking !== 'Agendado' && statusBooking !== 'Realizado') return false;
+
+  // 3. Critério de Data: Exige appointment_date preenchido e válido
+  if (!booking.appointment_date || typeof booking.appointment_date !== 'string' || booking.appointment_date.trim() === '') {
+    return false;
+  }
+
+  return true;
+};
+
+/**
  * Sincronização automática com a Regulação (/Regulacao/Acompanhar)
  * Consulta os agendamentos reais existentes no Supabase e deriva as demandas de transporte.
  * NÃO inventa cidades, NÃO usa data de solicitação e NÃO gera dados fictícios.
@@ -483,10 +560,11 @@ export const sincronizarComRegulacao = async (agendamentosFornecidos?: ConsultaA
         .from('consultas_agendamentos')
         .select(`
           id, patient_id, procedimento_id, appointment_date, appointment_time, solicitation_date,
-          status, priority, is_deleted, prestador, municipio, convenio,
+          status, priority, prestador, municipio, convenio,
           paciente:consultas_pacientes(id, name, cpf, nickname, birth_date, phone),
           procedimento:consultas_procedimentos(id, name, code, type)
         `)
+        .in('status', ['Agendado', 'Realizado'])
         .not('appointment_date', 'is', null);
 
       if (error) {
@@ -507,28 +585,16 @@ export const sincronizarComRegulacao = async (agendamentosFornecidos?: ConsultaA
     }
   });
 
-  // Filtragem estrita dos critérios de inclusão:
-  // - Possuir appointment_date preenchido (data de agendamento realizada)
-  // - NÃO estar cancelado, excluído, em fila de espera ou aguardando data
-  // - Não estar deletado (is_deleted !== true)
-  const statusExcluidos = new Set([
-    'Cancelado',
-    'Excluído',
-    'Fila de espera',
-    'Aguardando Data',
-    'Pausada',
-    'Suspensa — Exclusão Pendente'
-  ]);
-
   const demandasResultado: TransporteDemanda[] = [];
 
   (agendamentosLista || []).forEach(booking => {
-    if (!booking) return;
-    if (booking.is_deleted || (booking as any).isDeleted) return;
-    if (!booking.appointment_date || booking.appointment_date.trim() === '') return;
+    // Validação estrita: somente agendamentos efetivos reais com data confirmada
+    if (!isAgendamentoEfetivo(booking)) return;
 
-    const statusBooking = (booking.status || '').trim();
-    if (statusExcluidos.has(statusBooking)) return;
+    // REGRA OBRIGATÓRIA: Utilizar EXCLUSIVAMENTE a data do agendamento (appointment_date), NUNCA da solicitação
+    const rawData = (booking.appointment_date || '').trim();
+    const dataAgendamento = rawData.includes('T') ? rawData.split('T')[0].trim() : rawData;
+    if (!dataAgendamento || !/^\d{4}-\d{2}-\d{2}$/.test(dataAgendamento)) return;
 
     const pac = booking.paciente;
     const proc = booking.procedimento;
@@ -549,7 +615,7 @@ export const sincronizarComRegulacao = async (agendamentosFornecidos?: ConsultaA
     let veiculoId = existente?.veiculoId;
     let motoristaId = existente?.motoristaId;
 
-    if (existente && existente.dataAtendimento !== booking.appointment_date) {
+    if (existente && existente.dataAtendimento !== dataAgendamento) {
       viagemId = undefined;
       veiculoId = undefined;
       motoristaId = undefined;
@@ -571,7 +637,7 @@ export const sincronizarComRegulacao = async (agendamentosFornecidos?: ConsultaA
       especialista: proc?.especialista?.nome || (proc?.especialista as any)?.name || '',
       tipoProcedimento: (proc?.type as any) || 'Consulta',
       // REGRA OBRIGATÓRIA: Utilizar exclusivamente a data do agendamento (appointment_date), NUNCA da solicitação
-      dataAtendimento: booking.appointment_date,
+      dataAtendimento: dataAgendamento,
       horaAtendimento: booking.appointment_time ? booking.appointment_time.substring(0, 5) : '08:00',
       municipioDestino: destinoFinal,
       estabelecimentoSaude: booking.prestador || booking.convenio || '',

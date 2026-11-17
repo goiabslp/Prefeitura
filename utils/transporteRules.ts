@@ -111,6 +111,7 @@ export const validarCapacidadeViagem = (
 export interface GrupoDestinoHierarquico {
   destino: string;
   totalPacientes: number;
+  totalAgendamentos?: number;
   aguardando: number;
   alocados: number;
   confirmados: number;
@@ -126,18 +127,28 @@ export interface GrupoDataHierarquico {
   diaSemana: string;
   dataLabel: string;
   totalPacientes: number;
+  totalAgendamentos?: number;
   destinos: GrupoDestinoHierarquico[];
 }
 
 /**
- * Agrupa demandas na hierarquia estrita: DATA -> MUNICÍPIO DE DESTINO -> PACIENTES
+ * Agrupa demandas na hierarquia estrita: DATA DO AGENDAMENTO -> MUNICÍPIO DE DESTINO -> PACIENTES
+ * Utiliza EXCLUSIVAMENTE a data do agendamento (appointment_date), descartando dados de solicitação.
  */
 export const agruparHierarquicoDataDestino = (demandas: TransporteDemanda[]): GrupoDataHierarquico[] => {
   const mapData = new Map<string, Map<string, TransporteDemanda[]>>();
 
   demandas.forEach(d => {
-    const dataKey = d.dataAtendimento || new Date().toISOString().substring(0, 10);
-    const destKey = d.municipioDestino?.trim() || 'DESTINO NÃO INFORMADO';
+    // Normalização estrita da data do agendamento (YYYY-MM-DD)
+    const rawData = (d.dataAtendimento || '').trim();
+    const dataKey = rawData.includes('T') ? rawData.split('T')[0].trim() : rawData;
+    if (!dataKey || !/^\d{4}-\d{2}-\d{2}$/.test(dataKey)) {
+      return;
+    }
+
+    // Destino: se não informado, padroniza como "Destino não informado" sem inventar cidades
+    const rawDest = (d.municipioDestino || '').trim();
+    const destKey = rawDest && rawDest.toUpperCase() !== 'DESTINO NÃO INFORMADO' ? rawDest : 'Destino não informado';
 
     if (!mapData.has(dataKey)) {
       mapData.set(dataKey, new Map());
@@ -158,7 +169,8 @@ export const agruparHierarquicoDataDestino = (demandas: TransporteDemanda[]): Gr
   datasOrdenadas.forEach(dataStr => {
     const mapDest = mapData.get(dataStr)!;
     const destinosList: GrupoDestinoHierarquico[] = [];
-    let totalPacientesData = 0;
+    const pacientesUnicosData = new Set<string>();
+    let totalAgendamentosData = 0;
 
     // Converte YYYY-MM-DD em partes numéricas para evitar problemas de timezone
     const [ano, mes, dia] = dataStr.split('-').map(Number);
@@ -171,10 +183,16 @@ export const agruparHierarquicoDataDestino = (demandas: TransporteDemanda[]): Gr
 
     destinosOrdenados.forEach(destStr => {
       const paxs = mapDest.get(destStr)!;
-      // Ordena os pacientes por horário
+      // Ordena os pacientes por horário do agendamento
       paxs.sort((a, b) => (a.horaAtendimento || '00:00').localeCompare(b.horaAtendimento || '00:00'));
 
-      totalPacientesData += paxs.length;
+      paxs.forEach(p => {
+        pacientesUnicosData.add(p.pacienteId || p.pacienteCpf || p.pacienteNome || p.id);
+      });
+      totalAgendamentosData += paxs.length;
+
+      // Pacientes únicos para não duplicar contagem no mesmo destino
+      const pacientesUnicosDestino = new Set(paxs.map(p => p.pacienteId || p.pacienteCpf || p.pacienteNome || p.id));
 
       const aguardando = paxs.filter(p => p.statusTransporte === 'Aguardando vaga').length;
       const alocados = paxs.filter(p => p.statusTransporte === 'Alocado').length;
@@ -195,7 +213,8 @@ export const agruparHierarquicoDataDestino = (demandas: TransporteDemanda[]): Gr
 
       destinosList.push({
         destino: destStr,
-        totalPacientes: paxs.length,
+        totalPacientes: pacientesUnicosDestino.size,
+        totalAgendamentos: paxs.length,
         aguardando,
         alocados,
         confirmados,
@@ -211,7 +230,8 @@ export const agruparHierarquicoDataDestino = (demandas: TransporteDemanda[]): Gr
       dataFormatada,
       diaSemana,
       dataLabel,
-      totalPacientes: totalPacientesData,
+      totalPacientes: pacientesUnicosData.size,
+      totalAgendamentos: totalAgendamentosData,
       destinos: destinosList
     });
   });
@@ -233,6 +253,7 @@ export const calcularIndicadoresTransporte = (
     : demandas;
 
   const totalDemandas = escopoDemandas.length;
+  const pacientesUnicos = new Set(escopoDemandas.map(d => d.pacienteId || d.pacienteCpf || d.pacienteNome || d.id)).size;
   const aguardandoVaga = escopoDemandas.filter(d => d.statusTransporte === 'Aguardando vaga').length;
   const alocados = escopoDemandas.filter(d => d.statusTransporte === 'Alocado').length;
   const confirmados = escopoDemandas.filter(d => d.statusTransporte === 'Confirmado').length;
@@ -258,7 +279,7 @@ export const calcularIndicadoresTransporte = (
 
   return {
     totalDemandas,
-    totalPacientes: totalDemandas,
+    totalPacientes: pacientesUnicos,
     aguardandoVaga,
     aguardando: aguardandoVaga,
     alocados,
