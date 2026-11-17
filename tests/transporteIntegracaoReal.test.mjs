@@ -496,3 +496,171 @@ test('15. Auditoria de divergência: 148 agendamentos com status Agendado vs 495
   assert.equal(demandas.length, 148, 'Deve conter rigorosamente 148 demandas correspondentes aos 148 agendamentos ativos');
   assert.equal(demandas.every(d => d.dataAtendimento === '2026-11-27'), true, 'Todas as 148 demandas devem ser de agendamentos futuros válidos');
 });
+
+test('16. Viagem com horário de saída já alcançado (no passado) é estritamente OCULTADA', () => {
+  const agoraFicticio = '2026-11-20T10:00:00'; // São 10h00
+  const vehicles = [
+    { id: 'v1', plate: 'ABC-1234', passengerCapacity: 16, capacity: 16, status: 'Ativo' }
+  ];
+  const schedules = [
+    {
+      id: 'sch_passada_hoje',
+      vehicleId: 'v1',
+      departureDateTime: '2026-11-20T08:00:00', // Saiu às 08h00 (já passou!)
+      destination: 'IPATINGA - MG',
+      status: 'confirmado',
+      passengers: []
+    },
+    {
+      id: 'sch_futura_hoje',
+      vehicleId: 'v1',
+      departureDateTime: '2026-11-20T14:00:00', // Sai às 14h00 (futura!)
+      destination: 'IPATINGA - MG',
+      status: 'confirmado',
+      passengers: []
+    }
+  ];
+
+  const res = filtrarVeiculosElegiveisTransporte({
+    dataAlvo: '2026-11-20',
+    destAlvo: 'IPATINGA',
+    schedules,
+    vehicles,
+    agoraBrasilISO: agoraFicticio
+  });
+
+  // A viagem das 08h deve ser ocultada; apenas a das 14h deve aparecer
+  assert.equal(res.veiculosLaranja.length, 1);
+  assert.equal(res.veiculosLaranja[0].id, 'sch_futura_hoje');
+  assert.equal(res.veiculosLaranja[0].horarioSaida, '14:00');
+});
+
+test('17. Viagem com status "em_curso" ou "concluido" é OCULTADA', () => {
+  const agoraFicticio = '2026-11-20T07:00:00';
+  const vehicles = [
+    { id: 'v1', plate: 'ABC-1234', passengerCapacity: 16, capacity: 16, status: 'Ativo' }
+  ];
+  const schedules = [
+    {
+      id: 'sch_em_curso',
+      vehicleId: 'v1',
+      departureDateTime: '2026-11-20T08:00:00',
+      destination: 'IPATINGA - MG',
+      status: 'em_curso', // Em andamento
+      passengers: []
+    },
+    {
+      id: 'sch_concluido',
+      vehicleId: 'v1',
+      departureDateTime: '2026-11-20T09:00:00',
+      destination: 'IPATINGA - MG',
+      status: 'concluido', // Já concluída
+      passengers: []
+    }
+  ];
+
+  const res = filtrarVeiculosElegiveisTransporte({
+    dataAlvo: '2026-11-20',
+    destAlvo: 'IPATINGA',
+    schedules,
+    vehicles,
+    agoraBrasilISO: agoraFicticio
+  });
+
+  assert.equal(res.veiculosLaranja.length, 0, 'Viagens em curso ou concluídas não devem aparecer para vinculação');
+});
+
+test('18. Se a data selecionada estiver no passado, isDataPassada é true e oculta viagens e veículos livres', () => {
+  const agoraFicticio = '2026-11-20T10:00:00';
+  const dataPassada = '2026-02-27'; // Fevereiro é passado em relação a Novembro
+  const vehicles = [
+    { id: 'v1', plate: 'ABC-1234', passengerCapacity: 16, capacity: 16, status: 'Ativo' }
+  ];
+  const schedules = [
+    {
+      id: 'sch_fev',
+      vehicleId: 'v1',
+      departureDateTime: '2026-02-27T08:00:00',
+      destination: 'IPATINGA - MG',
+      status: 'confirmado',
+      passengers: []
+    }
+  ];
+
+  const res = filtrarVeiculosElegiveisTransporte({
+    dataAlvo: dataPassada,
+    destAlvo: 'IPATINGA',
+    schedules,
+    vehicles,
+    agoraBrasilISO: agoraFicticio
+  });
+
+  assert.equal(res.isDataPassada, true);
+  assert.equal(res.veiculosLaranja.length, 0);
+  assert.equal(res.veiculosVerdes.length, 0, 'Não deve oferecer veículos livres no passado');
+  assert.equal(res.vagasDisponiveis, 0);
+  assert.equal(res.veiculosDisponiveis, 0);
+});
+
+test('19. Veículo com viagem para outro destino no mesmo dia gera conflito e é ocultado dos Verdes', () => {
+  const agoraFicticio = '2026-11-20T07:00:00';
+  const vehicles = [
+    { id: 'v_conflito', plate: 'CONF-0001', passengerCapacity: 6, capacity: 6, status: 'Ativo' }
+  ];
+  const schedules = [
+    {
+      id: 'sch_bh',
+      vehicleId: 'v_conflito',
+      departureDateTime: '2026-11-20T08:00:00',
+      destination: 'BELO HORIZONTE - MG', // Escalado para BH
+      status: 'confirmado',
+      passengers: []
+    }
+  ];
+
+  const res = filtrarVeiculosElegiveisTransporte({
+    dataAlvo: '2026-11-20',
+    destAlvo: 'IPATINGA',
+    schedules,
+    vehicles,
+    agoraBrasilISO: agoraFicticio
+  });
+
+  // Não é laranja para Ipatinga (destino diferente) e NÃO pode ser verde (conflito de viagem na data)
+  assert.equal(res.veiculosLaranja.length, 0);
+  assert.equal(res.veiculosVerdes.length, 0);
+  assert.equal(res.veiculosElegiveis.length, 0);
+});
+
+test('20. Passageiro com múltiplos procedimentos na mesma viagem não duplica ocupação de vagas', () => {
+  const agoraFicticio = '2026-11-20T06:00:00';
+  const vehicles = [
+    { id: 'v1', plate: 'ABC-1234', passengerCapacity: 4, capacity: 4, status: 'Ativo' } // 3 lugares livres para passageiros
+  ];
+  const schedules = [
+    {
+      id: 'sch_multi',
+      vehicleId: 'v1',
+      departureDateTime: '2026-11-20T08:00:00',
+      destination: 'IPATINGA - MG',
+      status: 'confirmado',
+      // Mesmo paciente com dois procedimentos agendados na viagem
+      passengers: [
+        { id: 'pax_1', patientId: 'pac_123', name: 'Maria Silva', type: 'Paciente' },
+        { id: 'pax_2', patientId: 'pac_123', name: 'Maria Silva', type: 'Paciente' }
+      ]
+    }
+  ];
+
+  const res = filtrarVeiculosElegiveisTransporte({
+    dataAlvo: '2026-11-20',
+    destAlvo: 'IPATINGA',
+    schedules,
+    vehicles,
+    agoraBrasilISO: agoraFicticio
+  });
+
+  assert.equal(res.veiculosLaranja.length, 1);
+  assert.equal(res.veiculosLaranja[0].ocupados, 1, 'Deve contar apenas 1 ocupante físico');
+  assert.equal(res.veiculosLaranja[0].vagasLivres, 2, '3 capacidade - 1 ocupante = 2 vagas livres');
+});

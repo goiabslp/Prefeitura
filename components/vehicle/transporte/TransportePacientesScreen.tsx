@@ -45,10 +45,11 @@ import * as transporteDb from '../../../services/transporteService';
 import { 
   agruparHierarquicoDataDestino, 
   GrupoDataHierarquico, 
-  GrupoDestinoHierarquico,
-  normalizeCityTransporte,
-  normalizeTransporteText,
-  filtrarVeiculosElegiveisTransporte
+  GrupoDestinoHierarquico, 
+  normalizeCityTransporte, 
+  normalizeTransporteText, 
+  filtrarVeiculosElegiveisTransporte,
+  getAgoraBrasilISO
 } from '../../../utils/transporteRules';
 import { ManifestoPassageirosModal } from './ManifestoPassageirosModal';
 
@@ -155,20 +156,36 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
     }
   };
 
+  // Timer de atualização contínua (a cada 30 segundos) para validar expiração de horário de saída
+  const [currentTimeTick, setCurrentTimeTick] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTimeTick(Date.now());
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
+
   useEffect(() => {
     carregarDemandas();
 
     const handleDataChanged = () => carregarDemandas();
+    const handleVehicleDataChanged = () => setCurrentTimeTick(Date.now());
+
     window.addEventListener('transporte-demandas-changed', handleDataChanged);
     window.addEventListener('transporte-alocacao-changed', handleDataChanged);
     window.addEventListener('consultas-agendamentos-changed', handleDataChanged);
     window.addEventListener('consultas-vagas-changed', handleDataChanged);
+    window.addEventListener('vehicle-schedules-changed', handleVehicleDataChanged);
+    window.addEventListener('vehicles-changed', handleVehicleDataChanged);
 
     return () => {
       window.removeEventListener('transporte-demandas-changed', handleDataChanged);
       window.removeEventListener('transporte-alocacao-changed', handleDataChanged);
       window.removeEventListener('consultas-agendamentos-changed', handleDataChanged);
       window.removeEventListener('consultas-vagas-changed', handleDataChanged);
+      window.removeEventListener('vehicle-schedules-changed', handleVehicleDataChanged);
+      window.removeEventListener('vehicles-changed', handleVehicleDataChanged);
     };
   }, []);
 
@@ -294,16 +311,17 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
     return '';
   }, [focoDestino, filterDestino, primeiraDemandaSelecionada]);
 
-  // Estrutura Unificada de Veículos Elegíveis (Regras 1 a 5): LARANJAS (Viagem no destino) e VERDES (Livres sem destino)
-  const { veiculosLaranja, veiculosVerdes, veiculosElegiveis } = useMemo(() => {
+  // Estrutura Unificada de Veículos Elegíveis (Regras 1 a 5): LARANJAS (Viagens futuras com vagas) e VERDES (Livres sem conflito)
+  const { veiculosLaranja, veiculosVerdes, veiculosElegiveis, isDataPassada } = useMemo(() => {
     return filtrarVeiculosElegiveisTransporte({
       dataAlvo,
       destAlvo,
       schedules,
       vehicles,
-      persons
+      persons,
+      agoraBrasilISO: getAgoraBrasilISO()
     });
-  }, [schedules, vehicles, persons, dataAlvo, destAlvo]);
+  }, [schedules, vehicles, persons, dataAlvo, destAlvo, currentTimeTick]);
 
   // Indicadores Principais Dinâmicos (Regra 8: Apenas veículos elegíveis para a data e destino selecionados)
   const indicadores = useMemo(() => {
@@ -415,6 +433,40 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
       demandasAVincular,
       assentosNecessarios,
       vagasDisponiveis: viagemAlvo.vagasLivres
+    });
+  };
+
+  // Vinculação direta acionada pelo botão "VINCULAR PACIENTES" no card Laranja
+  const handlePrepararVinculacaoComViagem = (
+    viagem: VehicleSchedule,
+    veiculo: Vehicle,
+    driver?: Person,
+    vagasLivres: number = 0
+  ) => {
+    if (selectedDemandaIds.length === 0) {
+      showToast('Selecione ao menos um paciente na tabela ao lado para vincular a esta viagem.', 'info');
+      return;
+    }
+
+    const demandasAVincular = demandas.filter(d => selectedDemandaIds.includes(d.id));
+    const assentosNecessarios = demandasAVincular.reduce((acc, curr) => acc + 1 + (curr.qtdAcompanhantes || 0), 0);
+
+    if (assentosNecessarios > vagasLivres) {
+      showToast(
+        `Capacidade insuficiente! Esta viagem possui ${vagasLivres} vaga(s) livre(s), mas são solicitados ${assentosNecessarios} assento(s).`,
+        'error'
+      );
+      return;
+    }
+
+    setConfirmacaoVinculacaoModal({
+      isOpen: true,
+      viagem,
+      veiculo,
+      driver,
+      demandasAVincular,
+      assentosNecessarios,
+      vagasDisponiveis: vagasLivres
     });
   };
 
@@ -1063,18 +1115,20 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
               <div>
                 <h2 className="text-xs font-black text-slate-900 uppercase tracking-tight">
                   VEÍCULOS E VIAGENS
-                  {dataAlvo ? ` (${destAlvo && destAlvo !== 'Destino não informado' ? `${destAlvo} — ` : ''}${dataAlvo.split('-').reverse().join('/')})` : ''}
+                  {dataAlvo ? ` — ${destAlvo && destAlvo !== 'Destino não informado' ? `${destAlvo} (${dataAlvo.split('-').reverse().join('/')})` : dataAlvo.split('-').reverse().join('/')}` : ''}
                 </h2>
                 <p className="text-[10px] text-slate-500 font-bold leading-none mt-0.5">
-                  {veiculosLaranja.length > 0
-                    ? `${veiculosLaranja.length} viagem(ns) para o destino • ${veiculosVerdes.length} veículo(s) livre(s)`
-                    : dataAlvo ? `${veiculosVerdes.length} veículo(s) livre(s) sem destino nesta data` : 'Selecione uma data e destino para filtrar'}
+                  {isDataPassada
+                    ? 'Data no passado selecionada • Nenhuma viagem futura ou veículo livre disponível'
+                    : dataAlvo
+                    ? `${veiculosLaranja.length} ${veiculosLaranja.length === 1 ? 'viagem futura com vagas' : 'viagens futuras com vagas'} • ${veiculosVerdes.length} ${veiculosVerdes.length === 1 ? 'veículo livre' : 'veículos livres'}`
+                    : 'Selecione uma data e um destino para consultar os veículos e viagens disponíveis'}
                 </p>
               </div>
             </div>
 
             {/* Ação de Vincular Imediata quando houver pacientes selecionados */}
-            {selectedDemandaIds.length > 0 && (
+            {selectedDemandaIds.length > 0 && !isDataPassada && (
               <button
                 type="button"
                 onClick={handlePrepararVinculacao}
@@ -1091,24 +1145,30 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
             )}
           </div>
 
-          {/* Lista de Veículos Elegíveis (Laranjas: com viagem no destino | Verdes: livres sem destino) */}
+          {/* Lista de Veículos Elegíveis (Laranjas: viagens futuras no destino | Verdes: livres sem conflito) */}
           <div className="flex-1 overflow-y-auto p-2 sm:p-2.5 space-y-2 custom-scrollbar">
             {veiculosElegiveis.length === 0 ? (
               <div className="py-16 text-center space-y-2.5 px-4">
-                <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
-                  {dataAlvo ? <Car className="w-5 h-5" /> : <CalendarDays className="w-5 h-5 text-indigo-500" />}
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mx-auto ${
+                  isDataPassada ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-400'
+                }`}>
+                  {isDataPassada ? <AlertCircle className="w-5 h-5" /> : dataAlvo ? <Car className="w-5 h-5" /> : <CalendarDays className="w-5 h-5 text-indigo-500" />}
                 </div>
                 <h4 className="text-xs font-black text-slate-700 uppercase">
-                  {dataAlvo 
+                  {isDataPassada
+                    ? 'Data no passado selecionada'
+                    : dataAlvo 
                     ? 'Nenhum veículo com vagas disponíveis para a data e o destino selecionados.' 
                     : 'Nenhuma data selecionada'}
                 </h4>
                 <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
-                  {dataAlvo 
-                    ? 'Não foram encontradas viagens com vagas para este destino ou veículos livres operacionais na data informada.'
+                  {isDataPassada
+                    ? `A data ${dataAlvo.split('-').reverse().join('/')} já ocorreu. Não é possível vincular pacientes ou criar novas viagens em datas passadas.`
+                    : dataAlvo 
+                    ? 'Não foram encontradas viagens futuras com vagas para este destino ou veículos livres operacionais na data informada.'
                     : 'Selecione uma data e um destino nas demandas ao lado (ou utilize os filtros acima) para consultar os veículos e viagens disponíveis.'}
                 </p>
-                {onOpenNewTripModal && (
+                {onOpenNewTripModal && !isDataPassada && (
                   <div className="pt-1">
                     <button
                       type="button"
@@ -1241,13 +1301,30 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
                       {/* Métricas e Botão de Ação na Direita */}
                       <div className="shrink-0 flex items-center gap-2">
                         {isLaranja ? (
-                          <div className="hidden sm:flex flex-col items-end text-[9.5px] font-bold text-slate-600 space-y-0.5">
-                            <span className="flex items-center gap-1">
-                              <Armchair className="w-3 h-3 text-amber-600" /> Total: <strong className="text-slate-900">{item.capacidadePassageiros} lugares</strong>
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <User className="w-3 h-3 text-amber-600" /> Ocupados: <strong className="text-slate-900">{item.ocupados}</strong>
-                            </span>
+                          <div className="flex flex-col items-end gap-1.5">
+                            <div className="hidden sm:flex items-center gap-2 text-[9.5px] font-bold text-slate-600">
+                              <span className="flex items-center gap-0.5">
+                                <Armchair className="w-3 h-3 text-amber-600" /> <strong className="text-slate-900">{item.capacidadePassageiros}</strong> lug.
+                              </span>
+                              <span className="text-slate-300">•</span>
+                              <span className="flex items-center gap-0.5">
+                                <User className="w-3 h-3 text-amber-600" /> <strong className="text-slate-900">{item.ocupados}</strong> ocup.
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedViagemId(item.schedule!.id);
+                                setSelectedVeiculoVerdeId('');
+                                handlePrepararVinculacaoComViagem(item.schedule!, item.vehicle, item.driver, item.vagasLivres);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-[10px] uppercase tracking-wider flex items-center gap-1 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                              title="Vincular pacientes selecionados a esta viagem existente"
+                            >
+                              <Link2 className="w-3 h-3" />
+                              <span>Vincular Pacientes</span>
+                            </button>
                           </div>
                         ) : (
                           onOpenNewTripModal && (

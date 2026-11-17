@@ -291,12 +291,62 @@ export const calcularIndicadoresTransporte = (
   };
 };
 
+/**
+ * Retorna a string ISO (YYYY-MM-DDTHH:mm:ss) da data e horário atuais
+ * no fuso horário oficial de Brasília (America/Sao_Paulo).
+ */
+export const getAgoraBrasilISO = (customDate?: Date): string => {
+  const d = customDate || new Date();
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+  // Em algumas versões do Node/Chromium, meia-noite pode retornar 24:xx:xx
+  const formatted = formatter.format(d).replace(', ', 'T').replace('T24:', 'T00:');
+  return formatted;
+};
+
+/**
+ * Retorna apenas a data atual (YYYY-MM-DD) no fuso horário America/Sao_Paulo
+ */
+export const getHojeBrasilDateStr = (customDate?: Date): string => {
+  return getAgoraBrasilISO(customDate).split('T')[0];
+};
+
+/**
+ * Normaliza uma data/hora ISO de saída (ex.: "2026-11-20T08:00" ou "2026-11-20T08:00:00Z")
+ * para comparação cronológica direta "YYYY-MM-DDTHH:mm:ss" em horário local de Brasília.
+ */
+const normalizarSaidaISO = (raw?: string): string => {
+  if (!raw || typeof raw !== 'string') return '';
+  const trimmed = raw.trim();
+  // Remove sufixo de timezone/milissegundos se houver para preservar a hora cadastrada
+  const base = trimmed.replace(/\.\d+Z?$/, '').replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(base)) {
+    return `${base}:00`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(base)) {
+    return base;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(base)) {
+    return `${base}T00:00:00`;
+  }
+  return base;
+};
+
 export interface VeiculoElegivelFiltroParams {
   dataAlvo: string;
   destAlvo?: string;
   schedules: VehicleSchedule[];
   vehicles: Vehicle[];
   persons?: Person[];
+  agoraBrasilISO?: string;
 }
 
 export interface VeiculoLaranjaItem {
@@ -334,16 +384,19 @@ export interface VeiculoElegivelResultado {
   veiculosElegiveis: VeiculoElegivelItem[];
   vagasDisponiveis: number;
   veiculosDisponiveis: number;
+  isDataPassada: boolean;
 }
 
 /**
  * Filtra e organiza os veículos elegíveis para a Central de Transporte de Pacientes:
- * 1. LARANJA: Veículos já escalados para o destino e data selecionados, com vagas disponíveis (vagasLivres > 0).
- * 2. VERDE: Veículos operacionais da frota disponíveis na data, sem destino definido e sem conflito de agendamento.
- * Veículos lotados, indisponíveis ou escalados para outros destinos são rigorosamente ocultados.
+ * 1. LARANJA: Viagens futuras já cadastradas no Histórico, que AINDA NÃO COMEÇARAM
+ *    (saída > agora em America/Sao_Paulo), com destino compatível e vagas disponíveis (vagasLivres > 0).
+ * 2. VERDE: Veículos operacionais da frota disponíveis na data (data >= hoje em America/Sao_Paulo),
+ *    sem destino definido e sem conflito de agendamento.
+ * Viagens passadas, já iniciadas, concluídas, canceladas, lotadas ou de outros destinos são rigorosamente ocultadas.
  */
 export const filtrarVeiculosElegiveisTransporte = (params: VeiculoElegivelFiltroParams): VeiculoElegivelResultado => {
-  const { dataAlvo, destAlvo, schedules = [], vehicles = [], persons = [] } = params;
+  const { dataAlvo, destAlvo, schedules = [], vehicles = [], persons = [], agoraBrasilISO } = params;
 
   if (!dataAlvo) {
     return {
@@ -351,7 +404,23 @@ export const filtrarVeiculosElegiveisTransporte = (params: VeiculoElegivelFiltro
       veiculosVerdes: [],
       veiculosElegiveis: [],
       vagasDisponiveis: 0,
-      veiculosDisponiveis: 0
+      veiculosDisponiveis: 0,
+      isDataPassada: false
+    };
+  }
+
+  const agoraISO = agoraBrasilISO || getAgoraBrasilISO();
+  const hojeBrasil = agoraISO.split('T')[0];
+
+  // REGRA 5: Se a data selecionada estiver no passado, NÃO apresentar viagens nem veículos livres!
+  if (dataAlvo < hojeBrasil) {
+    return {
+      veiculosLaranja: [],
+      veiculosVerdes: [],
+      veiculosElegiveis: [],
+      vagasDisponiveis: 0,
+      veiculosDisponiveis: 0,
+      isDataPassada: true
     };
   }
 
@@ -359,20 +428,28 @@ export const filtrarVeiculosElegiveisTransporte = (params: VeiculoElegivelFiltro
     ? normalizeCityTransporte(destAlvo)
     : '';
 
+  // Status válidos para viagens ainda não iniciadas
+  const statusViagemPermitidos = new Set(['confirmado', 'pendente', 'agendado']);
+
   // =========================================================================
-  // 1. VEÍCULOS LARANJA: VIAGEM EXISTENTE PARA O DESTINO SELECIONADO COM VAGAS
-  // Regra obrigatória: Só é LARANJA se houver um destino específico definido E
-  // a viagem for para este mesmo município. É PROIBIDO misturar destinos diferentes!
-  // Se o destino for indefinido ou 'Destino não informado', nenhuma viagem pode ser laranja.
+  // 1. VEÍCULOS LARANJA: VIAGEM FUTURA EXISTENTE PARA O DESTINO SELECIONADO COM VAGAS
   // =========================================================================
   const veiculosLaranja: VeiculoLaranjaItem[] = [];
 
   if (normDestAlvo) {
     schedules.forEach(sch => {
-      if (sch.status === 'cancelado') return;
+      const stSch = (sch.status || '').toLowerCase().trim();
+      // REGRA 2: Ocultar viagens canceladas, iniciadas/em_curso e concluídas
+      if (!statusViagemPermitidos.has(stSch)) return;
 
-      const depDate = (sch.departureDateTime || '').split('T')[0];
+      const saidaISO = normalizarSaidaISO(sch.departureDateTime);
+      if (!saidaISO) return;
+
+      const depDate = saidaISO.split('T')[0];
       if (depDate !== dataAlvo) return;
+
+      // REGRA 1 & 2 (ABSOLUTA): Data e horário completos de saída devem ser estritamente maiores que AGORA (America/Sao_Paulo)
+      if (saidaISO <= agoraISO) return;
 
       // Destino: compatibilidade estrita obrigatória
       const normDestSch = normalizeCityTransporte(sch.destination || '');
@@ -386,14 +463,35 @@ export const filtrarVeiculosElegiveisTransporte = (params: VeiculoElegivelFiltro
 
       const capTotal = veic?.passengerCapacity || (veic as any)?.capacity || 5;
       const capPassageiros = Math.max(1, capTotal - 1);
-      const passageiros = sch.passengers || [];
-      const ocupados = passageiros.length;
+
+      // REGRA 3: Calcular ocupantes reais sem duplicar a mesma pessoa
+      const ocupantesSet = new Set<string>();
+      (sch.passengers || []).forEach((p: any, idx: number) => {
+        if (!p) return;
+        const tipoPax = (p.type || 'paciente').toLowerCase();
+        if (tipoPax === 'acompanhante') {
+          ocupantesSet.add(p.id || `acomp_${p.name || idx}_${idx}`);
+        } else {
+          const cleanCpf = (p.cpf || '').replace(/\D/g, '');
+          const chave = p.patientId
+            ? `pac_${p.patientId}`
+            : (cleanCpf.length >= 11 ? `cpf_${cleanCpf}` : `nome_${(p.name || String(idx)).trim().toLowerCase()}`);
+          ocupantesSet.add(chave);
+        }
+      });
+
+      const ocupados = ocupantesSet.size;
       const vagasLivres = Math.max(0, capPassageiros - ocupados);
 
-      // REGRA OBRIGATÓRIA: Veículos com lotação completa (0 vagas) DEVEM SER OCULTADOS!
+      // REGRA 2 & 3 (OBRIGATÓRIA): Se vagas livres <= 0 (lotação completa), ocultar imediatamente!
       if (vagasLivres <= 0) return;
 
       const mot = persons.find(p => p.id === sch.driverId);
+
+      // Extrair horário HH:mm diretamente do texto ISO normalizado para evitar deslocamento de fuso
+      const horaSaidaStr = saidaISO.includes('T') ? saidaISO.split('T')[1].substring(0, 5) : '07:00';
+      const retornoISO = normalizarSaidaISO(sch.returnDateTime);
+      const horaRetornoStr = retornoISO && retornoISO.includes('T') ? retornoISO.split('T')[1].substring(0, 5) : undefined;
 
       veiculosLaranja.push({
         id: sch.id,
@@ -415,8 +513,8 @@ export const filtrarVeiculosElegiveisTransporte = (params: VeiculoElegivelFiltro
         vagasLivres,
         capacidadePassageiros: capPassageiros,
         ocupados,
-        horarioSaida: sch.departureDateTime ? new Date(sch.departureDateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '07:00',
-        horarioRetorno: sch.returnDateTime ? new Date(sch.returnDateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : undefined,
+        horarioSaida: horaSaidaStr,
+        horarioRetorno: horaRetornoStr,
         destino: sch.destination || 'Destino não informado',
         statusViagem: sch.status
       });
@@ -427,14 +525,23 @@ export const filtrarVeiculosElegiveisTransporte = (params: VeiculoElegivelFiltro
   }
 
   // =========================================================================
-  // 2. VEÍCULOS VERDES: VEÍCULOS DISPONÍVEIS NA DATA SEM DESTINO DEFINIDO
+  // 2. VEÍCULOS VERDES: VEÍCULOS DISPONÍVEIS NA DATA SEM DESTINO DEFINIDO E SEM CONFLITO
   // =========================================================================
-  const veiculosComViagemNaData = new Set<string>();
+  const veiculosComConflitoNaData = new Set<string>();
   schedules.forEach(sch => {
-    if (sch.status === 'cancelado') return;
-    const depDate = (sch.departureDateTime || '').split('T')[0];
-    if (depDate === dataAlvo && sch.vehicleId) {
-      veiculosComViagemNaData.add(sch.vehicleId);
+    const stSch = (sch.status || '').toLowerCase().trim();
+    if (stSch === 'cancelado') return;
+
+    const depISO = normalizarSaidaISO(sch.departureDateTime);
+    if (!depISO) return;
+    const depDate = depISO.split('T')[0];
+
+    const retISO = normalizarSaidaISO(sch.returnDateTime);
+    const retDate = retISO ? retISO.split('T')[0] : depDate;
+
+    // Verifica se a viagem ocorre na dataAlvo ou atravessa a dataAlvo (viagem multidia)
+    if (sch.vehicleId && depDate <= dataAlvo && retDate >= dataAlvo) {
+      veiculosComConflitoNaData.add(sch.vehicleId);
     }
   });
 
@@ -448,8 +555,8 @@ export const filtrarVeiculosElegiveisTransporte = (params: VeiculoElegivelFiltro
     const cat = (veic.vehicleCategory || veic.type || '').toLowerCase();
     if (cat === 'moto' || cat === 'máquina pesada' || cat === 'caminhão' || cat === 'acessórios') return;
 
-    // Veículo não pode ter nenhuma viagem cadastrada na data (sem conflito de agenda)
-    if (veiculosComViagemNaData.has(veic.id)) return;
+    // Veículo não pode ter nenhuma viagem cadastrada na data (sem conflito de agenda ou outro destino)
+    if (veiculosComConflitoNaData.has(veic.id)) return;
 
     const capTotal = veic.passengerCapacity || (veic as any)?.capacity || 5;
     const capPassageiros = Math.max(1, capTotal - 1);
@@ -473,14 +580,14 @@ export const filtrarVeiculosElegiveisTransporte = (params: VeiculoElegivelFiltro
   // Ordenar Verdes por maior capacidade de passageiros
   veiculosVerdes.sort((a, b) => b.capacidadePassageiros - a.capacidadePassageiros);
 
-  // Ordem estrita: 1º Laranjas (viagens no destino) -> 2º Verdes (livres sem destino)
+  // Ordem estrita: 1º Laranjas (viagens futuras no destino) -> 2º Verdes (livres sem destino)
   const veiculosElegiveis: VeiculoElegivelItem[] = [...veiculosLaranja, ...veiculosVerdes];
 
-  // REGRA 8: Indicadores
-  // VAGAS DISPONÍVEIS: somar exclusivamente vagas de viagens programadas para o destino e data selecionados (Veículos Laranja)
+  // Indicadores:
+  // VAGAS DISPONÍVEIS: soma exclusivamente vagas das viagens futuras compatíveis (Laranja)
   const vagasDisponiveis = veiculosLaranja.reduce((acc, curr) => acc + curr.vagasLivres, 0);
 
-  // VEÍCULOS DISPONÍVEIS: total de veículos elegíveis (Laranjas com vagas + Verdes disponíveis)
+  // VEÍCULOS DISPONÍVEIS: total de veículos elegíveis (Laranjas com vagas + Verdes livres)
   const veiculosDisponiveis = veiculosElegiveis.length;
 
   return {
@@ -488,6 +595,7 @@ export const filtrarVeiculosElegiveisTransporte = (params: VeiculoElegivelFiltro
     veiculosVerdes,
     veiculosElegiveis,
     vagasDisponiveis,
-    veiculosDisponiveis
+    veiculosDisponiveis,
+    isDataPassada: false
   };
 };
