@@ -9,11 +9,7 @@ import {
   User, 
   UserPlus, 
   Car, 
-  ShieldAlert, 
-  HeartPulse, 
-  AlertCircle,
-  Clock,
-  Building2
+  ShieldAlert
 } from 'lucide-react';
 import { CrewMember, Vehicle } from '../../types';
 import { maskCpfPartial } from '../../utils/cpfUtils';
@@ -51,7 +47,8 @@ export const TripulacaoTable: React.FC<TripulacaoTableProps> = ({
       const matchName = p.name.toLowerCase().includes(q);
       const matchCpf = cleanDigits && (p.cpf || '').replace(/\D/g, '').includes(cleanDigits);
       const matchProc = (p.procedureName || '').toLowerCase().includes(q);
-      return matchName || matchCpf || matchProc;
+      const matchNick = (p.nickname || '').toLowerCase().includes(q);
+      return matchName || matchCpf || matchProc || matchNick;
     });
   }, [passengers, filterSearch]);
 
@@ -238,7 +235,7 @@ export const TripulacaoTable: React.FC<TripulacaoTableProps> = ({
                         </span>
                       </td>
 
-                      {/* 2. Passageiro (Nome + Subtítulo com Nascimento/Idade + Menor de Idade) */}
+                      {/* 2. Passageiro (Nome + Subtítulo com Nascimento/Idade + Apelido + Menor de Idade) */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-start gap-2.5">
                           <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
@@ -307,9 +304,9 @@ export const TripulacaoTable: React.FC<TripulacaoTableProps> = ({
 
                       {/* 4. Local de Embarque */}
                       <td className="py-3.5 px-4 text-xs font-bold text-slate-700 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800">
-                          <MapPin className="w-3 h-3 text-indigo-500" />
-                          <span>{p.departureLocation || 'Sede'}</span>
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 max-w-[200px] truncate" title={p.departureLocation || 'Sede'}>
+                          <MapPin className="w-3 h-3 text-indigo-500 shrink-0" />
+                          <span className="truncate">{p.departureLocation || 'Sede'}</span>
                         </span>
                       </td>
 
