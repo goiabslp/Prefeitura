@@ -178,10 +178,18 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
     window.addEventListener('consultas-vagas-changed', handleDataChanged);
     window.addEventListener('vehicle-schedules-changed', handleVehicleDataChanged);
     window.addEventListener('vehicles-changed', handleVehicleDataChanged);
+    window.addEventListener('consultas-agendamentos-changed', handleDataChanged);
+    window.addEventListener('consultas-vagas-changed', handleDataChanged);
+    window.addEventListener('vehicle-schedules-changed', handleVehicleDataChanged);
+    window.addEventListener('vehicles-changed', handleVehicleDataChanged);
 
     return () => {
       window.removeEventListener('transporte-demandas-changed', handleDataChanged);
       window.removeEventListener('transporte-alocacao-changed', handleDataChanged);
+      window.removeEventListener('consultas-agendamentos-changed', handleDataChanged);
+      window.removeEventListener('consultas-vagas-changed', handleDataChanged);
+      window.removeEventListener('vehicle-schedules-changed', handleVehicleDataChanged);
+      window.removeEventListener('vehicles-changed', handleVehicleDataChanged);
       window.removeEventListener('consultas-agendamentos-changed', handleDataChanged);
       window.removeEventListener('consultas-vagas-changed', handleDataChanged);
       window.removeEventListener('vehicle-schedules-changed', handleVehicleDataChanged);

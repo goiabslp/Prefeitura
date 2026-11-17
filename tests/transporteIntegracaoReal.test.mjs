@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { 
+import {
   agruparHierarquicoDataDestino,
   calcularIndicadoresTransporte,
   normalizeCityTransporte,

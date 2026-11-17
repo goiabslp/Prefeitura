@@ -5,7 +5,8 @@
 import type { 
   TransporteDemanda, 
   VehicleSchedule, 
-  Vehicle 
+  Vehicle,
+  Person
 } from '../types';
 
 /**
@@ -458,8 +459,9 @@ export const filtrarVeiculosElegiveisTransporte = (params: VeiculoElegivelFiltro
 
       const veic = vehicles.find(v => v.id === sch.vehicleId);
       const stVeic = (veic?.status || '').toLowerCase();
-      if (stVeic === 'manutencao' || stVeic === 'inativo' || stVeic === 'baixado') return;
-      if (veic?.maintenanceStatus === 'Em Manutenção') return;
+      if (stVeic === 'manutencao' || stVeic === 'inativo' || stVeic === 'baixado' || stVeic === 'nao_liberado' || stVeic === 'batido') return;
+      const mStatusVeic = String(veic?.maintenanceStatus || '').toLowerCase();
+      if (mStatusVeic === 'andamento' || mStatusVeic.includes('manuten')) return;
 
       const capTotal = veic?.passengerCapacity || (veic as any)?.capacity || 5;
       const capPassageiros = Math.max(1, capTotal - 1);
@@ -549,8 +551,9 @@ export const filtrarVeiculosElegiveisTransporte = (params: VeiculoElegivelFiltro
 
   vehicles.forEach(veic => {
     const st = (veic.status || '').toLowerCase();
-    if (st === 'manutencao' || st === 'inativo' || st === 'baixado') return;
-    if (veic.maintenanceStatus === 'Em Manutenção') return;
+    if (st === 'manutencao' || st === 'inativo' || st === 'baixado' || st === 'nao_liberado' || st === 'batido') return;
+    const mStatus = String(veic.maintenanceStatus || '').toLowerCase();
+    if (mStatus === 'andamento' || mStatus.includes('manuten')) return;
     if (veic.availableForScheduling === 'Não') return;
     const cat = (veic.vehicleCategory || veic.type || '').toLowerCase();
     if (cat === 'moto' || cat === 'máquina pesada' || cat === 'caminhão' || cat === 'acessórios') return;
