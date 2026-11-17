@@ -211,39 +211,26 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  // Filtros combinados em linha única
-  const [filterDate, setFilterDate] = useState<string>('2026-11-20');
+  // Filtros combinados em linha única (iniciam limpos)
+  const [filterDate, setFilterDate] = useState<string>('');
   const [filterDestino, setFilterDestino] = useState<string>('TODOS');
   const [filterStatus, setFilterStatus] = useState<TransporteStatus | 'TODOS'>('TODOS');
   const [filterProcedimento, setFilterProcedimento] = useState<string>('TODOS');
   const [searchTerm, setSearchTerm] = useState<string>('');
 
-  // Seleção múltipla de pacientes
-  const [selectedDemandaIds, setSelectedDemandaIds] = useState<string[]>([
-    'dem_ipa_01', // Maria Aparecida Silva (como na referência)
-    'dem_ipa_02'  // Raimundo Carvalho Souza (como na referência)
-  ]);
+  // Seleção múltipla de pacientes (inicia limpa sem seleção prévia)
+  const [selectedDemandaIds, setSelectedDemandaIds] = useState<string[]>([]);
 
-  // Veículo selecionado na coluna direita
-  const [selectedViagemId, setSelectedViagemId] = useState<string>('trip_qxv_4b21');
+  // Veículo selecionado na coluna direita (inicia sem seleção)
+  const [selectedViagemId, setSelectedViagemId] = useState<string>('');
 
-  // Estados de expansão do Acordeão
-  // Por padrão, todas as datas e destinos iniciam expandidos para priorizar visualização do grid
-  const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({
-    '2026-11-20': true,
-    '2026-11-21': true,
-    '2026-11-24': true
-  });
-
-  // Destinos expandidos por padrão para exibir o grid imediatamente
-  const [expandedDestinos, setExpandedDestinos] = useState<Record<string, boolean>>({
-    '2026-11-20__Ipatinga — MG': true,
-    '2026-11-20__Ponte Nova — MG': true
-  });
+  // Estados de expansão do Acordeão (datas e destinos abertos por padrão)
+  const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
+  const [expandedDestinos, setExpandedDestinos] = useState<Record<string, boolean>>({});
 
   // Destino e data ativos em foco para a coluna direita
-  const [focoData, setFocoData] = useState<string>('2026-11-20');
-  const [focoDestino, setFocoDestino] = useState<string>('Ipatinga');
+  const [focoData, setFocoData] = useState<string>('');
+  const [focoDestino, setFocoDestino] = useState<string>('');
 
   // Modo mobile (Abas: 'pacientes' | 'veiculos')
   const [mobileTab, setMobileTab] = useState<'pacientes' | 'veiculos'>('pacientes');
@@ -1173,7 +1160,7 @@ export const TransportePacientesScreen: React.FC<TransportePacientesScreenProps>
               </div>
               <div>
                 <h2 className="text-xs font-black text-slate-900 uppercase tracking-tight">
-                  VEÍCULOS E VIAGENS ({focoDestino} — {filterDate ? new Date(filterDate + 'T12:00:00').toLocaleDateString('pt-BR') : '20/11/2026'})
+                  VEÍCULOS E VIAGENS{focoDestino || filterDate ? ` (${focoDestino ? focoDestino : 'Geral'}${filterDate ? ` — ${new Date(filterDate + 'T12:00:00').toLocaleDateString('pt-BR')}` : ''})` : ''}
                 </h2>
                 <p className="text-[10px] text-slate-400 font-bold leading-none mt-0.5">
                   Selecione um veículo e vincule os pacientes
