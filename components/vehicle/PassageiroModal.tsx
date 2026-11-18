@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Calendar, 
   MapPin, 
+  Clock,
   FileText,
   Accessibility, 
   Users,
@@ -55,6 +56,7 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
   const [nicknameDisplay, setNicknameDisplay] = useState('');
   const [birthDateDisplay, setBirthDateDisplay] = useState('');
   const [departureLocation, setDepartureLocation] = useState('');
+  const [departureTime, setDepartureTime] = useState('');
   const [procedureName, setProcedureName] = useState('');
   const [needsCompanion, setNeedsCompanion] = useState(false);
   const [needsAdaptedTransport, setNeedsAdaptedTransport] = useState(false);
@@ -94,6 +96,7 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       setNicknameDisplay('');
       setBirthDateDisplay('');
       setDepartureLocation('');
+      setDepartureTime('');
       setProcedureName('');
       setNeedsCompanion(false);
       setNeedsAdaptedTransport(false);
@@ -117,6 +120,7 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       setBirthDateDisplay(editingPassenger.birthDate ? formatBirthDateBr(editingPassenger.birthDate) : 'Não informada');
       setNicknameDisplay(editingPassenger.nickname ? editingPassenger.nickname : 'Não informado');
       setDepartureLocation(editingPassenger.departureLocation || '');
+      setDepartureTime(editingPassenger.departureTime || editingPassenger.appointmentTime || '');
       setProcedureName(editingPassenger.procedureName || '');
       setNeedsCompanion(Boolean(editingPassenger.needsCompanion || editingPassenger.companionId));
       setNeedsAdaptedTransport(Boolean(editingPassenger.needsAdaptedTransport));
@@ -136,6 +140,7 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       setNicknameDisplay('');
       setBirthDateDisplay('');
       setDepartureLocation('');
+      setDepartureTime('');
       setProcedureName('');
       setNeedsCompanion(false);
       setNeedsAdaptedTransport(false);
@@ -239,6 +244,8 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
     setSearchTerm('');
     setNicknameDisplay('');
     setBirthDateDisplay('');
+    setDepartureLocation('');
+    setDepartureTime('');
     setSearchResults([]);
     setIsDropdownOpen(false);
     setErrorMessage('');
@@ -254,6 +261,8 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       setSelectedPatient(null);
       setNicknameDisplay('');
       setBirthDateDisplay('');
+      setDepartureLocation('');
+      setDepartureTime('');
       setSuccessMessage('');
     }
   };
@@ -279,9 +288,20 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       return;
     }
 
-    // REGRA OBRIGATÓRIA: Local de Embarque é obrigatório
+    // REGRA OBRIGATÓRIA: Horário de Embarque é individual por passageiro e obrigatório
+    if (!departureTime.trim()) {
+      setErrorMessage('O campo Horário de Embarque é obrigatório para este passageiro.');
+      return;
+    }
+
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(departureTime.trim())) {
+      setErrorMessage('Informe um Horário de Embarque válido no formato HH:mm (ex: 06:30).');
+      return;
+    }
+
+    // REGRA OBRIGATÓRIA: Local de Embarque é individual por passageiro e obrigatório
     if (!departureLocation.trim()) {
-      setErrorMessage('O campo Local de Embarque é obrigatório.');
+      setErrorMessage('O campo Local de Embarque é obrigatório para este passageiro.');
       return;
     }
 
@@ -298,7 +318,8 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       nickname: nicknameDisplay !== 'Não informado' ? nicknameDisplay : undefined,
       phone: selectedPatient.phone || '',
       departureLocation: departureLocation.trim(),
-      appointmentTime: editingPassenger?.appointmentTime || '',
+      departureTime: departureTime.trim(),
+      appointmentTime: departureTime.trim(),
       appointmentLocation: editingPassenger?.appointmentLocation || '',
       procedureName: procedureName.trim() || 'Consulta / Exame',
       type: 'paciente',
@@ -566,21 +587,43 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
                 </div>
               )}
 
-              {/* 3. CAMPO LOCAL DE EMBARQUE * (TEXTO LIVRE) */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-wider text-slate-600 block">
-                  Local de embarque *
-                </label>
-                <div className="relative">
-                  <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input
-                    type="text"
-                    required
-                    value={departureLocation}
-                    onChange={e => setDepartureLocation(e.target.value)}
-                    placeholder="Rua Principal, nº 120, próximo à Praça Central"
-                    className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 focus:border-indigo-600 rounded-xl text-xs font-semibold text-slate-800 outline-none transition-all shadow-2xs placeholder:text-slate-400"
-                  />
+              {/* 3. HORÁRIO E LOCAL DE EMBARQUE DO PASSAGEIRO (INDIVIDUAIS POR PASSAGEIRO) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Horário de Embarque */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-600 block">
+                    Horário de embarque *
+                  </label>
+                  <div className="relative">
+                    <Clock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="time"
+                      required
+                      value={departureTime}
+                      onChange={e => setDepartureTime(e.target.value)}
+                      className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 focus:border-indigo-600 rounded-xl text-xs font-semibold text-slate-800 outline-none transition-all shadow-2xs"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-medium">Horário previsto para embarque deste passageiro.</p>
+                </div>
+
+                {/* Local de Embarque */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-600 block">
+                    Local de embarque *
+                  </label>
+                  <div className="relative">
+                    <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      required
+                      value={departureLocation}
+                      onChange={e => setDepartureLocation(e.target.value)}
+                      placeholder="Rua, número, praça ou ponto de encontro"
+                      className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 focus:border-indigo-600 rounded-xl text-xs font-semibold text-slate-800 outline-none transition-all shadow-2xs placeholder:text-slate-400"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-medium">Endereço ou referência para o motorista.</p>
                 </div>
               </div>
 

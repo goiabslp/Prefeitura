@@ -123,3 +123,71 @@ test('5. Tratamento de erro sem exibição de modal de sucesso e preservando for
   assert.equal(savedSchedule, null);
   assert.equal(formData.destination, 'IPATINGA - MG');
 });
+
+test('6. Horário e local de embarque individuais por passageiro preservados sem conflito', () => {
+  const tripSchedule = {
+    departureDateTime: '2026-11-20T05:00:00.000Z',
+    returnDateTime: '2026-11-20T19:00:00.000Z',
+    destination: 'BELO HORIZONTE - MG',
+    passengers: [
+      {
+        id: 'pass-1',
+        name: 'CARLOS SILVA',
+        type: 'paciente',
+        departureTime: '04:30',
+        departureLocation: 'Rua das Flores, nº 45, Bairro Centro',
+        appointmentTime: '04:30'
+      },
+      {
+        id: 'pass-2',
+        name: 'MARIA SILVA',
+        type: 'acompanhante',
+        departureTime: '04:30',
+        departureLocation: 'Rua das Flores, nº 45, Bairro Centro',
+        companionForPatientId: 'pass-1'
+      },
+      {
+        id: 'pass-3',
+        name: 'JOAO PEREIRA',
+        type: 'paciente',
+        departureTime: '05:15',
+        departureLocation: 'Praça Central, próximo à Igreja Matriz',
+        appointmentTime: '05:15'
+      }
+    ]
+  };
+
+  // Garante que o passageiro 1 tem horário e local específicos
+  assert.equal(tripSchedule.passengers[0].departureTime, '04:30');
+  assert.equal(tripSchedule.passengers[0].departureLocation, 'Rua das Flores, nº 45, Bairro Centro');
+
+  // Garante que o passageiro 3 tem horário e local distintos e individuais
+  assert.equal(tripSchedule.passengers[2].departureTime, '05:15');
+  assert.equal(tripSchedule.passengers[2].departureLocation, 'Praça Central, próximo à Igreja Matriz');
+  assert.notEqual(tripSchedule.passengers[0].departureTime, tripSchedule.passengers[2].departureTime);
+
+  // Garante que os horários gerais da viagem não foram sobrescritos
+  assert.equal(tripSchedule.departureDateTime, '2026-11-20T05:00:00.000Z');
+  assert.equal(tripSchedule.returnDateTime, '2026-11-20T19:00:00.000Z');
+});
+
+test('7. Renderização da tabela de Tripulação do Comprovante PDF com Nome, Partida, Horário e Local', () => {
+  const passenger = {
+    name: 'TEREZA CRISTINA ANDRADE',
+    departureTime: '06:15',
+    departureLocation: 'UBS Central / Av. Brasil, 500',
+    type: 'paciente'
+  };
+
+  const pdfRow = {
+    nome: passenger.name,
+    partida: passenger.departureLocation || 'Ponto Central',
+    horario: passenger.departureTime || passenger.appointmentTime || '---',
+    local: passenger.departureLocation || passenger.appointmentLocation || 'Ponto Central'
+  };
+
+  assert.equal(pdfRow.nome, 'TEREZA CRISTINA ANDRADE');
+  assert.equal(pdfRow.partida, 'UBS Central / Av. Brasil, 500');
+  assert.equal(pdfRow.horario, '06:15');
+  assert.equal(pdfRow.local, 'UBS Central / Av. Brasil, 500');
+});

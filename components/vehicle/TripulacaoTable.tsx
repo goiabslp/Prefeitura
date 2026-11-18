@@ -9,7 +9,8 @@ import {
   User, 
   UserPlus, 
   Car, 
-  ShieldAlert
+  ShieldAlert,
+  Clock
 } from 'lucide-react';
 import { CrewMember, Vehicle } from '../../types';
 import { maskCpfPartial } from '../../utils/cpfUtils';
@@ -304,12 +305,20 @@ export const TripulacaoTable: React.FC<TripulacaoTableProps> = ({
                         {p.cpf ? maskCpfPartial(p.cpf) : <span className="text-slate-400 italic font-sans text-[11px]">Não inf.</span>}
                       </td>
 
-                      {/* 4. Local de Embarque */}
+                      {/* 4. Local e Horário de Embarque */}
                       <td className="py-3.5 px-4 text-xs font-bold text-slate-700 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 max-w-[200px] truncate" title={p.departureLocation || 'Sede'}>
-                          <MapPin className="w-3 h-3 text-indigo-500 shrink-0" />
-                          <span className="truncate">{p.departureLocation || 'Sede'}</span>
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          {(p.departureTime || p.appointmentTime) && (
+                            <span className="inline-flex items-center gap-1 font-mono text-[11px] font-black text-indigo-700">
+                              <Clock className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                              {p.departureTime || p.appointmentTime}
+                            </span>
+                          )}
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 max-w-[200px] truncate" title={p.departureLocation || 'Sede'}>
+                            <MapPin className="w-3 h-3 text-slate-500 shrink-0" />
+                            <span className="truncate">{p.departureLocation || 'Sede'}</span>
+                          </span>
+                        </div>
                       </td>
 
                       {/* 5. Procedimento / Compromisso */}

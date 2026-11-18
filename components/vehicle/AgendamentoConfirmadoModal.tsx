@@ -442,7 +442,8 @@ export const AgendamentoConfirmadoModal: React.FC<AgendamentoConfirmadoModalProp
                         <th className="py-2 px-3">Passageiro</th>
                         <th className="py-2 px-2">Tipo</th>
                         <th className="py-2 px-2">CPF</th>
-                        <th className="py-2 px-2">Embarque</th>
+                        <th className="py-2 px-2">Horário</th>
+                        <th className="py-2 px-2">Local de Embarque</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs font-medium">
@@ -464,7 +465,10 @@ export const AgendamentoConfirmadoModal: React.FC<AgendamentoConfirmadoModalProp
                           <td className="py-2 px-2 font-mono text-[11px] text-slate-600">
                             {p.cpf ? maskCpfPartial(p.cpf) : 'Não informado'}
                           </td>
-                          <td className="py-2 px-2 text-slate-600 text-[11px] truncate max-w-[140px]">
+                          <td className="py-2 px-2 font-mono text-[11px] font-bold text-indigo-700 whitespace-nowrap">
+                            {p.departureTime || p.appointmentTime || '---'}
+                          </td>
+                          <td className="py-2 px-2 text-slate-600 text-[11px] truncate max-w-[160px]" title={p.departureLocation || 'Ponto Central'}>
                             {p.departureLocation || 'Ponto Central'}
                           </td>
                         </tr>
@@ -688,7 +692,7 @@ export const AgendamentoConfirmadoModal: React.FC<AgendamentoConfirmadoModalProp
               <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
                 <div className="bg-slate-100 px-3 py-1.5 border-b border-slate-200 flex items-center justify-between">
                   <span className="text-[7.5pt] font-black uppercase tracking-wider text-slate-700">
-                    Relação de Passageiros ({passengersList.length})
+                    Tripulação ({passengersList.length})
                   </span>
                   <span className="text-[6.5pt] font-bold text-slate-500 uppercase">
                     {countPacientes} Paciente(s) • {countAcompanhantes} Acompanhante(s)
@@ -697,12 +701,11 @@ export const AgendamentoConfirmadoModal: React.FC<AgendamentoConfirmadoModalProp
                 <table className="w-full text-left border-collapse text-[7pt]">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[6pt] font-black uppercase tracking-wider text-slate-500">
-                      <th className="py-1 px-2 w-8">#</th>
-                      <th className="py-1 px-2">Nome Completo</th>
-                      <th className="py-1 px-2 w-20">Tipo</th>
-                      <th className="py-1 px-2 w-24">CPF</th>
-                      <th className="py-1 px-2 w-20">Nascimento</th>
-                      <th className="py-1 px-2">Embarque</th>
+                      <th className="py-1 px-2 w-6">#</th>
+                      <th className="py-1 px-2">Nome</th>
+                      <th className="py-1 px-2">Partida</th>
+                      <th className="py-1 px-2 w-16">Horário</th>
+                      <th className="py-1 px-2">Local</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -712,11 +715,19 @@ export const AgendamentoConfirmadoModal: React.FC<AgendamentoConfirmadoModalProp
                         <td className="py-1 px-2 font-bold text-slate-900 uppercase">
                           {p.name}
                           {p.nickname && <span className="text-[6pt] text-indigo-700 block font-normal">({p.nickname})</span>}
+                          {p.type === 'acompanhante' && (
+                            <span className="text-[5.5pt] text-purple-700 font-bold block uppercase">Acompanhante</span>
+                          )}
                         </td>
-                        <td className="py-1 px-2 uppercase font-semibold text-slate-700">{p.type || 'Paciente'}</td>
-                        <td className="py-1 px-2 font-mono">{p.cpf ? maskCpfPartial(p.cpf) : '---'}</td>
-                        <td className="py-1 px-2">{p.birthDate ? formatBirthDateBr(p.birthDate) : '---'}</td>
-                        <td className="py-1 px-2 text-slate-600 truncate max-w-[140px]">{p.departureLocation || 'Ponto Central'}</td>
+                        <td className="py-1 px-2 uppercase font-medium text-slate-700">
+                          {p.departureLocation || 'Ponto Central'}
+                        </td>
+                        <td className="py-1 px-2 font-mono font-bold text-slate-900">
+                          {p.departureTime || p.appointmentTime || '---'}
+                        </td>
+                        <td className="py-1 px-2 text-slate-600">
+                          {p.departureLocation || p.appointmentLocation || 'Ponto Central'}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

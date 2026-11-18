@@ -318,9 +318,9 @@ export const VehicleServiceOrderPreview: React.FC<VehicleServiceOrderPreviewProp
                                                         {schedule.passengers.map((p, idx) => (
                                                             <tr key={idx} className="text-[7pt] font-medium text-slate-700">
                                                                 <td className="p-2 pl-3 font-bold uppercase text-slate-800 truncate">{p.name}</td>
-                                                                <td className="p-2 uppercase truncate">{p.departureLocation}</td>
-                                                                <td className="p-2 font-mono">{p.appointmentTime}</td>
-                                                                <td className="p-2 uppercase truncate">{p.appointmentLocation}</td>
+                                                                <td className="p-2 uppercase truncate">{p.departureLocation || 'Ponto Central'}</td>
+                                                                <td className="p-2 font-mono font-bold text-slate-900">{p.departureTime || p.appointmentTime || '---'}</td>
+                                                                <td className="p-2 uppercase truncate">{p.departureLocation || p.appointmentLocation || 'Ponto Central'}</td>
                                                             </tr>
                                                         ))}
                                                     </tbody>

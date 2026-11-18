@@ -552,6 +552,7 @@ export interface CrewMember {
   nickname?: string;
   phone?: string;
   departureLocation?: string;
+  departureTime?: string;
   appointmentTime?: string;
   appointmentLocation?: string;
   procedureName?: string;
