@@ -55,6 +55,8 @@ class SessionLifecycleService {
   private expiredListeners: Set<(reason: string) => void> = new Set();
   private logoutListeners: Set<() => void> = new Set();
   private startedListeners: Set<(userId: string) => void> = new Set();
+  private lastLogoutNotifiedAt: number = 0;
+  private lastExpiredNotifiedAt: number = 0;
 
   constructor() {
     this.initServerOffset();
@@ -290,8 +292,15 @@ class SessionLifecycleService {
   /**
    * Invalida a sessão por expiração (atingiu o limite de 4 horas)
    */
-  public expireSession(reason: string = SESSION_EXPIRED_OFFICIAL_MESSAGE): void {
+  public expireSession(
+    reason: string = SESSION_EXPIRED_OFFICIAL_MESSAGE,
+    options?: { broadcast?: boolean; notifyLocal?: boolean }
+  ): void {
     if (typeof window === 'undefined') return;
+
+    const now = Date.now();
+    const shouldBroadcast = options?.broadcast !== false;
+    const shouldNotifyLocal = options?.notifyLocal !== false;
 
     try {
       localStorage.setItem(STORAGE_KEYS.EXPIRED_MSG, reason);
@@ -304,17 +313,38 @@ class SessionLifecycleService {
       this.clearSupabaseAuthStorage();
     } catch (e) {}
 
-    this.broadcastSyncEvent({ type: 'SESSION_EXPIRED', reason });
-    this.notifyExpiredListeners(reason);
+    // Evita reentrância / rajadas repetidas em janela curta
+    if (now - this.lastExpiredNotifiedAt < 1500) {
+      return;
+    }
+    this.lastExpiredNotifiedAt = now;
+
+    if (shouldBroadcast) {
+      this.broadcastSyncEvent({ type: 'SESSION_EXPIRED', reason });
+    }
+    if (shouldNotifyLocal) {
+      this.notifyExpiredListeners(reason, true);
+    }
   }
 
   /**
-   * Encerra a sessão normalmente (logout manual do usuário)
+   * Encerra a sessão normalmente (logout manual do usuário).
+   * Por padrão, propaga o encerramento apenas para OUTRAS abas (broadcast: true)
+   * e NÃO dispara notifyLogoutListeners na própria aba (evitando loop infinito com SIGNED_OUT).
    */
-  public clearSession(): void {
+  public clearSession(options?: { broadcast?: boolean; notifyLocal?: boolean }): void {
     if (typeof window === 'undefined') return;
 
+    const shouldBroadcast = options?.broadcast !== false;
+    const shouldNotifyLocal = options?.notifyLocal === true;
+
+    let hadActiveSession = false;
     try {
+      hadActiveSession = Boolean(
+        localStorage.getItem(STORAGE_KEYS.STARTED_AT) ||
+        localStorage.getItem(STORAGE_KEYS.USER_ID)
+      );
+
       localStorage.removeItem(STORAGE_KEYS.STARTED_AT);
       localStorage.removeItem(STORAGE_KEYS.EXPIRES_AT);
       localStorage.removeItem(STORAGE_KEYS.USER_ID);
@@ -324,8 +354,13 @@ class SessionLifecycleService {
       this.clearSupabaseAuthStorage();
     } catch (e) {}
 
-    this.broadcastSyncEvent({ type: 'SESSION_LOGOUT' });
-    this.notifyLogoutListeners();
+    // Só envia evento para outras abas se havia sessão ativa a encerrar
+    if (shouldBroadcast && hadActiveSession) {
+      this.broadcastSyncEvent({ type: 'SESSION_LOGOUT' });
+    }
+    if (shouldNotifyLocal) {
+      this.notifyLogoutListeners();
+    }
   }
 
   /**
@@ -381,13 +416,22 @@ class SessionLifecycleService {
     return () => this.logoutListeners.delete(callback);
   }
 
-  private notifyExpiredListeners(reason: string) {
+  private notifyExpiredListeners(reason: string, skipDebounce = false) {
+    const now = Date.now();
+    if (!skipDebounce) {
+      if (now - this.lastExpiredNotifiedAt < 1500) return;
+      this.lastExpiredNotifiedAt = now;
+    }
     this.expiredListeners.forEach(listener => {
       try { listener(reason); } catch (e) { console.error(e); }
     });
   }
 
   private notifyLogoutListeners() {
+    const now = Date.now();
+    // Deduplica eventos duplicados (BroadcastChannel + storage event simultâneos ou reentrância)
+    if (now - this.lastLogoutNotifiedAt < 1500) return;
+    this.lastLogoutNotifiedAt = now;
     this.logoutListeners.forEach(listener => {
       try { listener(); } catch (e) { console.error(e); }
     });

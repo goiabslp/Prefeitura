@@ -176,7 +176,10 @@ export const auditLogService = {
       };
 
       // 1. Grava no banco de dados Supabase de forma assíncrona
-      const insertPromise = supabase.from('audit_logs').insert([logPayload]).select('id').single();
+      // IMPORTANTE: NÃO encadear .select('id') aqui! A política RLS de SELECT em audit_logs
+      // restringe leitura exclusivamente a administradores (role = 'admin'). Usar .select()
+      // aciona INSERT ... RETURNING no Postgres e causa 403 Forbidden para usuários não-admin.
+      const insertPromise = supabase.from('audit_logs').insert([logPayload]);
 
       // 2. Dispara notificação Realtime em tempo real (Broadcast)
       try {
@@ -195,11 +198,9 @@ export const auditLogService = {
         window.dispatchEvent(new CustomEvent('audit_log_created', { detail: logPayload }));
       }
 
-      const { data: insertedData, error } = await insertPromise;
+      const { error } = await insertPromise;
       if (error) {
         console.warn('Erro ao gravar log de auditoria no Supabase:', error.message);
-      } else if (insertedData?.id) {
-        logPayload.id = insertedData.id;
       }
 
       return logPayload;

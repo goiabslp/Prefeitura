@@ -394,3 +394,53 @@ test('10. Operação no Supabase com sessão expirada: interceptação e rejeiç
   assert.equal(response.status, 401);
   assert.equal(response.body.message, 'Sua sessão expirou após 4 horas. Faça login novamente para continuar.');
 });
+
+test('11. Regressão de loop infinito: clearSession() NÃO dispara onSessionLogout na mesma aba', async () => {
+  const store = new Map();
+  const mockLocalStorage = {
+    get length() { return store.size; },
+    key(i) { return Array.from(store.keys())[i] ?? null; },
+    getItem(k) { return store.has(k) ? store.get(k) : null; },
+    setItem(k, v) { store.set(k, String(v)); },
+    removeItem(k) { store.delete(k); },
+    clear() { store.clear(); }
+  };
+
+  const prevWindow = globalThis.window;
+  const prevLocalStorage = globalThis.localStorage;
+  const prevSessionStorage = globalThis.sessionStorage;
+  const prevBroadcastChannel = globalThis.BroadcastChannel;
+
+  try {
+    globalThis.BroadcastChannel = undefined;
+    globalThis.localStorage = mockLocalStorage;
+    globalThis.sessionStorage = mockLocalStorage;
+    globalThis.window = {
+      localStorage: mockLocalStorage,
+      sessionStorage: mockLocalStorage,
+      addEventListener() {},
+      removeEventListener() {}
+    };
+
+    const { sessionLifecycleService } = await import('../services/sessionLifecycleService.ts');
+
+    let logoutListenerCalls = 0;
+    const unbind = sessionLifecycleService.onSessionLogout(() => {
+      logoutListenerCalls += 1;
+    });
+
+    sessionLifecycleService.startSession('user_loop_test');
+    sessionLifecycleService.clearSession();
+    // Segunda chamada simulando SIGNED_OUT do Supabase logo em seguida
+    sessionLifecycleService.clearSession({ broadcast: false, notifyLocal: false });
+
+    unbind();
+
+    assert.equal(logoutListenerCalls, 0, 'clearSession na própria aba não deve disparar listener de logout de outra aba (previne loop infinito)');
+  } finally {
+    globalThis.BroadcastChannel = prevBroadcastChannel;
+    globalThis.window = prevWindow;
+    globalThis.localStorage = prevLocalStorage;
+    globalThis.sessionStorage = prevSessionStorage;
+  }
+});

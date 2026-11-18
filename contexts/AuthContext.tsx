@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { Session } from '@supabase/supabase-js';
 import { User, UserRole } from '../types';
@@ -50,6 +50,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [user, setUser] = useState<User | null>(null);
     const [session, setSession] = useState<Session | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
+    // Guarda contra reentrância de logout para impedir loops entre SIGNED_OUT e eventos multi-abas
+    const isSigningOutRef = useRef<boolean>(false);
 
     useEffect(() => {
         // Validação da Sessão Ativa ao carregar ou acessar o link da aplicação
@@ -59,12 +61,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const sessionCheck = sessionLifecycleService.isSessionValid(session.user.id);
                 if (!sessionCheck.isValid) {
                     console.warn(`[AUTH] Sessão do Supabase rejeitada na inicialização: ${sessionCheck.reason}. Limite de 4 horas atingido ou inexistente.`);
-                    if (sessionCheck.reason === 'expired_4h') {
-                        sessionLifecycleService.expireSession(SESSION_EXPIRED_OFFICIAL_MESSAGE);
-                    } else {
-                        sessionLifecycleService.clearSession();
+                    isSigningOutRef.current = true;
+                    try {
+                        if (sessionCheck.reason === 'expired_4h') {
+                            sessionLifecycleService.expireSession(SESSION_EXPIRED_OFFICIAL_MESSAGE, { broadcast: true, notifyLocal: false });
+                        } else {
+                            sessionLifecycleService.clearSession({ broadcast: false, notifyLocal: false });
+                        }
+                        await supabase.auth.signOut();
+                    } finally {
+                        isSigningOutRef.current = false;
                     }
-                    await supabase.auth.signOut();
                     setSession(null);
                     setUser(null);
                     setLoading(false);
@@ -74,7 +81,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setSession(session);
                 fetchProfile(session.user.id, session.user.email || '');
             } else {
-                sessionLifecycleService.clearSession();
+                sessionLifecycleService.clearSession({ broadcast: false, notifyLocal: false });
                 setSession(null);
                 setUser(null);
                 setLoading(false);
@@ -98,8 +105,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                             sessionLifecycleService.startSession(session.user.id);
                         } else if (check.reason === 'expired_4h') {
                             console.warn('[AUTH] Sessão expirada detectada no SIGNED_IN. Desconectando.');
-                            sessionLifecycleService.expireSession(SESSION_EXPIRED_OFFICIAL_MESSAGE);
-                            await supabase.auth.signOut();
+                            isSigningOutRef.current = true;
+                            try {
+                                sessionLifecycleService.expireSession(SESSION_EXPIRED_OFFICIAL_MESSAGE, { broadcast: true, notifyLocal: false });
+                                await supabase.auth.signOut();
+                            } finally {
+                                isSigningOutRef.current = false;
+                            }
                             setUser(null);
                             setSession(null);
                             setLoading(false);
@@ -113,8 +125,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     const check = sessionLifecycleService.isSessionValid(session.user.id);
                     if (!check.isValid) {
                         console.warn('[AUTH] Token refreshed rejeitado: sessão ultrapassou o limite absoluto de 4 horas.');
-                        sessionLifecycleService.expireSession(SESSION_EXPIRED_OFFICIAL_MESSAGE);
-                        await supabase.auth.signOut();
+                        isSigningOutRef.current = true;
+                        try {
+                            sessionLifecycleService.expireSession(SESSION_EXPIRED_OFFICIAL_MESSAGE, { broadcast: true, notifyLocal: false });
+                            await supabase.auth.signOut();
+                        } finally {
+                            isSigningOutRef.current = false;
+                        }
                         setUser(null);
                         setSession(null);
                         setLoading(false);
@@ -122,7 +139,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     }
                 }
             } else if (event === 'SIGNED_OUT') {
-                sessionLifecycleService.clearSession();
+                // Limpa apenas o storage local silenciosamente, sem re-disparar broadcast ou listeners
+                sessionLifecycleService.clearSession({ broadcast: false, notifyLocal: false });
                 setUser(null);
                 setSession(null);
                 setLoading(false);
@@ -265,6 +283,8 @@ timestamp: ${new Date().toISOString()}`);
     };
 
     const signOut = async (reason = 'Ação manual do usuário / Logout') => {
+        if (isSigningOutRef.current) return;
+
         if (reason === 'Atualização do Sistema Concluída') {
             const validation = canExecuteSystemUpdateLogout();
             if (!validation.allowed) {
@@ -272,7 +292,10 @@ timestamp: ${new Date().toISOString()}`);
                 return;
             }
         }
-        console.warn(`[AUTH-DIAGNOSTIC] Origem do logout:
+
+        isSigningOutRef.current = true;
+        try {
+            console.warn(`[AUTH-DIAGNOSTIC] Origem do logout:
 função: signOut
 arquivo: contexts/AuthContext.tsx
 motivo: ${reason}
@@ -281,10 +304,13 @@ userId: ${user?.id || 'N/A'}
 authEvent: explicit_signOut
 timestamp: ${new Date().toISOString()}`);
 
-        sessionLifecycleService.clearSession();
-        await supabase.auth.signOut();
-        setUser(null);
-        setSession(null);
+            sessionLifecycleService.clearSession({ broadcast: true, notifyLocal: false });
+            await supabase.auth.signOut();
+            setUser(null);
+            setSession(null);
+        } finally {
+            isSigningOutRef.current = false;
+        }
     };
 
     // Monitoramento contínuo em tempo real da vigência de 4 horas e sincronização entre abas
@@ -292,27 +318,39 @@ timestamp: ${new Date().toISOString()}`);
         if (!session?.user) return;
 
         // 1. Checagem periódica a cada 10 segundos
-        const intervalId = setInterval(() => {
+        const intervalId = setInterval(async () => {
+            if (isSigningOutRef.current) return;
             const check = sessionLifecycleService.isSessionValid(session.user.id);
             if (!check.isValid && check.reason === 'expired_4h') {
-                console.warn('[AUTH] Sessão atingiu o limite de 4 horas em tempo real. Encerrando acesso.');
-                sessionLifecycleService.expireSession(SESSION_EXPIRED_OFFICIAL_MESSAGE);
-                supabase.auth.signOut();
-                setUser(null);
-                setSession(null);
+                isSigningOutRef.current = true;
+                try {
+                    console.warn('[AUTH] Sessão atingiu o limite de 4 horas em tempo real. Encerrando acesso.');
+                    sessionLifecycleService.expireSession(SESSION_EXPIRED_OFFICIAL_MESSAGE, { broadcast: true, notifyLocal: false });
+                    await supabase.auth.signOut();
+                    setUser(null);
+                    setSession(null);
+                } finally {
+                    isSigningOutRef.current = false;
+                }
             }
         }, 10000);
 
         // 2. Checagem imediata ao focar na janela ou alternar abas
-        const handleVisibilityChange = () => {
+        const handleVisibilityChange = async () => {
+            if (isSigningOutRef.current) return;
             if (document.visibilityState === 'visible') {
                 const check = sessionLifecycleService.isSessionValid(session.user.id);
                 if (!check.isValid && check.reason === 'expired_4h') {
-                    console.warn('[AUTH] Sessão expirou enquanto a aba estava em segundo plano. Encerrando.');
-                    sessionLifecycleService.expireSession(SESSION_EXPIRED_OFFICIAL_MESSAGE);
-                    supabase.auth.signOut();
-                    setUser(null);
-                    setSession(null);
+                    isSigningOutRef.current = true;
+                    try {
+                        console.warn('[AUTH] Sessão expirou enquanto a aba estava em segundo plano. Encerrando.');
+                        sessionLifecycleService.expireSession(SESSION_EXPIRED_OFFICIAL_MESSAGE, { broadcast: true, notifyLocal: false });
+                        await supabase.auth.signOut();
+                        setUser(null);
+                        setSession(null);
+                    } finally {
+                        isSigningOutRef.current = false;
+                    }
                 }
             }
         };
@@ -320,19 +358,31 @@ timestamp: ${new Date().toISOString()}`);
         window.addEventListener('focus', handleVisibilityChange);
         document.addEventListener('visibilitychange', handleVisibilityChange);
 
-        // 3. Ouvintes de eventos multi-abas
+        // 3. Ouvintes de eventos multi-abas (ignoram se o encerramento já está em curso nesta aba)
         const unbindExpired = sessionLifecycleService.onSessionExpired(async () => {
-            console.warn('[AUTH] Sessão expirada em outra aba. Sincronizando encerramento.');
-            await supabase.auth.signOut();
-            setUser(null);
-            setSession(null);
+            if (isSigningOutRef.current) return;
+            isSigningOutRef.current = true;
+            try {
+                console.warn('[AUTH] Sessão expirada em outra aba. Sincronizando encerramento.');
+                await supabase.auth.signOut();
+                setUser(null);
+                setSession(null);
+            } finally {
+                isSigningOutRef.current = false;
+            }
         });
 
         const unbindLogout = sessionLifecycleService.onSessionLogout(async () => {
-            console.warn('[AUTH] Logout efetuado em outra aba. Sincronizando encerramento.');
-            await supabase.auth.signOut();
-            setUser(null);
-            setSession(null);
+            if (isSigningOutRef.current) return;
+            isSigningOutRef.current = true;
+            try {
+                console.warn('[AUTH] Logout efetuado em outra aba. Sincronizando encerramento.');
+                await supabase.auth.signOut();
+                setUser(null);
+                setSession(null);
+            } finally {
+                isSigningOutRef.current = false;
+            }
         });
 
         return () => {
