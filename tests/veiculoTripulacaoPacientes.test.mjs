@@ -134,3 +134,38 @@ test('6. Rotas URL padronizadas para cada aba do Agendamento de Veículos', () =
   assert.equal(rotasAbas.tripulacao, '/AgendamentoVeiculos/Agendar/Novo/Tripulacao');
   assert.equal(rotasAbas.tripulacao.startsWith('/AgendamentoVeiculos/Agendar/Novo'), true);
 });
+
+test('7. Colaborador autorizado no Agendamento de Veículos tem acesso à busca de pacientes na Tripulação', async () => {
+  const { hasIntegratedPatientReadAccess, hasVehicleSchedulingPatientAccess } = await import('../services/consultasService.ts');
+
+  const colaboradorVeiculos = {
+    id: '10cac7c3-432a-4f26-9346-174f31c65b76',
+    username: 'IMR',
+    name: 'Isaura Madalena R Caetano',
+    role: 'collaborator',
+    permissions: [
+      'parent_agendamento_veiculo',
+      'parent_marketing',
+      'parent_agendamento_veiculo_agendar',
+      'parent_agendamento_veiculo_meus',
+      'parent_agendamento_veiculo_aprovacoes',
+      'parent_agendamento_veiculo_dashboard',
+      'parent_noticias',
+      'noticias'
+    ]
+  };
+
+  assert.equal(hasVehicleSchedulingPatientAccess(colaboradorVeiculos), true);
+  assert.equal(hasIntegratedPatientReadAccess(colaboradorVeiculos), true);
+
+  // Usuário sem permissão de saúde nem agendamento de veículos permanece bloqueado
+  const usuarioMarketing = {
+    id: 'user-mkt',
+    username: 'MKT',
+    name: 'Usuário Marketing',
+    role: 'collaborator',
+    permissions: ['parent_marketing', 'parent_noticias']
+  };
+  assert.equal(hasVehicleSchedulingPatientAccess(usuarioMarketing), false);
+  assert.equal(hasIntegratedPatientReadAccess(usuarioMarketing), false);
+});

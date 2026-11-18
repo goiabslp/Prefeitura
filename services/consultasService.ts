@@ -60,7 +60,32 @@ const hasAutoSenhaPatientAccess = (
     );
 };
 
-const hasIntegratedPatientReadAccess = (
+export const hasVehicleSchedulingPatientAccess = (
+    user: User,
+    globalSettings?: Record<string, boolean>
+): boolean => {
+    const perms = user.permissions || [];
+    return (
+        userCanAccessSubmodule(user, 'parent_agendamento_veiculo', 'sub_agendamento_agendar', globalSettings) ||
+        userCanAccessSubmodule(user, 'parent_agendamento_veiculo', 'sub_agendamento_transporte', globalSettings) ||
+        userCanAccessSubmodule(user, 'parent_agendamento_veiculo', 'sub_agendamento_historico', globalSettings) ||
+        userCanAccessSubmodule(user, 'parent_agendamento_veiculo', 'sub_agendamento_aprovacoes', globalSettings) ||
+        userCanAccessSubmodule(user, 'parent_agendamento_veiculo', 'sub_agendamento_consultar', globalSettings) ||
+        userCanAccessSubmodule(user, 'parent_agendamento_veiculo', 'sub_agendamento_dashboard', globalSettings) ||
+        perms.includes('parent_agendamento_veiculo') ||
+        perms.includes('agendamento') ||
+        perms.some(
+            p =>
+                typeof p === 'string' &&
+                (p.startsWith('sub_agendamento_') ||
+                    p.startsWith('parent_agendamento_veiculo_') ||
+                    p.startsWith('sub_veiculos_') ||
+                    p.startsWith('parent_agendamento_veiculos'))
+        )
+    );
+};
+
+export const hasIntegratedPatientReadAccess = (
     user: User,
     globalSettings?: Record<string, boolean>
 ): boolean => {
@@ -68,6 +93,7 @@ const hasIntegratedPatientReadAccess = (
     if (
         user.role === 'admin' ||
         hasAutoSenhaPatientAccess(user, globalSettings) ||
+        hasVehicleSchedulingPatientAccess(user, globalSettings) ||
         hasConsultasAcompanharOperationalAccess(user, globalSettings) ||
         isConsultasAcompanharReadOnly(user, globalSettings) ||
         userCanAccessSubmodule(user, 'parent_consultas', 'sub_consultas_pacientes', globalSettings) ||
@@ -76,11 +102,7 @@ const hasIntegratedPatientReadAccess = (
         userCanAccessSubmodule(user, 'parent_farmacia', 'sub_farmacia_pacientes', globalSettings) ||
         userCanAccessSubmodule(user, 'parent_farmacia', 'sub_farmacia_retirar', globalSettings) ||
         userCanAccessSubmodule(user, 'parent_farmacia', 'sub_farmacia_consultar', globalSettings) ||
-        perms.includes('parent_farmacia') ||
-        userCanAccessSubmodule(user, 'parent_agendamento_veiculos', 'sub_veiculos_novo', globalSettings) ||
-        userCanAccessSubmodule(user, 'parent_agendamento_veiculos', 'sub_veiculos_agendar', globalSettings) ||
-        perms.includes('parent_agendamento_veiculos') ||
-        perms.some(p => typeof p === 'string' && (p.startsWith('sub_veiculos_') || p.startsWith('parent_agendamento_veiculos')))
+        perms.includes('parent_farmacia')
     ) {
         return true;
     }
@@ -166,11 +188,7 @@ const assertCanMutateRegulacao = (
             perms.includes('parent_farmacia') ||
             perms.some(p => typeof p === 'string' && (p.startsWith('sub_farmacia_') || p.startsWith('parent_farmacia_')));
         const canPacientesAutoSenha = hasAutoSenhaPatientAccess(user, globalSettings);
-        const canPacientesVeiculos =
-            userCanAccessSubmodule(user, 'parent_agendamento_veiculos', 'sub_veiculos_novo', globalSettings) ||
-            userCanAccessSubmodule(user, 'parent_agendamento_veiculos', 'sub_veiculos_agendar', globalSettings) ||
-            perms.includes('parent_agendamento_veiculos') ||
-            perms.some(p => typeof p === 'string' && (p.startsWith('sub_veiculos_') || p.startsWith('parent_agendamento_veiculos')));
+        const canPacientesVeiculos = hasVehicleSchedulingPatientAccess(user, globalSettings);
 
         if (!canPacientesRegulacao && !canPacientesFarmacia && !canPacientesAutoSenha && !canPacientesVeiculos) {
             throw new Error(`Acesso negado (Modo Somente Leitura): seu usuário não possui permissão para "${actionLabel}".`);
