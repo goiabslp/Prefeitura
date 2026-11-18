@@ -7,6 +7,7 @@ import {
   Loader2, 
   AlertCircle, 
   Check, 
+  CheckCircle2,
   Calendar, 
   MapPin, 
   FileText,
@@ -58,6 +59,7 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
   const [needsCompanion, setNeedsCompanion] = useState(false);
   const [needsAdaptedTransport, setNeedsAdaptedTransport] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   // 3. Modal de Cadastro Rápido de Paciente (caso não exista na base)
   const [isFastRegisterOpen, setIsFastRegisterOpen] = useState(false);
@@ -96,6 +98,7 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       setNeedsCompanion(false);
       setNeedsAdaptedTransport(false);
       setErrorMessage('');
+      setSuccessMessage('');
       setIsDropdownOpen(false);
       return;
     }
@@ -118,6 +121,7 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       setNeedsCompanion(Boolean(editingPassenger.needsCompanion || editingPassenger.companionId));
       setNeedsAdaptedTransport(Boolean(editingPassenger.needsAdaptedTransport));
       setErrorMessage('');
+      setSuccessMessage('');
 
       // Sincroniza apelido oficial do cadastro do paciente no Supabase
       if (editingPassenger.patientId) {
@@ -136,6 +140,7 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       setNeedsCompanion(false);
       setNeedsAdaptedTransport(false);
       setErrorMessage('');
+      setSuccessMessage('');
       setIsDropdownOpen(false);
     }
   }, [isOpen, editingPassenger]);
@@ -213,6 +218,14 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
     const localNick = (paciente.nickname || (paciente as any).apelido || '').trim();
     setNicknameDisplay(localNick || 'Não informado');
 
+    // Sugere local de embarque se estiver vazio e o paciente possuir endereço cadastrado
+    if (!departureLocation.trim()) {
+      const parts = [paciente.street, paciente.neighborhood].filter(Boolean);
+      if (parts.length > 0) {
+        setDepartureLocation(parts.join(' - '));
+      }
+    }
+
     // Consulta oficial no Supabase para garantir sincronização estrita
     const dbNick = await fetchPatientNicknameFromDb(paciente.id);
     if (dbNick) {
@@ -229,6 +242,7 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
     setSearchResults([]);
     setIsDropdownOpen(false);
     setErrorMessage('');
+    setSuccessMessage('');
   };
 
   // Trata alteração no campo de pesquisa
@@ -240,13 +254,18 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       setSelectedPatient(null);
       setNicknameDisplay('');
       setBirthDateDisplay('');
+      setSuccessMessage('');
     }
   };
 
-  // Cadastro rápido concluído
+  // Cadastro rápido concluído com seleção automática obrigatória
   const handleFastPatientCreated = (novoPaciente: ConsultaPaciente) => {
     setIsFastRegisterOpen(false);
     handleSelectPatient(novoPaciente);
+    setSuccessMessage(`Paciente "${novoPaciente.name}" cadastrado com sucesso e selecionado para a viagem!`);
+    setTimeout(() => {
+      setSuccessMessage('');
+    }, 4500);
   };
 
   // Submissão do Formulário
@@ -350,16 +369,38 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
                 </div>
               )}
 
+              {/* Mensagem de Sucesso */}
+              {successMessage && (
+                <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{successMessage}</span>
+                </div>
+              )}
+
               {/* 1. CAMPO UNIFICADO: PACIENTE (NOME OU CPF) * */}
               <div className="space-y-1.5 relative">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
                     Paciente (Nome ou CPF) *
                   </label>
-                  <span className="text-[11px] text-indigo-600 font-bold flex items-center gap-1">
-                    <Database className="w-3.5 h-3.5" />
-                    <span>Buscar na base municipal de pacientes</span>
-                  </span>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDropdownOpen(false);
+                      setIsFastRegisterOpen(true);
+                    }}
+                    className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                    title="Cadastrar novo paciente na base municipal integrada"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>+ Cadastrar Novo Paciente</span>
+                  </button>
                 </div>
 
                 <div className="relative">
@@ -459,11 +500,17 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
                         </p>
                         <button
                           type="button"
-                          onClick={() => {
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
                             setIsDropdownOpen(false);
                             setIsFastRegisterOpen(true);
                           }}
-                          className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-xl text-xs uppercase tracking-wider inline-flex items-center gap-1.5 cursor-pointer shadow-md"
+                          className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-xl text-xs uppercase tracking-wider inline-flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95 transition-all"
                         >
                           <UserPlus className="w-3.5 h-3.5" />
                           <span>+ Cadastrar Novo Paciente</span>

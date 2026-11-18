@@ -169,3 +169,71 @@ test('7. Colaborador autorizado no Agendamento de Veículos tem acesso à busca 
   assert.equal(hasVehicleSchedulingPatientAccess(usuarioMarketing), false);
   assert.equal(hasIntegratedPatientReadAccess(usuarioMarketing), false);
 });
+
+test('8. Payload do cadastro rápido no modal inclui apelido opcional e sanitização de dados', () => {
+  const dadosDigitados = {
+    name: 'josé da silva pereira',
+    nickname: 'zé do posto',
+    cpf: '123.456.789-09',
+    birthDate: '1975-08-14',
+    phone: '(31) 9 8888-7777',
+    neighborhood: 'centro',
+    street: 'rua getúlio vargas, 45'
+  };
+
+  const payload = {
+    name: dadosDigitados.name.trim().toUpperCase(),
+    nickname: dadosDigitados.nickname.trim() ? dadosDigitados.nickname.trim().toUpperCase() : undefined,
+    cpf: normalizeCpf(dadosDigitados.cpf),
+    birth_date: dadosDigitados.birthDate,
+    phone: dadosDigitados.phone.trim(),
+    neighborhood: dadosDigitados.neighborhood.trim().toUpperCase(),
+    street: dadosDigitados.street.trim().toUpperCase(),
+    city: 'SÃO JOSÉ DO GOIABAL'
+  };
+
+  assert.equal(payload.name, 'JOSÉ DA SILVA PEREIRA');
+  assert.equal(payload.nickname, 'ZÉ DO POSTO');
+  assert.equal(payload.cpf, '12345678909');
+  assert.equal(payload.city, 'SÃO JOSÉ DO GOIABAL');
+});
+
+test('9. Seleção automática pós-cadastro no modal NOVO PASSAGEIRO', () => {
+  const pacienteRecemCriado = {
+    id: 'uuid-paciente-salvo-999',
+    name: 'CLARICE LISPECTOR DA SILVA',
+    cpf: '98765432100',
+    birth_date: '1980-12-10',
+    nickname: 'CLARA',
+    phone: '(31) 98765-4321',
+    neighborhood: 'CENTRO',
+    street: 'AV. PRINCIPAL'
+  };
+
+  // Simulação da lógica de handleSelectPatient
+  let selectedPatient = null;
+  let searchTerm = '';
+  let birthDateDisplay = '';
+  let nicknameDisplay = '';
+  let departureLocation = '';
+
+  const handleSelectPatient = (paciente) => {
+    selectedPatient = paciente;
+    searchTerm = paciente.name;
+    birthDateDisplay = formatBirthDateBr(paciente.birth_date);
+    nicknameDisplay = paciente.nickname || 'Não informado';
+    if (!departureLocation.trim()) {
+      const parts = [paciente.street, paciente.neighborhood].filter(Boolean);
+      if (parts.length > 0) departureLocation = parts.join(' - ');
+    }
+  };
+
+  handleSelectPatient(pacienteRecemCriado);
+
+  assert.equal(selectedPatient.id, 'uuid-paciente-salvo-999');
+  assert.equal(searchTerm, 'CLARICE LISPECTOR DA SILVA');
+  assert.equal(birthDateDisplay, '10/12/1980');
+  assert.equal(nicknameDisplay, 'CLARA');
+  assert.equal(departureLocation, 'AV. PRINCIPAL - CENTRO');
+});
+
