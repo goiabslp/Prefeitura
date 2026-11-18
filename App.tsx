@@ -6252,11 +6252,17 @@ timestamp: ${new Date().toISOString()}`);
                   const optimistic = { ...s, id: Date.now().toString(), createdAt: new Date().toISOString() } as VehicleSchedule;
                   setSchedules(prev => [optimistic, ...prev]);
                   try {
-                    await vehicleSchedulingService.createSchedule(s, (s as any).overrideRestRules);
+                    const created = await vehicleSchedulingService.createSchedule(s, (s as any).overrideRestRules);
+                    if (created) {
+                      setSchedules(prev => [created, ...prev.filter(x => x.id !== optimistic.id)]);
+                      return created;
+                    }
+                    return optimistic;
                   } catch (e) {
                     console.error("Failed to create schedule", e);
                     setSchedules(prev => prev.filter(x => x.id !== optimistic.id));
                     showToast("Erro ao agendar veículo.", "error");
+                    throw e;
                   }
                 }}
                 onUpdateSchedule={async (s) => {

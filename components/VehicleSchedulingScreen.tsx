@@ -27,6 +27,7 @@ import { PassageiroModal } from './vehicle/PassageiroModal';
 import { AcompanhanteObrigatorioModal } from './vehicle/AcompanhanteObrigatorioModal';
 import { DriverRestRestrictionModal } from './modals/DriverRestRestrictionModal';
 import { VehicleSchedulingLoadingModal } from './modals/VehicleSchedulingLoadingModal';
+import { AgendamentoConfirmadoModal } from './vehicle/AgendamentoConfirmadoModal';
 import { useSystemSettings } from '../contexts/SystemSettingsContext';
 import { userCanAccessSubmodule } from '../services/permissionService';
 import { searchPacientesInteligente } from '../services/consultasService';
@@ -42,7 +43,7 @@ interface VehicleSchedulingScreenProps {
   vehicles: Vehicle[];
   persons: Person[];
   sectors: Sector[];
-  onAddSchedule: (s: Omit<VehicleSchedule, 'id' | 'createdAt'>) => Promise<void>;
+  onAddSchedule: (s: Omit<VehicleSchedule, 'id' | 'createdAt'>) => Promise<VehicleSchedule | void>;
   onUpdateSchedule: (s: VehicleSchedule) => Promise<void>;
   onDeleteSchedule: (id: string) => Promise<void>;
   onBack: () => void;
@@ -523,6 +524,8 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   });
 
   const [systemHolidays, setSystemHolidays] = useState<SystemHoliday[]>([]);
+  const [createdSuccessSchedule, setCreatedSuccessSchedule] = useState<VehicleSchedule | null>(null);
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [driverRestModal, setDriverRestModal] = useState<{
     isOpen: boolean;
     result: DriverValidationResult | null;
@@ -1570,8 +1573,9 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         } as VehicleSchedule;
         await onUpdateSchedule(data);
         showToast(overrideRestRules ? "Agendamento atualizado com autorização de exceção de descanso!" : "Agendamento atualizado!", "success");
+        setIsModalOpen(false);
       } else {
-        // Create
+        // Create - Gravação Real no Supabase
         const data = {
           ...formData,
           status: finalStatus,
@@ -1583,17 +1587,17 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
           requesterId: currentUserId,
           overrideRestRules
         } as any;
-        await onAddSchedule(data);
-        showToast(
-          overrideRestRules 
-            ? "Agendamento realizado com autorização de exceção de descanso!" 
-            : hasAuthority 
-            ? "Agendamento aprovado e realizado!" 
-            : "Agendamento realizado com sucesso!", 
-          "success"
-        );
+        const savedSchedule = await onAddSchedule(data);
+        const resolvedSaved: VehicleSchedule = (savedSchedule as VehicleSchedule) || {
+          ...data,
+          id: (savedSchedule as any)?.id || `sch_${Date.now()}`,
+          protocol: (savedSchedule as any)?.protocol || `OS-${new Date().getFullYear()}${Date.now().toString().slice(-6)}`,
+          createdAt: new Date().toISOString()
+        };
+        setCreatedSuccessSchedule(resolvedSaved);
+        setIsSuccessModalOpen(true);
+        setIsModalOpen(false);
       }
-      setIsModalOpen(false);
     } catch (error: any) {
       console.error("Erro ao salvar:", error);
       const errorMsg = error?.message || "Erro ao processar agendamento. Tente novamente.";
@@ -1614,6 +1618,27 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       }
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Encerramento da Operação: Concluir e Retornar ao Início do Agendamento
+  const handleCloseSuccessModal = () => {
+    setIsSuccessModalOpen(false);
+    setCreatedSuccessSchedule(null);
+    handleOpenModal();
+    handleSubViewChange('calendar');
+  };
+
+  // Direcionamento ao Histórico com Foco no Registro Salvo
+  const handleViewInHistory = () => {
+    const target = createdSuccessSchedule;
+    setIsSuccessModalOpen(false);
+    setCreatedSuccessSchedule(null);
+    handleOpenModal();
+    handleSubViewChange('history');
+    if (target) {
+      setViewingSchedule(target);
+      setIsViewModalOpen(true);
     }
   };
 
@@ -3945,6 +3970,19 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         vehiclesCount={vehicles.length}
         driversCount={persons.length}
         schedulesCount={schedules.length}
+      />
+
+      {/* MODAL INSTITUCIONAL - AGENDAMENTO REALIZADO COM SUCESSO E COMPROVANTE PDF */}
+      <AgendamentoConfirmadoModal
+        isOpen={isSuccessModalOpen}
+        schedule={createdSuccessSchedule}
+        vehicles={vehicles}
+        persons={persons}
+        sectors={effectiveSectors}
+        state={state}
+        currentUserName={currentUserName}
+        onClose={handleCloseSuccessModal}
+        onViewInHistory={handleViewInHistory}
       />
     </div>
   );
