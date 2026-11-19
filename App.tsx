@@ -243,6 +243,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'consultas:procedimentos': '/Regulacao/Procedimentos',
   'consultas:procedimentos-revisar-duplicidades': '/Regulacao/Procedimentos/RevisarDuplicidades',
   'consultas:pacientes': '/Regulacao/Pacientes',
+  'consultas:pacientes-duplicidades': '/Regulacao/Pacientes/Duplicidades',
   'consultas:novo-agendamento': '/Regulacao/NovoAgendamento',
   'consultas:novo-agendamento-paciente': '/Regulacao/NovoAgendamento/Paciente',
   'consultas:novo-agendamento-procedimento': '/Regulacao/NovoAgendamento/Procedimento',
@@ -6722,6 +6723,9 @@ timestamp: ${new Date().toISOString()}`);
                   } else if (view === 'consultas:pacientes') {
                     setAppState(prev => ({ ...prev, view: 'pacientes' }));
                     window.history.pushState({}, '', '/Regulacao/Pacientes');
+                  } else if (view === 'consultas:pacientes-duplicidades' || view === 'pacientes-duplicidades') {
+                    setAppState(prev => ({ ...prev, view: 'pacientes-duplicidades' }));
+                    window.history.pushState({}, '', '/Regulacao/Pacientes/Duplicidades');
                   } else if (view === 'consultas:novo-agendamento') {
                     setAppState(prev => ({ ...prev, view: 'novo-agendamento' }));
                     window.history.pushState({}, '', '/Regulacao/NovoAgendamento');

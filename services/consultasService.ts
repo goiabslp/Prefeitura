@@ -996,34 +996,31 @@ export const createPaciente = async (
                 throw new Error('A Data de Nascimento é obrigatória.');
             }
 
-            // Verifica duplicidade no banco antes da inserção sem modificar registros existentes
-            const existingCheck = await lookupPacienteByCpf(cleanCpf);
-            if (existingCheck.status === 'found' && existingCheck.paciente) {
-                throw new DuplicatePatientCpfError(
-                    'Já existe um paciente cadastrado com este CPF na base integrada.',
-                    existingCheck.paciente
+            // Validação Anti-Duplicidade Obrigatória no Supabase (CPF e Nome + Data de Nascimento)
+            const dupCheck = await checkDuplicatePaciente({
+                name: paciente.name,
+                cpf: cleanCpf,
+                birth_date: paciente.birth_date
+            });
+
+            if (dupCheck.hasDuplicate && dupCheck.existingPatient) {
+                throw new DuplicatePatientConflictError(
+                    dupCheck.message || 'Identificamos um paciente correspondente na base integrada. Não é permitido criar cadastros duplicados.',
+                    dupCheck.conflictType || 'cpf',
+                    dupCheck.existingPatient
                 );
             }
-            if (existingCheck.status !== 'not_found') {
-                throw new Error(existingCheck.error || 'Não foi possível validar o CPF no banco de dados.');
-            }
         } else if (cleanCpf.length === 11) {
-            // 1. Verificação prévia retrocompatível: se o paciente já existir no banco por CPF, atualiza e retorna o registro
-            const existing = await getPacienteByCpf(cleanCpf);
-            if (existing) {
-                console.log('[consultasService] Paciente com este CPF já existe no banco. Atualizando e retornando existente...', existing.id);
-                const updated = await updatePaciente(existing.id, {
-                    name: paciente.name || existing.name,
-                    nickname: paciente.nickname !== undefined ? (paciente.nickname?.trim() || null) : existing.nickname,
-                    birth_date: paciente.birth_date || existing.birth_date,
-                    phone: paciente.phone !== undefined ? (paciente.phone?.trim() || null) : existing.phone,
-                    neighborhood: paciente.neighborhood !== undefined ? (paciente.neighborhood?.trim() || null) : existing.neighborhood,
-                    street: paciente.street?.trim() !== undefined ? (paciente.street?.trim() || null) : existing.street,
-                    city: paciente.city !== undefined ? (paciente.city?.trim() || null) : existing.city,
-                    sus_number: cleanSus || existing.sus_number,
-                    agente_saude: paciente.agente_saude !== undefined ? (paciente.agente_saude?.trim() || null) : existing.agente_saude
-                });
-                return updated || existing;
+            // 1. Verificação prévia: se o paciente já existir no banco por CPF ou Nome+Nasc, trata duplicidade
+            const dupCheck = await checkDuplicatePaciente({
+                name: paciente.name,
+                cpf: cleanCpf,
+                birth_date: paciente.birth_date
+            });
+
+            if (dupCheck.hasDuplicate && dupCheck.existingPatient) {
+                console.log('[consultasService] Paciente correspondente já existe no banco. Retornando existente...', dupCheck.existingPatient.id);
+                return dupCheck.existingPatient;
             }
         }
 
@@ -1100,19 +1097,34 @@ export const createPaciente = async (
             error = lastError;
         }
 
-        // Se deu erro de duplicidade (23505):
-        if (error && (error.code === '23505' || String(error.message || '').toLowerCase().includes('duplicate')) && cleanCpf.length === 11) {
-            const existingLookup = await lookupPacienteByCpf(cleanCpf);
-            if (options?.strictNoDuplicate) {
-                throw new DuplicatePatientCpfError(
-                    'Já existe um paciente cadastrado com este CPF no banco de dados.',
-                    existingLookup.status === 'found' ? existingLookup.paciente : null
-                );
+        // Se deu erro de duplicidade (23505) ou trigger de duplicidade:
+        if (error && (error.code === '23505' || String(error.message || '').includes('DUPLICATE_PATIENT') || String(error.message || '').toLowerCase().includes('duplicate'))) {
+            const isNameBirth = String(error.message || '').includes('DUPLICATE_PATIENT_NAME_BIRTH') || String(error.details || '').includes('Nome');
+            const conflictType: PatientConflictType = isNameBirth ? 'name_and_birth_date' : 'cpf';
+
+            let existing: ConsultaPaciente | null = null;
+            const detailIdMatch = String(error.details || '').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+            if (detailIdMatch) {
+                const res = await supabase.from('consultas_pacientes').select('*').eq('id', detailIdMatch[0]).maybeSingle();
+                if (res.data) existing = res.data;
             }
-            console.warn('[consultasService] Conflito de duplicidade 23505 capturado. Buscando paciente existente por CPF...');
-            if (existingLookup.status === 'found' && existingLookup.paciente) {
-                return existingLookup.paciente;
+
+            if (!existing) {
+                const fallbackCheck = await checkDuplicatePaciente({
+                    name: paciente.name,
+                    cpf: cleanCpf,
+                    birth_date: paciente.birth_date
+                });
+                if (fallbackCheck.existingPatient) existing = fallbackCheck.existingPatient;
             }
+
+            throw new DuplicatePatientConflictError(
+                conflictType === 'name_and_birth_date'
+                    ? 'Identificamos um paciente com o mesmo Nome Completo e Data de Nascimento na base integrada. Não é permitido criar cadastros duplicados.'
+                    : 'Já existe um paciente cadastrado com este CPF na base integrada.',
+                conflictType,
+                existing
+            );
         }
 
         if (error) throw error;
@@ -1122,14 +1134,13 @@ export const createPaciente = async (
         }
         return data;
     } catch (error: any) {
-        if (error instanceof DuplicatePatientCpfError) {
+        if (error instanceof DuplicatePatientConflictError || error instanceof DuplicatePatientCpfError) {
             throw error;
         }
         const appError = handleSupabaseError(error);
         console.error('[consultasService] createPaciente Error:', appError.message);
-        // Mensagem amigável para violação única em CPF
         if (error?.code === '23505') {
-            throw new DuplicatePatientCpfError('CPF já cadastrado no sistema.');
+            throw new DuplicatePatientConflictError('Paciente já cadastrado na base integrada.', 'cpf');
         }
         throw appError;
     }
@@ -1142,6 +1153,31 @@ export const updatePaciente = async (id: string, updates: Partial<ConsultaPacien
         if (updates.cpf !== undefined) {
             const rawCpf = updates.cpf ? updates.cpf.replace(/\D/g, '') : '';
             cleanUpdates.cpf = rawCpf.length > 0 ? rawCpf : null;
+        }
+
+        // Validação de Duplicidade ao Editar (desconsiderando o próprio registro id)
+        if (updates.name !== undefined || updates.cpf !== undefined || updates.birth_date !== undefined) {
+            const current = await getPacienteById(id);
+            if (current) {
+                const checkName = updates.name !== undefined ? updates.name : current.name;
+                const checkCpf = updates.cpf !== undefined ? updates.cpf : current.cpf;
+                const checkBirth = updates.birth_date !== undefined ? updates.birth_date : current.birth_date;
+
+                const dupCheck = await checkDuplicatePaciente({
+                    name: checkName,
+                    cpf: checkCpf,
+                    birth_date: checkBirth,
+                    excludeId: id
+                });
+
+                if (dupCheck.hasDuplicate && dupCheck.existingPatient) {
+                    throw new DuplicatePatientConflictError(
+                        dupCheck.message || 'Conflito de duplicidade com outro paciente na base integrada.',
+                        dupCheck.conflictType || 'cpf',
+                        dupCheck.existingPatient
+                    );
+                }
+            }
         }
 
         // Validação de WhatsApp anti-fictício (Anatel + Padrões)
@@ -1214,10 +1250,19 @@ export const updatePaciente = async (id: string, updates: Partial<ConsultaPacien
         }
         return data;
     } catch (error: any) {
+        if (error instanceof DuplicatePatientConflictError || error instanceof DuplicatePatientCpfError) {
+            throw error;
+        }
         const appError = handleSupabaseError(error);
         console.error('[consultasService] updatePaciente Error:', appError.message);
-        if (error.code === '23505') {
-            throw new Error('CPF já cadastrado no sistema.');
+        if (error.code === '23505' || String(error.message || '').includes('DUPLICATE_PATIENT')) {
+            const isNameBirth = String(error.message || '').includes('DUPLICATE_PATIENT_NAME_BIRTH');
+            throw new DuplicatePatientConflictError(
+                isNameBirth
+                    ? 'Conflito de duplicidade: Já existe outro paciente com o mesmo Nome Completo e Data de Nascimento.'
+                    : 'CPF já cadastrado para outro paciente no sistema.',
+                isNameBirth ? 'name_and_birth_date' : 'cpf'
+            );
         }
         throw appError;
     }

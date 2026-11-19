@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { ConsultaPaciente } from '../../types';
 import * as db from '../../services/consultasService';
-import { DuplicatePatientCpfError } from '../../services/consultasService';
+import { DuplicatePatientCpfError, DuplicatePatientConflictError } from '../../services/consultasService';
+import { DuplicatePatientModal } from '../common/DuplicatePatientModal';
+import { PatientConflictType } from '../../utils/patientDuplicateUtils';
 import {
   normalizeCpf,
   formatCpf,
@@ -54,6 +56,8 @@ export const FastPatientRegisterModal: React.FC<FastPatientRegisterModalProps> =
   const [isCheckingCpf, setIsCheckingCpf] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [existingDuplicate, setExistingDuplicate] = useState<ConsultaPaciente | null>(null);
+  const [duplicateConflictType, setDuplicateConflictType] = useState<PatientConflictType | null>(null);
+  const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
 
   const checkCpfTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -161,6 +165,21 @@ export const FastPatientRegisterModal: React.FC<FastPatientRegisterModalProps> =
 
     setIsSubmitting(true);
     try {
+      // 1. Verificação proativa de duplicidade (CPF ou Nome + Nascimento)
+      const dupCheck = await db.checkDuplicatePaciente({
+        name: trimmedName,
+        cpf: cleanCpfDigits,
+        birth_date: birthDate
+      });
+
+      if (dupCheck.hasDuplicate && dupCheck.existingPatient) {
+        setExistingDuplicate(dupCheck.existingPatient);
+        setDuplicateConflictType(dupCheck.conflictType);
+        setIsDuplicateModalOpen(true);
+        setIsSubmitting(false);
+        return;
+      }
+
       const payload: Omit<ConsultaPaciente, 'id' | 'created_at' | 'updated_at'> = {
         name: trimmedName,
         nickname: nickname.trim() ? nickname.trim().toUpperCase() : undefined,
@@ -182,10 +201,14 @@ export const FastPatientRegisterModal: React.FC<FastPatientRegisterModalProps> =
       }
     } catch (err: any) {
       console.error('Erro ao cadastrar paciente rápido:', err);
-      if (err instanceof DuplicatePatientCpfError) {
-        setErrorMessage(err.message || 'Este CPF já está cadastrado na base municipal.');
-        if (err.existingPatient) {
-          setExistingDuplicate(err.existingPatient);
+      if (err instanceof DuplicatePatientConflictError || err instanceof DuplicatePatientCpfError) {
+        const existing = err.existingPatient || null;
+        if (existing) {
+          setExistingDuplicate(existing);
+          setDuplicateConflictType((err as any).conflictType || 'cpf');
+          setIsDuplicateModalOpen(true);
+        } else {
+          setErrorMessage(err.message || 'Paciente já cadastrado na base municipal.');
         }
       } else {
         setErrorMessage(err?.message || 'Erro ao salvar paciente na base compartilhada.');
@@ -439,6 +462,37 @@ export const FastPatientRegisterModal: React.FC<FastPatientRegisterModalProps> =
           </div>
         </form>
       </div>
+
+      {/* Modal Anti-Duplicidade Oficial */}
+      {isDuplicateModalOpen && existingDuplicate && (
+        <DuplicatePatientModal
+          isOpen={isDuplicateModalOpen}
+          existingPatient={existingDuplicate}
+          conflictType={duplicateConflictType}
+          attemptedCandidate={{
+            name,
+            cpf,
+            birthDate,
+            phone,
+            neighborhood,
+            street,
+            susNumber,
+            nickname
+          }}
+          onUseExisting={(paciente) => {
+            setIsDuplicateModalOpen(false);
+            onSuccess(paciente);
+            onClose();
+          }}
+          onCancel={() => {
+            setIsDuplicateModalOpen(false);
+          }}
+          onSentToAdminConference={() => {
+            setIsDuplicateModalOpen(false);
+            onClose();
+          }}
+        />
+      )}
     </div>
   );
 

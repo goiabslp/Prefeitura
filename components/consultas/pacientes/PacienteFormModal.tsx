@@ -5,9 +5,12 @@ import { useAgentesSaude } from '../../../services/agentesSaudeService';
 import * as db from '../../../services/consultasService';
 import {
     DuplicatePatientCpfError,
+    DuplicatePatientConflictError,
     PacienteSmartSearchCriterion,
     PacienteSmartSearchStatus
 } from '../../../services/consultasService';
+import { DuplicatePatientModal } from '../../common/DuplicatePatientModal';
+import { PatientConflictType } from '../../../utils/patientDuplicateUtils';
 import {
     normalizeCpf,
     formatCpf,
@@ -85,6 +88,8 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
         message: string;
     } | null>(null);
     const [duplicateConflictPatient, setDuplicateConflictPatient] = useState<ConsultaPaciente | null>(null);
+    const [duplicateConflictType, setDuplicateConflictType] = useState<PatientConflictType | null>(null);
+    const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
 
     // Controle de corrida, debounce e prevenção de requisições duplicadas
     const activeAbortControllerRef = useRef<AbortController | null>(null);
@@ -483,20 +488,20 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
 
         setLoading(true);
         try {
-            // Verifica novamente a existência na base antes de salvar (quando novo cadastro)
-            if (!editingPatient) {
-                const checkExisting = await db.lookupPacienteByCpf(cleanCpf);
-                if (checkExisting.status === 'found' && checkExisting.paciente) {
-                    setDuplicateConflictPatient(checkExisting.paciente);
-                    setError('Já existe um paciente cadastrado com este CPF na base integrada.');
-                    setLoading(false);
-                    return;
-                }
-                if (checkExisting.status === 'permission_denied' || checkExisting.status === 'connection_error') {
-                    setError(checkExisting.error || 'Não foi possível verificar duplicidade na base integrada.');
-                    setLoading(false);
-                    return;
-                }
+            // Verificação proativa de duplicidade (CPF ou Nome Normalizado + Data de Nascimento)
+            const dupCheck = await db.checkDuplicatePaciente({
+                name: nome.trim(),
+                cpf: cleanCpf,
+                birth_date: dataNascimento,
+                excludeId: editingPatient?.id || null
+            });
+
+            if (dupCheck.hasDuplicate && dupCheck.existingPatient) {
+                setDuplicateConflictPatient(dupCheck.existingPatient);
+                setDuplicateConflictType(dupCheck.conflictType);
+                setIsDuplicateModalOpen(true);
+                setLoading(false);
+                return;
             }
 
             const payload = {
@@ -532,9 +537,14 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
             }
         } catch (err: any) {
             console.error('Erro ao salvar paciente:', err);
-            if (err instanceof DuplicatePatientCpfError || err?.code === 'DUPLICATE_PATIENT_CPF') {
-                setDuplicateConflictPatient(err.existingPatient || null);
-                setError(err.message || 'Já existe um paciente cadastrado com este CPF na base integrada.');
+            if (err instanceof DuplicatePatientConflictError || err instanceof DuplicatePatientCpfError || err?.code === 'DUPLICATE_PATIENT_CPF' || err?.code === 'DUPLICATE_PATIENT_NAME_BIRTH') {
+                const existing = err.existingPatient || null;
+                if (existing) {
+                    setDuplicateConflictPatient(existing);
+                    setDuplicateConflictType((err as any).conflictType || (err?.code === 'DUPLICATE_PATIENT_NAME_BIRTH' ? 'name_and_birth_date' : 'cpf'));
+                    setIsDuplicateModalOpen(true);
+                }
+                setError(err.message || 'Identificamos um paciente correspondente na base integrada. Não é permitido criar cadastros duplicados.');
             } else {
                 setError(err?.message || 'Erro ao salvar paciente.');
             }
@@ -1193,6 +1203,40 @@ export const PacienteFormModal: React.FC<PacienteFormModalProps> = ({
                     </form>
                 )}
             </div>
+
+            {/* Modal Anti-Duplicidade Oficial */}
+            {isDuplicateModalOpen && duplicateConflictPatient && (
+                <DuplicatePatientModal
+                    isOpen={isDuplicateModalOpen}
+                    existingPatient={duplicateConflictPatient}
+                    conflictType={duplicateConflictType}
+                    attemptedCandidate={{
+                        name: nome,
+                        cpf: cpf,
+                        birthDate: dataNascimento,
+                        phone: whatsapp,
+                        neighborhood: bairro,
+                        street: rua,
+                        susNumber: susNumber,
+                        nickname: apelido
+                    }}
+                    onUseExisting={(paciente) => {
+                        setIsDuplicateModalOpen(false);
+                        handleSelectExistingPatient(paciente);
+                    }}
+                    onViewDetails={(paciente) => {
+                        setIsDuplicateModalOpen(false);
+                        handleSelectExistingPatient(paciente);
+                    }}
+                    onCancel={() => {
+                        setIsDuplicateModalOpen(false);
+                    }}
+                    onSentToAdminConference={() => {
+                        setIsDuplicateModalOpen(false);
+                        onClose();
+                    }}
+                />
+            )}
         </div>
     );
 

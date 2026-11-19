@@ -219,6 +219,21 @@ export const PacienteBuscaScreen: React.FC<PacienteBuscaScreenProps> = ({
                     <div className="flex items-center gap-1.5 shrink-0">
                         <button
                             type="button"
+                            onClick={() => {
+                                if (typeof window !== 'undefined') {
+                                    window.history.pushState({}, '', '/Regulacao/Pacientes/Duplicidades');
+                                    window.dispatchEvent(new Event('popstate'));
+                                }
+                            }}
+                            className="px-2.5 py-1 rounded-lg border border-slate-200 hover:border-amber-300 hover:bg-amber-50/50 text-slate-700 hover:text-amber-700 text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer shrink-0"
+                            title="Auditar duplicidades de pacientes e conferência administrativa (/Regulacao/Pacientes/Duplicidades)"
+                        >
+                            <AlertTriangle className="w-3 h-3 text-amber-600" />
+                            <span>Auditar Duplicidades</span>
+                        </button>
+
+                        <button
+                            type="button"
                             onClick={() => setIsAuditoriaOpen(true)}
                             className="px-2.5 py-1 rounded-lg border border-slate-200 hover:border-rose-300 hover:bg-rose-50/50 text-slate-700 hover:text-rose-700 text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer shrink-0"
                             title="Auditar integridade de telefones e identificar números fictícios ou inválidos"

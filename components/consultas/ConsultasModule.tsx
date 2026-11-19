@@ -8,6 +8,7 @@ import { DadosScreen } from './DadosScreen';
 import { LiberarVagasScreen } from './LiberarVagasScreen';
 import { ProcedimentosScreen } from './ProcedimentosScreen';
 import { PacientesHubScreen } from './pacientes/PacientesHubScreen';
+import { PacientesDuplicidadesScreen } from './pacientes/PacientesDuplicidadesScreen';
 import { ModuleGestorScreen } from '../common/ModuleGestorScreen';
 import { SolicitacoesCancelamentoModal } from './SolicitacoesCancelamentoModal';
 import * as db from '../../services/consultasService';
@@ -84,9 +85,10 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
     const showProcedimentos = (subView === 'procedimentos' || subView === 'procedimentos-revisar-duplicidades') && canAccessProcedimentos;
     const showDados = (subView === 'dados' || (subView?.startsWith('dados') ?? false)) && canAccessDados;
     const showPacientes = (subView === 'pacientes') && canAccessPacientes;
+    const showDuplicidades = (subView === 'pacientes-duplicidades') && canAccessPacientes;
     const showGestor = (subView === 'gestor') && canAccessGestor;
     
-    const isSubView = showNovoAgendamento || showLiberarVagas || showAcompanhar || showProcedimentos || showDados || showPacientes || showGestor;
+    const isSubView = showNovoAgendamento || showLiberarVagas || showAcompanhar || showProcedimentos || showDados || showPacientes || showDuplicidades || showGestor;
 
     const renderMainScreen = () => {
         const visibleCardsCount = [
@@ -347,6 +349,13 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                             onNavigate={onNavigate}
                             subView={subView}
                         />
+                    ) : showDuplicidades ? (
+                        <div className="w-full flex-1 flex flex-col h-full max-h-full min-h-0 bg-transparent overflow-hidden animate-in fade-in duration-200">
+                            <PacientesDuplicidadesScreen
+                                onBack={() => onNavigate('consultas:pacientes')}
+                                currentUser={currentUser}
+                            />
+                        </div>
                     ) : showPacientes ? (
                         <div className="w-full flex-1 flex flex-col h-full max-h-full min-h-0 bg-transparent overflow-hidden animate-in fade-in duration-200">
                             <PacientesHubScreen
