@@ -8,8 +8,14 @@ import {
     isValidCpf,
     removeAccents,
     detectarCriterioPesquisaPaciente,
-    CriterioPesquisaPacienteDetectado
+    CriterioPesquisaPacienteDetectado,
+    formatBirthDateBr
 } from '../utils/cpfUtils';
+import {
+    normalizePatientName,
+    normalizeBirthDateIso,
+    PatientConflictType
+} from '../utils/patientDuplicateUtils';
 import {
     validateBrazilianPhone,
     formatBrazilianPhone,
@@ -279,16 +285,213 @@ export interface PacienteCpfLookupResult {
     error?: string;
 }
 
-export class DuplicatePatientCpfError extends Error {
-    public readonly code = 'DUPLICATE_PATIENT_CPF';
+export class DuplicatePatientConflictError extends Error {
+    public readonly code: 'DUPLICATE_PATIENT_CPF' | 'DUPLICATE_PATIENT_NAME_BIRTH';
+    public readonly conflictType: PatientConflictType;
     public readonly existingPatient?: ConsultaPaciente | null;
 
-    constructor(message: string, existingPatient?: ConsultaPaciente | null) {
+    constructor(
+        message: string, 
+        conflictType: PatientConflictType = 'cpf',
+        existingPatient?: ConsultaPaciente | null
+    ) {
         super(message);
-        this.name = 'DuplicatePatientCpfError';
+        this.name = 'DuplicatePatientConflictError';
+        this.conflictType = conflictType;
+        this.code = conflictType === 'cpf' ? 'DUPLICATE_PATIENT_CPF' : 'DUPLICATE_PATIENT_NAME_BIRTH';
         this.existingPatient = existingPatient ?? null;
     }
 }
+
+export class DuplicatePatientCpfError extends DuplicatePatientConflictError {
+    constructor(message: string, existingPatient?: ConsultaPaciente | null) {
+        super(message, 'cpf', existingPatient);
+        this.name = 'DuplicatePatientCpfError';
+    }
+}
+
+export interface CheckDuplicatePacienteResult {
+    hasDuplicate: boolean;
+    conflictType: PatientConflictType | null;
+    existingPatient: ConsultaPaciente | null;
+    message?: string;
+}
+
+/**
+ * Consulta a base de dados do Supabase e verifica duplicidade de pacientes por:
+ * 1. CPF (11 dígitos normalizados)
+ * 2. Nome Completo (normalizado) + Data de Nascimento
+ * Ambas as validações funcionam independentemente.
+ */
+export const checkDuplicatePaciente = async (params: {
+    name: string;
+    cpf?: string | null;
+    birth_date?: string | null;
+    excludeId?: string | null;
+}): Promise<CheckDuplicatePacienteResult> => {
+    try {
+        const cleanCpf = normalizeCpf(params.cpf);
+        const nameTrim = params.name ? params.name.trim() : '';
+        const birthDate = params.birth_date ? normalizeBirthDateIso(params.birth_date) : null;
+
+        // 1. Tenta via RPC no Supabase primeiro
+        const { data: rpcData, error: rpcError } = await supabase.rpc('check_paciente_duplicidade', {
+            p_name: nameTrim,
+            p_cpf: cleanCpf || null,
+            p_birth_date: birthDate || null,
+            p_exclude_id: params.excludeId || null
+        });
+
+        if (!rpcError && rpcData && rpcData.length > 0) {
+            const first = rpcData[0];
+            if (first.has_duplicate) {
+                const existing = first.existing_patient as ConsultaPaciente;
+                const conflictType = first.conflict_type as PatientConflictType;
+                return {
+                    hasDuplicate: true,
+                    conflictType,
+                    existingPatient: existing,
+                    message: conflictType === 'cpf'
+                        ? `Já existe um paciente cadastrado com este CPF (${formatCpf(existing.cpf)}) na base integrada.`
+                        : `Já existe um paciente cadastrado com o mesmo Nome Completo e Data de Nascimento (${formatBirthDateBr(existing.birth_date)}) na base integrada.`
+                };
+            }
+            return {
+                hasDuplicate: false,
+                conflictType: null,
+                existingPatient: null
+            };
+        }
+
+        // 2. Fallback caso RPC falhe: consultas diretas no Supabase
+        // A) Checa CPF
+        if (cleanCpf.length === 11) {
+            let query = supabase
+                .from('consultas_pacientes')
+                .select('*')
+                .eq('cpf', cleanCpf)
+                .limit(1);
+
+            if (params.excludeId) {
+                query = query.neq('id', params.excludeId);
+            }
+
+            const { data: cpfRows } = await query;
+            if (cpfRows && cpfRows.length > 0) {
+                return {
+                    hasDuplicate: true,
+                    conflictType: 'cpf',
+                    existingPatient: cpfRows[0] as ConsultaPaciente,
+                    message: `Já existe um paciente cadastrado com este CPF (${formatCpf(cleanCpf)}) na base integrada.`
+                };
+            }
+        }
+
+        // B) Checa Nome Normalizado + Data de Nascimento
+        if (nameTrim && birthDate) {
+            const targetNameNorm = normalizePatientName(nameTrim);
+            let query = supabase
+                .from('consultas_pacientes')
+                .select('*')
+                .eq('birth_date', birthDate);
+
+            if (params.excludeId) {
+                query = query.neq('id', params.excludeId);
+            }
+
+            const { data: birthRows } = await query;
+            if (birthRows && birthRows.length > 0) {
+                const match = birthRows.find(p => normalizePatientName(p.name) === targetNameNorm);
+                if (match) {
+                    return {
+                        hasDuplicate: true,
+                        conflictType: 'name_and_birth_date',
+                        existingPatient: match as ConsultaPaciente,
+                        message: `Já existe um paciente cadastrado com o mesmo Nome Completo e Data de Nascimento (${formatBirthDateBr(birthDate)}) na base integrada.`
+                    };
+                }
+            }
+        }
+
+        return {
+            hasDuplicate: false,
+            conflictType: null,
+            existingPatient: null
+        };
+    } catch (err) {
+        console.error('[consultasService] checkDuplicatePaciente error:', err);
+        return {
+            hasDuplicate: false,
+            conflictType: null,
+            existingPatient: null
+        };
+    }
+};
+
+export interface SolicitacaoConferenciaAdminParams {
+    candidateName: string;
+    candidateCpf?: string | null;
+    candidateBirthDate?: string | null;
+    candidatePhone?: string | null;
+    candidateNeighborhood?: string | null;
+    candidateStreet?: string | null;
+    candidateSusNumber?: string | null;
+    candidateNickname?: string | null;
+    conflictPatientId?: string | null;
+    conflictType: 'cpf' | 'name_and_birth_date' | 'homonimo_suspeito';
+    reason?: string;
+    notes?: string;
+    currentUser?: { id?: string; name?: string; email?: string } | null;
+}
+
+export const encaminharParaConferenciaAdministrativa = async (
+    params: SolicitacaoConferenciaAdminParams
+): Promise<{ success: boolean; id?: string; error?: string }> => {
+    try {
+        const payload = {
+            candidate_name: params.candidateName.trim().toUpperCase(),
+            candidate_cpf: normalizeCpf(params.candidateCpf) || null,
+            candidate_birth_date: params.candidateBirthDate ? normalizeBirthDateIso(params.candidateBirthDate) : null,
+            candidate_phone: params.candidatePhone?.trim() || null,
+            candidate_neighborhood: params.candidateNeighborhood?.trim()?.toUpperCase() || null,
+            candidate_street: params.candidateStreet?.trim()?.toUpperCase() || null,
+            candidate_sus_number: params.candidateSusNumber?.trim() || null,
+            candidate_nickname: params.candidateNickname?.trim()?.toUpperCase() || null,
+            conflict_patient_id: params.conflictPatientId || null,
+            conflict_type: params.conflictType,
+            reason: params.reason || 'Divergência cadastral / Suspeita de Homônimo para conferência administrativa',
+            notes: params.notes || null,
+            status: 'pendente',
+            created_by_user_id: params.currentUser?.id || null,
+            created_by_user_name: params.currentUser?.name || params.currentUser?.email || 'Operador do Sistema'
+        };
+
+        const { data, error } = await supabase
+            .from('pacientes_conferencia_administrativa')
+            .insert([payload])
+            .select('id')
+            .single();
+
+        if (error) throw error;
+        return { success: true, id: data?.id };
+    } catch (err: any) {
+        console.error('[consultasService] encaminharParaConferenciaAdministrativa error:', err);
+        return { success: false, error: err?.message || 'Falha ao registrar para conferência administrativa.' };
+    }
+};
+
+export const getPacientesDuplicadosAuditoria = async () => {
+    try {
+        const { data, error } = await supabase
+            .from('vw_pacientes_duplicados_auditoria')
+            .select('*');
+        if (error) throw error;
+        return data || [];
+    } catch (err) {
+        console.error('[consultasService] getPacientesDuplicadosAuditoria error:', err);
+        return [];
+    }
+};
 
 const classifyPacienteLookupError = (err: any): { status: 'permission_denied' | 'connection_error' | 'technical_error'; message: string } => {
     const code = String(err?.code || '').toUpperCase();
