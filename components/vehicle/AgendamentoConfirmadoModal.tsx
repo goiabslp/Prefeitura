@@ -439,40 +439,47 @@ export const AgendamentoConfirmadoModal: React.FC<AgendamentoConfirmadoModalProp
                   <table className="w-full text-left border-collapse">
                     <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500 sticky top-0">
                       <tr>
-                        <th className="py-2 px-3">Passageiro</th>
+                        <th className="py-2 px-3">Nome</th>
                         <th className="py-2 px-2">Tipo</th>
                         <th className="py-2 px-2">CPF</th>
                         <th className="py-2 px-2">Horário</th>
-                        <th className="py-2 px-2">Local de Embarque</th>
+                        <th className="py-2 px-2">Local de embarque</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs font-medium">
-                      {passengersList.map((p, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
-                          <td className="py-2 px-3 font-bold text-slate-900 uppercase truncate max-w-[160px]">
-                            {p.name}
-                            {p.nickname && <span className="text-[10px] text-indigo-600 block font-normal">Apelido: {p.nickname}</span>}
-                          </td>
-                          <td className="py-2 px-2 text-[10px] font-black uppercase">
-                            <span className={`px-2 py-0.5 rounded-md ${
-                              p.type === 'acompanhante' 
-                                ? 'bg-purple-100 text-purple-800' 
-                                : 'bg-indigo-100 text-indigo-800'
-                            }`}>
-                              {p.type || 'Paciente'}
-                            </span>
-                          </td>
-                          <td className="py-2 px-2 font-mono text-[11px] text-slate-600">
-                            {p.cpf ? maskCpfPartial(p.cpf) : 'Não informado'}
-                          </td>
-                          <td className="py-2 px-2 font-mono text-[11px] font-bold text-indigo-700 whitespace-nowrap">
-                            {p.departureTime || p.appointmentTime || '---'}
-                          </td>
-                          <td className="py-2 px-2 text-slate-600 text-[11px] truncate max-w-[160px]" title={p.departureLocation || 'Ponto Central'}>
-                            {p.departureLocation || 'Ponto Central'}
-                          </td>
-                        </tr>
-                      ))}
+                      {passengersList.map((p, idx) => {
+                        const isAcomp = p.type === 'acompanhante' || Boolean(p.companionForPatientId);
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
+                            <td className="py-2 px-3 font-bold text-slate-900 uppercase truncate max-w-[160px]">
+                              {p.name}
+                              {p.nickname && <span className="text-[10px] text-indigo-600 block font-normal">Apelido: {p.nickname}</span>}
+                              {isAcomp && p.companionForPatientName && (
+                                <span className="text-[10px] text-purple-700 block font-normal">Acompanhando: {p.companionForPatientName}</span>
+                              )}
+                              {!isAcomp && p.companionName && (
+                                <span className="text-[10px] text-slate-500 block font-normal">Acompanhante: {p.companionName}</span>
+                              )}
+                            </td>
+                            <td className="py-2 px-2 text-[10px] font-black uppercase">
+                              <span className={`px-2 py-0.5 rounded-md ${
+                                isAcomp ? 'bg-purple-100 text-purple-800' : 'bg-indigo-100 text-indigo-800'
+                              }`}>
+                                {isAcomp ? 'Acompanhante' : 'Paciente'}
+                              </span>
+                            </td>
+                            <td className="py-2 px-2 font-mono text-[11px] text-slate-600">
+                              {p.cpf ? maskCpfPartial(p.cpf) : 'Não informado'}
+                            </td>
+                            <td className="py-2 px-2 font-mono text-[11px] font-bold text-indigo-700 whitespace-nowrap">
+                              {p.departureTime || p.appointmentTime || '---'}
+                            </td>
+                            <td className="py-2 px-2 text-slate-600 text-[11px] truncate max-w-[160px]" title={p.departureLocation || 'Ponto Central'}>
+                              {p.departureLocation || 'Ponto Central'}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -703,33 +710,43 @@ export const AgendamentoConfirmadoModal: React.FC<AgendamentoConfirmadoModalProp
                     <tr className="bg-slate-50 border-b border-slate-200 text-[6pt] font-black uppercase tracking-wider text-slate-500">
                       <th className="py-1 px-2 w-6">#</th>
                       <th className="py-1 px-2">Nome</th>
-                      <th className="py-1 px-2">Partida</th>
+                      <th className="py-1 px-2 w-20">Tipo</th>
                       <th className="py-1 px-2 w-16">Horário</th>
-                      <th className="py-1 px-2">Local</th>
+                      <th className="py-1 px-2">Local de embarque</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {passengersList.map((p, idx) => (
-                      <tr key={idx}>
-                        <td className="py-1 px-2 font-bold text-slate-500">{idx + 1}</td>
-                        <td className="py-1 px-2 font-bold text-slate-900 uppercase">
-                          {p.name}
-                          {p.nickname && <span className="text-[6pt] text-indigo-700 block font-normal">({p.nickname})</span>}
-                          {p.type === 'acompanhante' && (
-                            <span className="text-[5.5pt] text-purple-700 font-bold block uppercase">Acompanhante</span>
-                          )}
-                        </td>
-                        <td className="py-1 px-2 uppercase font-medium text-slate-700">
-                          {p.departureLocation || 'Ponto Central'}
-                        </td>
-                        <td className="py-1 px-2 font-mono font-bold text-slate-900">
-                          {p.departureTime || p.appointmentTime || '---'}
-                        </td>
-                        <td className="py-1 px-2 text-slate-600">
-                          {p.departureLocation || p.appointmentLocation || 'Ponto Central'}
-                        </td>
-                      </tr>
-                    ))}
+                    {passengersList.map((p, idx) => {
+                      const isAcomp = p.type === 'acompanhante' || Boolean(p.companionForPatientId);
+                      return (
+                        <tr key={idx} className={isAcomp ? 'bg-purple-50/20' : ''}>
+                          <td className="py-1 px-2 font-bold text-slate-500">{idx + 1}</td>
+                          <td className="py-1 px-2 font-bold text-slate-900 uppercase">
+                            {p.name}
+                            {p.nickname && <span className="text-[6pt] text-indigo-700 block font-normal">({p.nickname})</span>}
+                            {isAcomp && p.companionForPatientName && (
+                              <span className="text-[5.5pt] text-purple-700 font-bold block uppercase">
+                                Acompanhando: {p.companionForPatientName}
+                              </span>
+                            )}
+                            {!isAcomp && p.companionName && (
+                              <span className="text-[5.5pt] text-slate-500 font-bold block uppercase">
+                                Acompanhante: {p.companionName}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-1 px-2 uppercase font-semibold text-slate-700">
+                            {isAcomp ? 'Acompanhante' : 'Paciente'}
+                          </td>
+                          <td className="py-1 px-2 font-mono font-bold text-slate-900">
+                            {p.departureTime || p.appointmentTime || '---'}
+                          </td>
+                          <td className="py-1 px-2 text-slate-600">
+                            {p.departureLocation || p.appointmentLocation || 'Ponto Central'}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

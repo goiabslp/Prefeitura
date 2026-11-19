@@ -281,10 +281,12 @@ export const TripulacaoTable: React.FC<TripulacaoTableProps> = ({
                               Nasc.: {formatBirthDateComIdade(p.birthDate, tripDate)}
                             </p>
 
-                            {/* Se for menor de idade, exibe o acompanhante responsável */}
-                            {isMenor && p.companionName && (
-                              <p className="text-[10px] font-extrabold text-amber-800 flex items-center gap-1 mt-0.5">
-                                <span>Acompanhante:</span>
+                            {/* Exibe o acompanhante vinculado ao paciente (menor ou maior) */}
+                            {p.companionName && (
+                              <p className={`text-[10px] font-extrabold flex items-center gap-1 mt-0.5 ${
+                                isMenor ? 'text-amber-800' : 'text-purple-700'
+                              }`}>
+                                <span>{isMenor ? 'Acompanhante Resp.:' : 'Acompanhante:'}</span>
                                 <strong className="uppercase">{p.companionName}</strong>
                               </p>
                             )}

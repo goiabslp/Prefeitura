@@ -742,15 +742,58 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     setIsNewPassengerModalOpen(true);
   };
 
-  // Salvar passageiro vindo do PassageiroModal
-  const handleSavePassenger = (passengerData: CrewMember) => {
-    const currentPassengers = [...(formData.passengers || [])];
+  // Salvar passageiro vindo do PassageiroModal (suportando acompanhante vinculado)
+  const handleSavePassenger = (passengerData: CrewMember, companionData?: CrewMember | null) => {
+    let currentPassengers = [...(formData.passengers || [])];
+    const isEditing = editingPassengerIndex !== null && editingPassengerIndex >= 0;
 
-    if (editingPassengerIndex !== null && editingPassengerIndex >= 0) {
+    // 1. Validação de Capacidade do Veículo (cada passageiro e acompanhante consome 1 assento)
+    const seatsNeeded = companionData ? 2 : 1;
+    if (selectedVehicle && selectedVehicle.passengerCapacity !== undefined) {
+      let existingCount = currentPassengers.length;
+      if (isEditing) {
+        const oldTarget = currentPassengers[editingPassengerIndex];
+        const oldCompanion = currentPassengers.find(
+          (p, idx) => idx !== editingPassengerIndex && (
+            (p.companionForPatientId && (p.companionForPatientId === oldTarget.patientId || p.companionForPatientId === oldTarget.id)) ||
+            (oldTarget.companionId && p.id === oldTarget.companionId)
+          )
+        );
+        existingCount -= (1 + (oldCompanion ? 1 : 0));
+      }
+
+      // 1 Motorista + ocupantes
+      if ((existingCount + seatsNeeded + 1) > selectedVehicle.passengerCapacity) {
+        showToast(`A tripulação (${existingCount + seatsNeeded} pessoas + motorista) excede a capacidade do veículo (${selectedVehicle.passengerCapacity} lugares).`, "error");
+        return;
+      }
+    }
+
+    if (isEditing) {
+      const oldTarget = currentPassengers[editingPassengerIndex];
       currentPassengers[editingPassengerIndex] = passengerData;
+
+      // Localiza acompanhante antigo vinculado a este paciente
+      const oldAcompIdx = currentPassengers.findIndex(
+        (p, idx) => idx !== editingPassengerIndex && (
+          (p.companionForPatientId && (p.companionForPatientId === (oldTarget.patientId || oldTarget.id))) ||
+          (oldTarget.companionId && p.id === oldTarget.companionId)
+        )
+      );
+
+      if (companionData) {
+        if (oldAcompIdx >= 0) {
+          currentPassengers[oldAcompIdx] = companionData;
+        } else {
+          currentPassengers.push(companionData);
+        }
+      } else if (oldAcompIdx >= 0) {
+        currentPassengers.splice(oldAcompIdx, 1);
+      }
+
       showToast(`Passageiro ${passengerData.name} atualizado com sucesso!`, "success");
     } else {
-      // Prevenção de duplicidade
+      // Prevenção de duplicidade do paciente
       const alreadyExists = currentPassengers.some(
         p => (p.patientId && passengerData.patientId && p.patientId === passengerData.patientId) ||
              (p.cpf && passengerData.cpf && normalizeCpf(p.cpf) === normalizeCpf(passengerData.cpf))
@@ -760,15 +803,27 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         return;
       }
 
+      // Prevenção de duplicidade do acompanhante
+      if (companionData) {
+        const companionExists = currentPassengers.some(
+          p => (p.patientId && companionData.patientId && p.patientId === companionData.patientId) ||
+               (p.cpf && companionData.cpf && normalizeCpf(p.cpf) === normalizeCpf(companionData.cpf))
+        );
+        if (companionExists) {
+          showToast(`O acompanhante ${companionData.name} já foi adicionado a esta viagem.`, "warning");
+          return;
+        }
+      }
+
       // Restrições de viagem oncológica / hemodiálise
       if (isSpecialTreatmentTrip) {
         if (isHemodialysisVan) {
-          if (currentPassengers.length >= maxVanCrewCapacity) {
+          if (currentPassengers.length + seatsNeeded > maxVanCrewCapacity) {
             showToast(`Capacidade máxima da Van (${maxVanCrewCapacity} passageiros) atingida.`, "warning");
             return;
           }
         } else {
-          if (currentPassengers.length >= 3) {
+          if (currentPassengers.length + seatsNeeded > 3) {
             showToast("Limite máximo de 03 pessoas atingido nesta viagem exclusiva.", "warning");
             return;
           }
@@ -776,7 +831,15 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       }
 
       currentPassengers.push(passengerData);
-      showToast(`Passageiro ${passengerData.name} adicionado à tripulação!`, "success");
+      if (companionData) {
+        currentPassengers.push(companionData);
+      }
+      showToast(
+        companionData 
+          ? `Passageiro ${passengerData.name} e acompanhante adicionados à tripulação!` 
+          : `Passageiro ${passengerData.name} adicionado à tripulação!`, 
+        "success"
+      );
     }
 
     const pCount = currentPassengers.filter(p => p.type === 'paciente').length;
@@ -857,9 +920,29 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
 
     let nextPassengers = (formData.passengers || []).filter((_, i) => i !== index);
 
-    // Se remover o menor de idade, remove também o acompanhante vinculado exclusivamente a ele
-    if (target.isMinor && target.companionId) {
-      nextPassengers = nextPassengers.filter(p => p.id !== target.companionId && p.companionForPatientId !== (target.patientId || target.id));
+    // Se remover o paciente (seja menor ou maior), remove também o acompanhante vinculado exclusivamente a ele
+    if (target.companionId || target.type === 'paciente') {
+      nextPassengers = nextPassengers.filter(
+        p => !(
+          (target.companionId && p.id === target.companionId) ||
+          (p.companionForPatientId && (p.companionForPatientId === (target.patientId || target.id)))
+        )
+      );
+    }
+
+    // Se remover o acompanhante, atualiza o paciente responsável para limpar o vínculo
+    if (target.type === 'acompanhante' || target.companionForPatientId) {
+      nextPassengers = nextPassengers.map(p => {
+        if (p.companionId === target.id || (p.patientId && p.patientId === target.companionForPatientId)) {
+          return {
+            ...p,
+            companionId: undefined,
+            companionName: undefined,
+            needsCompanion: false
+          };
+        }
+        return p;
+      });
     }
 
     const pCount = nextPassengers.filter(p => p.type === 'paciente').length;

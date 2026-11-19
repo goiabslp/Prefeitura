@@ -2,6 +2,7 @@ import { supabase } from './supabaseClient';
 import { VehicleSchedule, ScheduleStatus } from '../types';
 import { notificationService } from './notificationService';
 import { validateDriverScheduleRules, fetchSystemHolidaysFromDatabase } from './driverRestRulesService';
+import { isMenorDeIdadeNaViagem } from '../utils/ageValidation';
 
 const LEGACY_SECTOR_MAP: Record<string, string> = {
     '0655d81b-5eab-4d4b-bf02-79469e7102e3': '7cb6c572-50b8-42ef-bd46-afcab8d56db7', // Secretaria de Saúde
@@ -141,10 +142,43 @@ const notifyRequester = async (scheduleId: string, status: ScheduleStatus) => {
 };
 
 
+export const validateCrewIntegrity = (passengers: any[] | undefined, tripDate?: string | Date) => {
+    if (!passengers || !Array.isArray(passengers)) return { isValid: true };
+
+    for (const p of passengers) {
+        if (!p.name || !String(p.name).trim()) {
+            return { isValid: false, message: 'Todos os integrantes da tripulação devem possuir nome.' };
+        }
+
+        const isMinor = p.isMinor || (p.birthDate ? isMenorDeIdadeNaViagem(p.birthDate, tripDate) : false);
+        if (isMinor) {
+            const hasCompanion = passengers.some(
+                a => (a.type === 'acompanhante' || Boolean(a.companionForPatientId)) &&
+                     (a.companionForPatientId === p.patientId || a.companionForPatientId === p.id || a.id === p.companionId || a.companionForPatientName === p.name)
+            );
+            if (!hasCompanion) {
+                return { 
+                    isValid: false, 
+                    message: `O paciente menor de 18 anos "${p.name}" necessita obrigatoriamente de um acompanhante vinculado à viagem.` 
+                };
+            }
+        }
+    }
+
+    return { isValid: true };
+};
+
 export const createSchedule = async (
     schedule: Omit<VehicleSchedule, 'id' | 'createdAt' | 'protocol'>, 
     allowRestOverride?: boolean
 ): Promise<VehicleSchedule | null> => {
+    // Validação Definitiva no Backend: Integridade da Tripulação e Menores de 18 Anos
+    const crewValidation = validateCrewIntegrity(schedule.passengers, schedule.departureDateTime);
+    if (!crewValidation.isValid) {
+        console.error('Tentativa de agendamento bloqueada por regra de integridade de passageiros:', crewValidation);
+        throw new Error(crewValidation.message);
+    }
+
     const shouldOverride = Boolean(allowRestOverride || schedule.overrideRestRules);
 
     // Validação Definitiva no Backend: Regras de Descanso e Disponibilidade do Motorista
@@ -230,6 +264,13 @@ export const updateSchedule = async (
     schedule: VehicleSchedule, 
     allowRestOverride?: boolean
 ): Promise<VehicleSchedule | null> => {
+    // Validação Definitiva no Backend: Integridade da Tripulação e Menores de 18 Anos
+    const crewValidation = validateCrewIntegrity(schedule.passengers, schedule.departureDateTime);
+    if (!crewValidation.isValid) {
+        console.error('Tentativa de atualização bloqueada por regra de integridade de passageiros:', crewValidation);
+        throw new Error(crewValidation.message);
+    }
+
     const shouldOverride = Boolean(allowRestOverride || schedule.overrideRestRules);
 
     // Validação Definitiva no Backend: Regras de Descanso e Disponibilidade do Motorista

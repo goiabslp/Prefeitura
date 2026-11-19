@@ -308,21 +308,38 @@ export const VehicleServiceOrderPreview: React.FC<VehicleServiceOrderPreviewProp
                                                 <table className="w-full text-left border-collapse">
                                                     <thead>
                                                         <tr className="bg-slate-50 border-b border-slate-200 text-[6pt] font-black uppercase tracking-widest text-slate-400">
-                                                            <th className="p-2 pl-3 w-1/4">Nome</th>
-                                                            <th className="p-2 w-1/4">Partida</th>
+                                                            <th className="p-2 pl-3 w-1/3">Nome</th>
+                                                            <th className="p-2 w-1/5">Tipo</th>
                                                             <th className="p-2 w-1/6">Horário</th>
-                                                            <th className="p-2 w-1/4">Local</th>
+                                                            <th className="p-2">Local de embarque</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="divide-y divide-slate-100">
-                                                        {schedule.passengers.map((p, idx) => (
-                                                            <tr key={idx} className="text-[7pt] font-medium text-slate-700">
-                                                                <td className="p-2 pl-3 font-bold uppercase text-slate-800 truncate">{p.name}</td>
-                                                                <td className="p-2 uppercase truncate">{p.departureLocation || 'Ponto Central'}</td>
-                                                                <td className="p-2 font-mono font-bold text-slate-900">{p.departureTime || p.appointmentTime || '---'}</td>
-                                                                <td className="p-2 uppercase truncate">{p.departureLocation || p.appointmentLocation || 'Ponto Central'}</td>
-                                                            </tr>
-                                                        ))}
+                                                        {schedule.passengers.map((p, idx) => {
+                                                            const isAcomp = p.type === 'acompanhante' || Boolean(p.companionForPatientId);
+                                                            return (
+                                                                <tr key={idx} className="text-[7pt] font-medium text-slate-700">
+                                                                    <td className="p-2 pl-3 font-bold uppercase text-slate-800 truncate">
+                                                                        {p.name}
+                                                                        {isAcomp && p.companionForPatientName && (
+                                                                            <span className="text-[5.5pt] text-purple-700 font-bold block uppercase">
+                                                                                Acompanhando: {p.companionForPatientName}
+                                                                            </span>
+                                                                        )}
+                                                                        {!isAcomp && p.companionName && (
+                                                                            <span className="text-[5.5pt] text-slate-500 font-bold block uppercase">
+                                                                                Acompanhante: {p.companionName}
+                                                                            </span>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="p-2 uppercase font-semibold text-slate-700">
+                                                                        {isAcomp ? 'Acompanhante' : 'Paciente'}
+                                                                    </td>
+                                                                    <td className="p-2 font-mono font-bold text-slate-900">{p.departureTime || p.appointmentTime || '---'}</td>
+                                                                    <td className="p-2 uppercase truncate">{p.departureLocation || p.appointmentLocation || 'Ponto Central'}</td>
+                                                                </tr>
+                                                            );
+                                                        })}
                                                     </tbody>
                                                 </table>
                                             </div>
