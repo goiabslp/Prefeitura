@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { 
     X, ArrowRightLeft, XCircle, Trash2, Sparkles, PauseCircle, PlayCircle, 
-    AlertTriangle, CheckCircle2, Loader2, Search, Filter, ShieldAlert, ShieldCheck, Check
+    AlertTriangle, CheckCircle2, Loader2, Search, Filter, ShieldAlert, ShieldCheck, Check,
+    User as UserIcon, Activity, Calendar, Clock
 } from 'lucide-react';
 import { ConsultaAgendamento, ConsultaProcedimento, User } from '../../types';
 import { formatProcedimentoLabel } from '../../services/consultasService';
@@ -23,6 +24,7 @@ interface BatchTransferModalProps {
     }) => Promise<void>;
     isProcessing: boolean;
     progress: { current: number; total: number } | null;
+    formatPatientName?: (p: any) => string;
 }
 
 export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
@@ -32,7 +34,8 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
     procedures,
     onConfirmTransfer,
     isProcessing,
-    progress
+    progress,
+    formatPatientName: customFormatPatientName
 }) => {
     const [targetProcId, setTargetProcId] = useState('');
     const [searchProc, setSearchProc] = useState('');
@@ -41,6 +44,11 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
     const [error, setError] = useState('');
 
     if (!isOpen) return null;
+
+    const patientFormatter = customFormatPatientName || formatPatientName;
+    const isSingle = selectedBookings.length === 1;
+    const singleBooking = isSingle ? selectedBookings[0] : null;
+    const singleBookingProcId = singleBooking ? (singleBooking.procedimento_id || singleBooking.procedimento?.id) : null;
 
     const filteredProcs = procedures.filter(p => {
         // REGRA DE SUSPENSÃO: Apenas procedimentos ativos podem ser destinos de transferência
@@ -68,6 +76,12 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
             return;
         }
 
+        // Não permitir transferir para o mesmo procedimento de origem
+        if (singleBooking && targetProcId === singleBookingProcId) {
+            setError('O procedimento selecionado é o mesmo atual. Escolha um procedimento diferente para realizar a transferência.');
+            return;
+        }
+
         // REGRA DE SUSPENSÃO: Validar se o procedimento de destino está ativo no momento da confirmação
         if (selectedTargetProc && selectedTargetProc.status !== 'Ativo') {
             setError(`O procedimento "${formatProcedimentoLabel(selectedTargetProc)}" está suspenso e não pode receber transferências.`);
@@ -91,7 +105,7 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
                 reason: reason.trim()
             });
         } catch (err: any) {
-            setError(err.message || 'Erro ao realizar transferência em lote.');
+            setError(err.message || (isSingle ? 'Erro ao realizar transferência do procedimento.' : 'Erro ao realizar transferência em lote.'));
         }
     };
 
@@ -111,14 +125,16 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
                         <div>
                             <div className="flex items-center gap-2">
                                 <h3 className="text-sm sm:text-base font-black text-slate-900 uppercase tracking-tight">
-                                    Transferência em Lote
+                                    {isSingle ? 'Transferir Procedimento' : 'Transferência em Lote'}
                                 </h3>
-                                <span className="px-2.5 py-0.5 rounded-full bg-indigo-600 text-white font-black text-[10px] tracking-wider">
-                                    {selectedBookings.length} {selectedBookings.length === 1 ? 'ITEM' : 'ITENS'}
+                                <span className="px-2.5 py-0.5 rounded-full bg-indigo-600 text-white font-black text-[10px] tracking-wider uppercase">
+                                    {isSingle ? '1 Solicitação' : `${selectedBookings.length} Itens`}
                                 </span>
                             </div>
                             <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
-                                Transfere todas as solicitações selecionadas para um novo procedimento
+                                {isSingle
+                                    ? 'Migrar agendamento para outro exame ou consulta médica'
+                                    : 'Transfere todas as solicitações selecionadas para um novo procedimento'}
                             </p>
                         </div>
                     </div>
@@ -148,7 +164,7 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
                             <div className="flex justify-between items-center text-xs font-bold text-indigo-900">
                                 <span className="flex items-center gap-1.5">
                                     <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
-                                    Processando transferência em lote...
+                                    Processando transferência...
                                 </span>
                                 <span>{progress?.current || 0} de {progress?.total || selectedBookings.length} ({progressPercentage}%)</span>
                             </div>
@@ -161,30 +177,79 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
                         </div>
                     )}
 
-                    {/* Resumo das solicitações selecionadas */}
-                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
-                        <div className="flex justify-between items-center text-[10.5px] font-black uppercase tracking-wider text-slate-400">
-                            <span>Solicitações a transferir ({selectedBookings.length})</span>
-                            <span>Lista resumida</span>
-                        </div>
-                        <div className="max-h-28 overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
-                            {selectedBookings.map((b) => (
-                                <div key={b.id} className="text-xs flex items-center justify-between gap-2 p-1.5 bg-white rounded-xl border border-slate-200/70">
-                                    <div className="min-w-0 flex-1 truncate">
-                                        <span className="font-extrabold text-slate-800">
-                                            {b.paciente ? formatPatientName(b.paciente) : 'Paciente'}
-                                        </span>
-                                        <span className="text-slate-400 text-[10.5px] block truncate">
-                                            Procedimento atual: {formatProcedimentoLabel(b.procedimento)}
+                    {/* Resumo das solicitações: Card Completo (1 item) ou Lista Resumida (N itens) */}
+                    {isSingle && singleBooking ? (
+                        <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 space-y-3">
+                            <div className="flex items-center justify-between border-b border-slate-200/70 pb-2.5">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <div className="w-8 h-8 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center border border-sky-200 shrink-0">
+                                        <UserIcon className="w-4 h-4" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block leading-none">Paciente</span>
+                                        <span className="text-xs sm:text-sm font-black text-slate-900 uppercase truncate block">
+                                            {singleBooking.paciente ? patientFormatter(singleBooking.paciente) : 'Paciente não informado'}
                                         </span>
                                     </div>
-                                    <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[9px] font-bold shrink-0 uppercase">
-                                        {b.status || 'Solicitado'}
+                                </div>
+                                <div className="text-right shrink-0">
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block leading-none">Cartão SUS / CPF</span>
+                                    <span className="text-xs font-mono font-black text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-200 inline-block mt-0.5">
+                                        {singleBooking.paciente?.sus_number || singleBooking.paciente?.cpf || 'Não informado'}
                                     </span>
                                 </div>
-                            ))}
+                            </div>
+
+                            {/* Procedimento Atual (Origem) */}
+                            <div className="bg-amber-50/80 border border-amber-200/90 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="w-8 h-8 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-800 shrink-0">
+                                        <Activity className="w-4 h-4" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-amber-800 block leading-none">Procedimento Atual (Origem)</span>
+                                        <span className="text-xs font-black text-amber-950 uppercase block mt-0.5 truncate">
+                                            {formatProcedimentoLabel(singleBooking.procedimento) || 'Procedimento não especificado'}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                                    {singleBooking.procedimento?.type && (
+                                        <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-white text-amber-900 border border-amber-200 shadow-2xs">
+                                            {singleBooking.procedimento.type}
+                                        </span>
+                                    )}
+                                    <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-amber-200/70 text-amber-950 border border-amber-300 shadow-2xs">
+                                        Status: {singleBooking.status || 'Solicitado'}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    ) : (
+                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
+                            <div className="flex justify-between items-center text-[10.5px] font-black uppercase tracking-wider text-slate-400">
+                                <span>Solicitações a transferir ({selectedBookings.length})</span>
+                                <span>Lista resumida</span>
+                            </div>
+                            <div className="max-h-28 overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
+                                {selectedBookings.map((b) => (
+                                    <div key={b.id} className="text-xs flex items-center justify-between gap-2 p-1.5 bg-white rounded-xl border border-slate-200/70">
+                                        <div className="min-w-0 flex-1 truncate">
+                                            <span className="font-extrabold text-slate-800">
+                                                {b.paciente ? patientFormatter(b.paciente) : 'Paciente'}
+                                            </span>
+                                            <span className="text-slate-400 text-[10.5px] block truncate">
+                                                Procedimento atual: {formatProcedimentoLabel(b.procedimento)}
+                                            </span>
+                                        </div>
+                                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[9px] font-bold shrink-0 uppercase">
+                                            {b.status || 'Solicitado'}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Procedimento de Destino */}
                     <div className="space-y-2">
@@ -231,18 +296,27 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
                             ) : (
                                 filteredProcs.map(proc => {
                                     const isSelected = targetProcId === proc.id;
+                                    const isCurrent = isSingle && proc.id === singleBookingProcId;
+
                                     return (
                                         <div
                                             key={proc.id}
-                                            onClick={() => setTargetProcId(proc.id)}
-                                            className={`p-2.5 px-3 flex items-center justify-between gap-3 cursor-pointer transition-all ${
-                                                isSelected
-                                                    ? 'bg-indigo-50/80 border-l-4 border-indigo-600'
-                                                    : 'hover:bg-slate-50'
+                                            onClick={() => {
+                                                if (!isCurrent) {
+                                                    setTargetProcId(proc.id);
+                                                    setError('');
+                                                }
+                                            }}
+                                            className={`p-2.5 px-3 flex items-center justify-between gap-3 transition-all ${
+                                                isCurrent
+                                                    ? 'opacity-40 bg-slate-50 cursor-not-allowed'
+                                                    : isSelected
+                                                    ? 'bg-indigo-50/80 border-l-4 border-indigo-600 cursor-pointer'
+                                                    : 'hover:bg-slate-50 cursor-pointer'
                                             }`}
                                         >
                                             <div className="min-w-0 flex-1">
-                                                <div className="flex items-center gap-1.5">
+                                                <div className="flex items-center gap-1.5 flex-wrap">
                                                     {proc.code && (
                                                         <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-slate-100 text-slate-700 font-mono">
                                                             {proc.code}
@@ -254,6 +328,11 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
                                                     }`}>
                                                         {proc.type}
                                                     </span>
+                                                    {isCurrent && (
+                                                        <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
+                                                            (Atual)
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <p className="text-xs font-black text-slate-800 uppercase mt-0.5 truncate">
                                                     {formatProcedimentoLabel(proc)}
@@ -271,6 +350,28 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
                         </div>
                     </div>
 
+                    {/* Resumo do Procedimento de Destino Selecionado */}
+                    {selectedTargetProc && (
+                        <div className="bg-indigo-50/70 border border-indigo-200 rounded-2xl p-3 flex items-center justify-between gap-3 text-indigo-950">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                                    <Check className="w-4 h-4" />
+                                </div>
+                                <div className="min-w-0">
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-indigo-700 block leading-tight">
+                                        Novo Procedimento Selecionado
+                                    </span>
+                                    <span className="text-xs font-black uppercase text-indigo-950 block truncate">
+                                        {formatProcedimentoLabel(selectedTargetProc)}
+                                    </span>
+                                </div>
+                            </div>
+                            <span className="text-[9.5px] font-black uppercase px-2 py-0.5 rounded bg-indigo-600 text-white shrink-0">
+                                {selectedTargetProc.type}
+                            </span>
+                        </div>
+                    )}
+
                     {/* Motivo Opcional */}
                     <div className="space-y-1">
                         <label className="block text-[10.5px] font-black uppercase tracking-wider text-slate-500">
@@ -278,7 +379,9 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
                         </label>
                         <textarea
                             rows={2}
-                            placeholder="Informe o motivo da transferência em lote (ex.: readequação de agenda médica)..."
+                            placeholder={isSingle
+                                ? "Informe o motivo da transferência (ex.: readequação de encaminhamento médico)..."
+                                : "Informe o motivo da transferência em lote (ex.: readequação de agenda médica)..."}
                             value={reason}
                             onChange={(e) => setReason(e.target.value)}
                             className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all text-slate-800 placeholder:text-slate-400"
@@ -297,7 +400,7 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
                         </button>
                         <button
                             type="submit"
-                            disabled={isProcessing || !targetProcId}
+                            disabled={isProcessing || !targetProcId || (isSingle && targetProcId === singleBookingProcId)}
                             className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-700 hover:from-indigo-500 hover:to-purple-600 text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-md shadow-indigo-600/25 flex items-center justify-center gap-2 active:scale-95 cursor-pointer disabled:opacity-50"
                         >
                             {isProcessing ? (
@@ -308,7 +411,7 @@ export const BatchTransferModal: React.FC<BatchTransferModalProps> = ({
                             ) : (
                                 <>
                                     <ArrowRightLeft className="w-4 h-4" />
-                                    <span>Confirmar Transferência em Lote</span>
+                                    <span>{isSingle ? 'Confirmar Transferência' : 'Confirmar Transferência em Lote'}</span>
                                 </>
                             )}
                         </button>

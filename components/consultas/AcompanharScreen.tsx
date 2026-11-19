@@ -2140,17 +2140,8 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [editError, setEditError] = useState('');
     const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
 
-    // Transfer modal states
-    const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
-    const [transferTarget, setTransferTarget] = useState<ConsultaAgendamento | null>(null);
-    const [transferSelectedProcId, setTransferSelectedProcId] = useState('');
-    const [transferSearchProc, setTransferSearchProc] = useState('');
-    const [transferTypeFilter, setTransferTypeFilter] = useState<'TODOS' | 'Consulta' | 'Exame' | 'Cirurgia'>('TODOS');
-    const [transferPreserveSolicitationDate, setTransferPreserveSolicitationDate] = useState(true);
-    const [transferPreservePriority, setTransferPreservePriority] = useState(true);
-    const [transferReason, setTransferReason] = useState('');
-    const [transferError, setTransferError] = useState('');
-    const [isTransferring, setIsTransferring] = useState(false);
+    // Transfer modal states (Unificado para solicitações individuais e em lote)
+    const [transferTargetBookings, setTransferTargetBookings] = useState<ConsultaAgendamento[]>([]);
     const [transferSuccessToast, setTransferSuccessToast] = useState<string | null>(null);
 
     // ==================== MODAL DE SUCESSO DA TRANSFERÊNCIA (DESFAZER TRANSFERÊNCIA) ====================
@@ -2215,7 +2206,8 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             setIsPauseModalOpen(false);
             setIsResumeModalOpen(false);
             setIsEditModalOpen(false);
-            setIsTransferModalOpen(false);
+            setIsBatchTransferModalOpen(false);
+            setTransferTargetBookings([]);
             setIsRetornoModalOpen(false);
             setIsDefinirDataModalOpen(false);
             setBlockedQueueTarget(null);
@@ -2838,79 +2830,11 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         }
     };
 
-    // Open and execute procedure transfer
+    // Abrir modal unificado de transferência de procedimento (Atende solicitações individuais e em lote)
     const handleOpenTransferModal = (booking: ConsultaAgendamento) => {
         if (isReadOnly) return;
-        setTransferTarget(booking);
-        setTransferSelectedProcId('');
-        setTransferSearchProc('');
-        setTransferTypeFilter('TODOS');
-        setTransferPreserveSolicitationDate(true);
-        setTransferPreservePriority(true);
-        setTransferReason('');
-        setTransferError('');
-        setIsTransferModalOpen(true);
-    };
-
-    const handleConfirmTransferProcedimento = async () => {
-        if (!transferTarget) return;
-        if (!transferSelectedProcId) {
-            setTransferError('Por favor, selecione o novo procedimento de destino.');
-            return;
-        }
-
-        const currentProcId = transferTarget.procedimento_id || transferTarget.procedimento?.id;
-        if (transferSelectedProcId === currentProcId) {
-            setTransferError('O procedimento selecionado é o mesmo atual. Escolha um procedimento diferente para realizar a transferência.');
-            return;
-        }
-
-        const newProc = procedures.find(p => p.id === transferSelectedProcId);
-        if (!newProc) {
-            setTransferError('Procedimento selecionado não encontrado.');
-            return;
-        }
-
-        // REGRA DE SUSPENSÃO: Procedimento de destino não pode estar suspenso
-        if (newProc.status !== 'Ativo') {
-            setTransferError(`O procedimento "${formatProcedimentoLabel(newProc)}" está suspenso e não pode receber transferências.`);
-            return;
-        }
-
-        if (newProc.parent_id) {
-            const parent = procedures.find(p => p.id === newProc.parent_id);
-            if (parent && parent.status !== 'Ativo') {
-                setTransferError(`O procedimento principal "${parent.name}" está suspenso e não pode receber transferências.`);
-                return;
-            }
-        }
-
-        setIsTransferring(true);
-        setTransferError('');
-
-        try {
-            // REGRA OBRIGATÓRIA: A transferência altera EXCLUSIVAMENTE o procedimento vinculado,
-            // preservando integralmente todas as demais informações (data, horário, local, prestador, status, prioridade e histórico).
-            const updated = await db.transferAgendamentoProcedimento(transferTarget.id, transferSelectedProcId, currentUser);
-
-            const rec = (updated as any)?.transferRecord || db.getTransferRecordForBooking(transferTarget.id);
-
-            setIsTransferModalOpen(false);
-            setTransferTarget(null);
-
-            // Ao concluir uma transferência, abrir automaticamente o modal de sucesso com o botão Desfazer Transferência
-            if (rec) {
-                setTransferSuccessRecord(rec);
-                setIsTransferSuccessModalOpen(true);
-            }
-
-            await loadData(true);
-        } catch (err: any) {
-            console.error('Erro ao transferir procedimento:', err);
-            setTransferError(err.message || 'Ocorreu um erro ao transferir a solicitação.');
-        } finally {
-            setIsTransferring(false);
-        }
+        setTransferTargetBookings([booking]);
+        setIsBatchTransferModalOpen(true);
     };
 
     // ==================== CONTROLES DE REVERSÃO / DESFAZER TRANSFERÊNCIA (EXCLUSIVO DO MODAL DE SUCESSO) ====================
@@ -3228,11 +3152,17 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         preservePriority: boolean;
         reason: string;
     }) => {
+        const targetBookings = transferTargetBookings.length > 0
+            ? transferTargetBookings
+            : selectedBookingsList;
+        const targetIds = targetBookings.map(b => b.id);
+        if (targetIds.length === 0) return;
+
         setIsBatchProcessing(true);
-        setBatchProgress({ current: 0, total: selectedBookingIds.size });
+        setBatchProgress({ current: 0, total: targetIds.length });
         try {
             const result = await db.batchTransferAgendamentos({
-                bookingIds: Array.from(selectedBookingIds),
+                bookingIds: targetIds,
                 targetProcedimentoId: params.targetProcedimentoId,
                 preserveSolicitationDate: params.preserveSolicitationDate,
                 preservePriority: params.preservePriority,
@@ -3240,20 +3170,28 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 user: currentUser,
                 onProgress: (current, total) => setBatchProgress({ current, total })
             });
+
+            if (result.failureCount > 0 && result.successCount === 0) {
+                const errMsg = result.errors[0]?.message || 'Ocorreu um erro ao transferir o procedimento.';
+                throw new Error(errMsg);
+            }
+
             setIsBatchTransferModalOpen(false);
+            setTransferTargetBookings([]);
             setSelectedBookingIds(new Set());
+
             if (result.transferRecord) {
                 setTransferSuccessRecord(result.transferRecord);
                 setIsTransferSuccessModalOpen(true);
             } else {
                 setBatchResultSummary({
-                    title: 'Transferência em Lote Concluída',
+                    title: targetIds.length === 1 ? 'Transferência Concluída' : 'Transferência em Lote Concluída',
                     result
                 });
             }
             await loadData(true);
         } catch (err: any) {
-            console.error('Erro na transferência em lote:', err);
+            console.error('Erro na transferência:', err);
             throw err;
         } finally {
             setIsBatchProcessing(false);
@@ -3368,39 +3306,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         }
     };
 
-    // Memos para o Modal de Transferência de Procedimento (Análise de Incompatibilidade e Destino)
-    const transferSelectedProc = useMemo(() => {
-        if (!transferSelectedProcId) return null;
-        return procedures.find(p => p.id === transferSelectedProcId) || null;
-    }, [procedures, transferSelectedProcId]);
 
-    const transferIncompatibilityReasons = useMemo(() => {
-        if (!transferTarget || !transferSelectedProc) return [];
-        const reasons: string[] = [];
-
-        // 1. Tipo / Modalidade
-        if (transferSelectedProc.type && transferTarget.procedimento?.type && transferSelectedProc.type !== transferTarget.procedimento.type) {
-            reasons.push(`Modalidade diferente: de "${transferTarget.procedimento.type}" para "${transferSelectedProc.type}".`);
-        }
-
-        // 2. Especialista / Especialidade
-        const curEsp = transferTarget.procedimento?.especialista?.nome || (transferTarget.procedimento?.especialista as any)?.name;
-        const newEsp = transferSelectedProc.especialista?.nome || (transferSelectedProc.especialista as any)?.name;
-        if (curEsp && newEsp && curEsp.trim().toLowerCase() !== newEsp.trim().toLowerCase()) {
-            reasons.push(`Especialista diferente: o atual é "${curEsp}" e o novo é "${newEsp}".`);
-        } else if (curEsp && !newEsp) {
-            reasons.push(`O procedimento atual possui especialista vinculado ("${curEsp}"), enquanto o novo procedimento não possui especialista.`);
-        } else if (!curEsp && newEsp) {
-            reasons.push(`O novo procedimento possui especialista vinculado ("${newEsp}"), enquanto a solicitação de origem não possuía especialista.`);
-        }
-
-        // 3. Prestador / Local
-        if (transferTarget.prestador) {
-            reasons.push(`O agendamento existente está vinculado ao local/prestador "${transferTarget.prestador}". Certifique-se de que este local atende ao novo procedimento.`);
-        }
-
-        return reasons;
-    }, [transferTarget, transferSelectedProc]);
 
     return (
         <div className="w-full mx-auto flex flex-col flex-1 h-full max-h-full min-h-0 bg-white rounded-3xl border border-slate-200/80 shadow-2xl shadow-slate-100 overflow-hidden">
@@ -4973,400 +4879,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 />
             )}
 
-            {/* MODAL: TRANSFERIR PROCEDIMENTO */}
-            {!isReadOnly && isTransferModalOpen && transferTarget && createPortal(
-                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-hidden border border-indigo-100 flex flex-col animate-in zoom-in-95 duration-200">
-                        {/* Header */}
-                        <div className="p-4 sm:p-5 bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-700 text-white flex justify-between items-center shrink-0 shadow-sm">
-                            <div className="flex items-center gap-3 min-w-0">
-                                <div className="w-10 h-10 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center text-white shadow-inner shrink-0">
-                                    <ArrowRightLeft className="w-5 h-5" />
-                                </div>
-                                <div className="min-w-0">
-                                    <h3 className="text-sm sm:text-base font-black uppercase tracking-tight truncate">
-                                        Transferir Procedimento
-                                    </h3>
-                                    <p className="text-[11px] text-indigo-100 font-semibold uppercase truncate">
-                                        Migrar agendamento para outro exame ou consulta médica
-                                    </p>
-                                </div>
-                            </div>
-                            <button 
-                                onClick={() => {
-                                    if (!isTransferring) {
-                                        setIsTransferModalOpen(false);
-                                        setTransferTarget(null);
-                                    }
-                                }} 
-                                disabled={isTransferring}
-                                className="p-2 hover:bg-white/20 rounded-xl text-white/80 hover:text-white transition-colors cursor-pointer shrink-0 disabled:opacity-50"
-                                title="Fechar"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
 
-                        {/* Body com scroll */}
-                        <div className="p-4 sm:p-6 overflow-y-auto space-y-5 bg-slate-50/50 flex-1 min-h-0 custom-scrollbar">
-                            {/* Card de Informações do Paciente & Procedimento Atual */}
-                            <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs space-y-3">
-                                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-7 h-7 rounded-lg bg-sky-50 text-sky-700 flex items-center justify-center border border-sky-200">
-                                            <UserIcon className="w-4 h-4" />
-                                        </div>
-                                        <div>
-                                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block leading-none">Paciente</span>
-                                            <span className="text-xs sm:text-sm font-black text-slate-900 uppercase">
-                                                {formatPatientName(transferTarget.paciente)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block leading-none">Cartão SUS</span>
-                                        <span className="text-xs font-mono font-black text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-200 inline-block mt-0.5">
-                                            {transferTarget.paciente?.sus_number || 'Não informado'}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                {/* Procedimento Atual (Origem) */}
-                                <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2.5">
-                                        <div className="w-8 h-8 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-800 shrink-0">
-                                            <Activity className="w-4 h-4" />
-                                        </div>
-                                        <div>
-                                            <span className="text-[9px] font-black uppercase tracking-widest text-amber-800 block leading-none">Procedimento Atual (Origem)</span>
-                                            <span className="text-xs font-black text-amber-950 uppercase block mt-0.5">
-                                                {formatProcedimentoLabel(transferTarget.procedimento) || 'Procedimento não especificado'}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                                        {transferTarget.procedimento?.type && (
-                                            <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-white text-amber-900 border border-amber-200 shadow-2xs">
-                                                {transferTarget.procedimento.type}
-                                            </span>
-                                        )}
-                                        {transferTarget.priority === 'Especial' && (
-                                            <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-200 to-yellow-200 text-amber-950 border border-amber-300 shadow-2xs">
-                                                Especial
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Apresentação dos Dados do Agendamento Existente & Garantia de Preservação */}
-                            <div className="bg-slate-50/90 border border-slate-200/90 rounded-2xl p-3.5 space-y-3">
-                                <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
-                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                                        <Calendar className="w-3.5 h-3.5 text-indigo-600" />
-                                        Dados do Agendamento Existente
-                                    </span>
-                                    <span className="text-[9.5px] font-extrabold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 uppercase">
-                                        {transferTarget.status || 'Solicitado'}
-                                    </span>
-                                </div>
-
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/70 shadow-2xs">
-                                        <span className="text-[8.5px] font-black uppercase text-slate-400 block tracking-wider">Status Atual</span>
-                                        <span className="text-xs font-black text-slate-800 uppercase block mt-0.5">
-                                            {transferTarget.status || 'Solicitado'}
-                                        </span>
-                                    </div>
-                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/70 shadow-2xs">
-                                        <span className="text-[8.5px] font-black uppercase text-slate-400 block tracking-wider">Data Agendada</span>
-                                        <span className="text-xs font-black text-slate-800 block mt-0.5">
-                                            {transferTarget.appointment_date 
-                                                ? new Date(transferTarget.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR') 
-                                                : 'Sem data definida'}
-                                        </span>
-                                    </div>
-                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/70 shadow-2xs">
-                                        <span className="text-[8.5px] font-black uppercase text-slate-400 block tracking-wider">Horário</span>
-                                        <span className="text-xs font-black text-slate-800 block mt-0.5">
-                                            {transferTarget.appointment_time ? transferTarget.appointment_time.substring(0, 5) : 'Sem horário'}
-                                        </span>
-                                    </div>
-                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/70 shadow-2xs">
-                                        <span className="text-[8.5px] font-black uppercase text-slate-400 block tracking-wider">Local / Prestador</span>
-                                        <span className="text-xs font-black text-slate-800 uppercase block mt-0.5 truncate" title={transferTarget.prestador || 'Não definido'}>
-                                            {transferTarget.prestador || 'Não definido'}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                {/* Especialista vinculado ao procedimento atual */}
-                                {(transferTarget.procedimento?.especialista?.nome || (transferTarget.procedimento?.especialista as any)?.name) && (
-                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/70 flex items-center justify-between gap-2 shadow-2xs">
-                                        <div>
-                                            <span className="text-[8.5px] font-black uppercase text-slate-400 block tracking-wider">Especialista / Médico Atual</span>
-                                            <span className="text-xs font-black text-indigo-950 uppercase block mt-0.5">
-                                                {transferTarget.procedimento.especialista.nome || (transferTarget.procedimento.especialista as any).name}
-                                            </span>
-                                        </div>
-                                        {transferTarget.procedimento.especialista.especialidade && (
-                                            <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                                {transferTarget.procedimento.especialista.especialidade}
-                                            </span>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Seleção do Novo Procedimento (Destino) */}
-                            <div className="space-y-3">
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                    <label className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                                        <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                                        Selecione o Novo Procedimento (Destino)
-                                    </label>
-                                    <span className="text-[10px] font-bold text-slate-400">
-                                        {procedures.filter(p => {
-                                            // REGRA DE SUSPENSÃO: Exibir somente procedimentos ativos como possíveis destinos
-                                            if (p.status !== 'Ativo') return false;
-                                            if (p.parent_id) {
-                                                const parent = procedures.find(parentProc => parentProc.id === p.parent_id);
-                                                if (parent && parent.status !== 'Ativo') return false;
-                                            }
-                                            const matchesType = transferTypeFilter === 'TODOS' || p.type === transferTypeFilter;
-                                            const matchesSearch = !transferSearchProc.trim() || 
-                                                procedureMatchesSearch(formatProcedimentoLabel(p), transferSearchProc, p.code) || 
-                                                procedureMatchesSearch(p.name, transferSearchProc, p.code);
-                                            return matchesType && matchesSearch;
-                                        }).length} procedimentos disponíveis
-                                    </span>
-                                </div>
-
-                                {/* Filtros e Busca de Procedimentos */}
-                                <div className="space-y-2">
-                                    <div className="relative">
-                                        <input
-                                            type="text"
-                                            placeholder="Buscar novo procedimento por nome ou código..."
-                                            className="w-full bg-white border border-slate-200/90 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-xl pl-9 pr-9 py-2 text-xs font-bold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
-                                            value={transferSearchProc}
-                                            onChange={(e) => setTransferSearchProc(e.target.value)}
-                                        />
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
-                                        {transferSearchProc && (
-                                            <button
-                                                type="button"
-                                                onClick={() => setTransferSearchProc('')}
-                                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-0.5 rounded-full hover:bg-slate-100 transition-colors"
-                                                title="Limpar busca"
-                                            >
-                                                <X className="w-3.5 h-3.5" />
-                                            </button>
-                                        )}
-                                    </div>
-
-                                    {/* Tabs de Tipo */}
-                                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                                        {(['TODOS', 'Consulta', 'Exame', 'Cirurgia'] as const).map(typeOpt => {
-                                            const isSel = transferTypeFilter === typeOpt;
-                                            return (
-                                                <button
-                                                    key={typeOpt}
-                                                    type="button"
-                                                    onClick={() => setTransferTypeFilter(typeOpt)}
-                                                    className={`px-3 py-1 rounded-xl text-[10.5px] font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
-                                                        isSel
-                                                            ? 'bg-indigo-600 text-white shadow-xs'
-                                                            : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-100'
-                                                    }`}
-                                                >
-                                                    {typeOpt === 'TODOS' ? 'Todos os Tipos' : `${typeOpt}s`}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-
-                                {/* Lista de Procedimentos em Cards */}
-                                <div className="max-h-56 sm:max-h-64 overflow-y-auto space-y-1.5 p-1 rounded-2xl bg-white border border-slate-200/90 custom-scrollbar">
-                                    {procedures
-                                        .filter(p => {
-                                            // REGRA DE SUSPENSÃO: Exibir somente procedimentos ativos como possíveis destinos
-                                            if (p.status !== 'Ativo') return false;
-                                            if (p.parent_id) {
-                                                const parent = procedures.find(parentProc => parentProc.id === p.parent_id);
-                                                if (parent && parent.status !== 'Ativo') return false;
-                                            }
-                                            const matchesType = transferTypeFilter === 'TODOS' || p.type === transferTypeFilter;
-                                            const matchesSearch = !transferSearchProc.trim() || 
-                                                procedureMatchesSearch(formatProcedimentoLabel(p), transferSearchProc, p.code) || 
-                                                procedureMatchesSearch(p.name, transferSearchProc, p.code);
-                                            return matchesType && matchesSearch;
-                                        })
-                                        .map(proc => {
-                                            const isCurrent = proc.id === (transferTarget.procedimento_id || transferTarget.procedimento?.id);
-                                            const isSelected = transferSelectedProcId === proc.id;
-
-                                            return (
-                                                <button
-                                                    key={proc.id}
-                                                    type="button"
-                                                    disabled={isCurrent}
-                                                    onClick={() => {
-                                                        if (!isCurrent) {
-                                                            setTransferSelectedProcId(proc.id);
-                                                            setTransferError('');
-                                                        }
-                                                    }}
-                                                    className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
-                                                        isCurrent
-                                                            ? 'opacity-40 bg-slate-50 border-slate-200 cursor-not-allowed'
-                                                            : isSelected
-                                                            ? 'bg-indigo-50/90 border-indigo-500 ring-2 ring-indigo-500/20 text-indigo-950 shadow-xs cursor-pointer'
-                                                            : 'bg-white hover:bg-slate-50/80 border-slate-200/70 hover:border-indigo-200 text-slate-800 cursor-pointer'
-                                                    }`}
-                                                >
-                                                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
-                                                            isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'
-                                                        }`}>
-                                                            {isSelected ? <Check className="w-4 h-4" /> : <Activity className="w-3.5 h-3.5" />}
-                                                        </div>
-                                                        <div className="min-w-0 flex-1">
-                                                            <div className="flex items-center gap-2 flex-wrap">
-                                                                <span className="text-xs font-black uppercase text-slate-900 truncate">
-                                                                    {formatProcedimentoLabel(proc)}
-                                                                </span>
-                                                                {proc.code && (
-                                                                    <span className="text-[9px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded">
-                                                                        #{proc.code}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            <div className="flex items-center gap-1.5 mt-0.5 text-[9.5px] font-semibold text-slate-400">
-                                                                <span>{proc.type}</span>
-                                                                {proc.recurso && (
-                                                                    <>
-                                                                        <span>•</span>
-                                                                        <span>{proc.recurso}</span>
-                                                                    </>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="shrink-0 flex items-center gap-1.5">
-                                                        {isCurrent ? (
-                                                            <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-slate-200 text-slate-600">
-                                                                Atual
-                                                            </span>
-                                                        ) : isSelected ? (
-                                                            <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-indigo-600 text-white shadow-2xs flex items-center gap-1">
-                                                                <Check className="w-3 h-3" /> Selecionado
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-[9.5px] font-bold text-indigo-600 hover:text-indigo-800 uppercase">
-                                                                Selecionar
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </button>
-                                            );
-                                        })}
-                                </div>
-                            </div>
-
-                            {/* Aviso de Incompatibilidade (quando houver divergência entre procedimento de origem e destino) */}
-                            {transferSelectedProc && transferIncompatibilityReasons.length > 0 && (
-                                <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3.5 space-y-2 text-amber-950 shadow-2xs animate-in fade-in">
-                                    <div className="flex items-center gap-2">
-                                        <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
-                                        <span className="font-black uppercase text-[11px] tracking-wide text-amber-900">
-                                            Aviso de Possível Incompatibilidade Detectada
-                                        </span>
-                                    </div>
-                                    <ul className="space-y-1 pl-6 list-disc text-[11px] font-semibold text-amber-900">
-                                        {transferIncompatibilityReasons.map((reason, idx) => (
-                                            <li key={idx} className="leading-relaxed">
-                                                {reason}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                    <p className="text-[10px] text-amber-800 font-bold border-t border-amber-200/80 pt-1.5 leading-normal">
-                                        Aviso informativo: Os dados do agendamento permanecerão inalterados. Nenhuma alteração de data, horário ou prestador será feita automaticamente.
-                                    </p>
-                                </div>
-                            )}
-
-                            {/* Resumo do Procedimento de Destino Selecionado */}
-                            {transferSelectedProc && (
-                                <div className="bg-indigo-50/70 border border-indigo-200 rounded-2xl p-3 flex items-center justify-between gap-3 text-indigo-950">
-                                    <div className="flex items-center gap-2.5 min-w-0">
-                                        <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0">
-                                            <Check className="w-4 h-4" />
-                                        </div>
-                                        <div className="min-w-0">
-                                            <span className="text-[9px] font-black uppercase tracking-wider text-indigo-700 block leading-tight">
-                                                Novo Procedimento Selecionado
-                                            </span>
-                                            <span className="text-xs font-black uppercase text-indigo-950 block truncate">
-                                                {formatProcedimentoLabel(transferSelectedProc)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <span className="text-[9.5px] font-black uppercase px-2 py-0.5 rounded bg-indigo-600 text-white shrink-0">
-                                        {transferSelectedProc.type}
-                                    </span>
-                                </div>
-                            )}
-
-                            {/* Mensagem de Erro */}
-                            {transferError && (
-                                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-700 font-bold flex items-center gap-2 animate-in fade-in duration-150">
-                                    <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                                    <span>{transferError}</span>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Footer */}
-                        <div className="p-4 border-t border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-end gap-2.5 shrink-0">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    if (!isTransferring) {
-                                        setIsTransferModalOpen(false);
-                                        setTransferTarget(null);
-                                    }
-                                }}
-                                disabled={isTransferring}
-                                className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer disabled:opacity-50"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleConfirmTransferProcedimento}
-                                disabled={isTransferring || !transferSelectedProcId}
-                                className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-700 hover:from-indigo-500 hover:to-purple-600 text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-md shadow-indigo-600/25 flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer disabled:opacity-50"
-                            >
-                                {isTransferring ? (
-                                    <>
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                        <span>Transferindo...</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <ArrowRightLeft className="w-4 h-4" />
-                                        <span>Confirmar Transferência</span>
-                                    </>
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                </div>,
-                document.body
-            )}
 
             {/* TOAST DE SUCESSO FLUTUANTE */}
             {transferSuccessToast && createPortal(
@@ -5409,7 +4922,10 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     canDelete={canDelete && isGestorOrAdmin}
                     canPause={canPause}
                     canEdit={canEdit}
-                    onOpenTransfer={() => setIsBatchTransferModalOpen(true)}
+                    onOpenTransfer={() => {
+                        setTransferTargetBookings(selectedBookingsList);
+                        setIsBatchTransferModalOpen(true);
+                    }}
                     onOpenCancel={() => setIsBatchCancelModalOpen(true)}
                     onOpenDelete={() => setIsBatchDeleteModalOpen(true)}
                     onOpenPriority={() => setIsBatchPriorityModalOpen(true)}
@@ -5419,15 +4935,19 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 />
             )}
 
-            {/* ==================== MODAIS DE EXECUÇÃO EM LOTE ==================== */}
+            {/* ==================== MODAIS DE EXECUÇÃO EM LOTE E INDIVIDUAL (UNIFICADO) ==================== */}
             <BatchTransferModal
                 isOpen={isBatchTransferModalOpen}
-                onClose={() => setIsBatchTransferModalOpen(false)}
-                selectedBookings={selectedBookingsList}
+                onClose={() => {
+                    setIsBatchTransferModalOpen(false);
+                    setTransferTargetBookings([]);
+                }}
+                selectedBookings={transferTargetBookings.length > 0 ? transferTargetBookings : selectedBookingsList}
                 procedures={procedures}
                 onConfirmTransfer={handleConfirmBatchTransfer}
                 isProcessing={isBatchProcessing}
                 progress={batchProgress}
+                formatPatientName={formatPatientName}
             />
 
             <BatchCancelModal

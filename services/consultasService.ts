@@ -6970,157 +6970,37 @@ export const transferAgendamentoProcedimento = async (
 ): Promise<ConsultaAgendamento> => {
     assertCanMutateRegulacao('Transferir Procedimento da Solicitação', 'acompanhar', currentUser);
 
-    // 1. Buscar dados atuais da solicitação
-    const { data: currentBooking, error: fetchErr } = await supabase
+    // Unificação: executa através do batchTransferAgendamentos com 1 item,
+    // garantindo rigorosamente as mesmas validações, persistência, histórico (Desfazer Transferência) e auditoria.
+    const res = await batchTransferAgendamentos({
+        bookingIds: [id],
+        targetProcedimentoId,
+        preserveSolicitationDate: true,
+        preservePriority: true,
+        user: currentUser
+    });
+
+    if (res.failureCount > 0 || res.successCount === 0) {
+        const errMsg = res.errors[0]?.message || 'Falha ao transferir procedimento da solicitação.';
+        throw new Error(errMsg);
+    }
+
+    // Buscar agendamento atualizado sem joins quebrados
+    const { data: updated } = await supabase
         .from('consultas_agendamentos')
         .select(`
             *,
             paciente:consultas_pacientes(*),
-            procedimento:consultas_procedimentos(
-                *,
-                especialista:consultas_especialistas(*)
-            )
+            procedimento:consultas_procedimentos(*)
         `)
         .eq('id', id)
-        .single();
+        .maybeSingle();
 
-    if (fetchErr || !currentBooking) {
-        throw new Error('Solicitação de agendamento não encontrada.');
+    if (updated && res.transferRecord) {
+        (updated as any).transferRecord = res.transferRecord;
     }
 
-    if (currentBooking.procedimento_id === targetProcedimentoId) {
-        throw new Error('O procedimento selecionado é o mesmo atual. Escolha um procedimento diferente.');
-    }
-
-    // 2. Buscar procedimento de destino
-    const { data: targetProc, error: procErr } = await supabase
-        .from('consultas_procedimentos')
-        .select(`
-            *,
-            especialista:consultas_especialistas(*)
-        `)
-        .eq('id', targetProcedimentoId)
-        .single();
-
-    if (procErr || !targetProc) {
-        throw new Error('Procedimento de destino não encontrado.');
-    }
-
-    // REGRA DE SUSPENSÃO: Procedimento de destino não pode estar suspenso
-    if (targetProc.status !== 'Ativo') {
-        throw new Error(`O procedimento de destino "${formatProcedimentoLabel(targetProc)}" está suspenso e não pode receber transferências.`);
-    }
-
-    if (targetProc.parent_id) {
-        const { data: parentProc } = await supabase
-            .from('consultas_procedimentos')
-            .select('id, name, code, status')
-            .eq('id', targetProc.parent_id)
-            .maybeSingle();
-        if (parentProc && parentProc.status !== 'Ativo') {
-            throw new Error(`O procedimento principal de destino "${parentProc.name || parentProc.code || ''}" está suspenso e não pode receber transferências.`);
-        }
-    }
-
-    // 3. Atualizar EXCLUSIVAMENTE o procedimento_id preservando data, hora, local, prestador, status, etc.
-    const updated = await updateAgendamento(id, {
-        procedimento_id: targetProcedimentoId
-    });
-
-    if (!updated) {
-        throw new Error('Falha ao atualizar o procedimento da solicitação.');
-    }
-
-    // 4. Recalcular e persistir posições da fila
-    try {
-        await recalculateAndPersistQueuePositions();
-    } catch (queueErr) {
-        console.warn('[consultasService] Aviso ao recalcular fila após transferência:', queueErr);
-    }
-
-    // 5. Registrar log de auditoria detalhado
-    try {
-        await auditLogService.logAction({
-            action_type: 'TRANSFERENCIA_PROCEDIMENTO',
-            module: 'Regulação - Acompanhar',
-            description: `Procedimento da solicitação do paciente ${currentBooking.paciente?.name || 'N/A'} transferido de "${formatProcedimentoLabel(currentBooking.procedimento)}" para "${formatProcedimentoLabel(targetProc)}". Todos os dados de agendamento foram integralmente preservados.`,
-            details: {
-                agendamento_id: id,
-                paciente_id: currentBooking.patient_id,
-                paciente_nome: currentBooking.paciente?.name,
-                procedimento_anterior_id: currentBooking.procedimento_id,
-                procedimento_anterior_nome: formatProcedimentoLabel(currentBooking.procedimento),
-                procedimento_anterior_codigo: currentBooking.procedimento?.code || '',
-                procedimento_novo_id: targetProcedimentoId,
-                procedimento_novo_nome: formatProcedimentoLabel(targetProc),
-                procedimento_novo_codigo: targetProc.code || '',
-                status_preservado: currentBooking.status,
-                data_agendada_preservada: currentBooking.appointment_date,
-                horario_agendado_preservado: currentBooking.appointment_time,
-                prestador_preservado: currentBooking.prestador,
-                municipio_preservado: currentBooking.municipio
-            },
-            user: {
-                id: currentUser.id,
-                name: currentUser.name || 'Servidor Municipal',
-                email: currentUser.email || ''
-            }
-        });
-    } catch (auditErr) {
-        console.warn('[consultasService] Aviso ao registrar auditoria de transferência:', auditErr);
-    }
-
-    // 6. Criar e registrar histórico de transferência permitindo reversão (Desfazer Transferência)
-    const transferRecord: TransferRecord = {
-        id: `transfer_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-        type: 'individual',
-        timestamp: new Date().toISOString(),
-        userId: currentUser.id,
-        userName: currentUser.name || 'Servidor Municipal',
-        sourceProcedimento: {
-            id: currentBooking.procedimento_id,
-            code: currentBooking.procedimento?.code || '',
-            name: currentBooking.procedimento?.name || 'Procedimento Anterior',
-            type: currentBooking.procedimento?.type
-        },
-        targetProcedimento: {
-            id: targetProcedimentoId,
-            code: targetProc.code || '',
-            name: targetProc.name || '',
-            type: targetProc.type
-        },
-        bookings: [{
-            bookingId: id,
-            patientId: currentBooking.patient_id,
-            patientName: currentBooking.paciente?.name || 'Paciente',
-            patientCpf: currentBooking.paciente?.cpf,
-            previousProcedimentoId: currentBooking.procedimento_id,
-            previousProcedimentoCode: currentBooking.procedimento?.code || '',
-            previousProcedimentoName: currentBooking.procedimento?.name || 'Procedimento Anterior',
-            targetProcedimentoId: targetProcedimentoId,
-            targetProcedimentoCode: targetProc.code || '',
-            targetProcedimentoName: targetProc.name || '',
-            status: currentBooking.status,
-            appointmentDate: currentBooking.appointment_date,
-            appointmentTime: currentBooking.appointment_time,
-            prestador: currentBooking.prestador,
-            municipio: currentBooking.municipio,
-            priority: currentBooking.priority,
-            solicitationDate: currentBooking.solicitation_date,
-            reverted: false
-        }],
-        reverted: false
-    };
-    saveTransferRecord(transferRecord);
-    (updated as any).transferRecord = transferRecord;
-
-    // 7. Disparar eventos em tempo real
-    if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
-        window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
-    }
-
-    return updated;
+    return (updated || { id, procedimento_id: targetProcedimentoId }) as ConsultaAgendamento;
 };
 
 export const batchTransferAgendamentos = async (params: BatchTransferParams): Promise<BatchOperationResult> => {
@@ -7165,37 +7045,82 @@ export const batchTransferAgendamentos = async (params: BatchTransferParams): Pr
         }
 
         // 2. Buscar agendamentos diretamente do banco para validação recente
-        const { data: dbBookings, error: fetchErr } = await supabase
-            .from('consultas_agendamentos')
-            .select(`
-                id,
-                status,
-                priority,
-                solicitation_date,
-                appointment_date,
-                appointment_time,
-                tipo_atendimento,
-                prestador,
-                municipio,
-                convenio,
-                vaga_id,
-                created_at,
-                procedimento_id,
-                patient_id,
-                paciente:consultas_pacientes(name),
-                procedimento:consultas_procedimentos(name)
-            `)
-            .in('id', bookingIds);
+        let dbBookings: any[] = [];
+        try {
+            const { data, error: fetchErr } = await supabase
+                .from('consultas_agendamentos')
+                .select(`
+                    id,
+                    status,
+                    priority,
+                    solicitation_date,
+                    appointment_date,
+                    appointment_time,
+                    tipo_atendimento,
+                    prestador,
+                    municipio,
+                    convenio,
+                    vaga_id,
+                    created_at,
+                    procedimento_id,
+                    patient_id,
+                    paciente:consultas_pacientes(id, name, cpf, sus_number),
+                    procedimento:consultas_procedimentos(id, name, code, type)
+                `)
+                .in('id', bookingIds);
 
-        if (fetchErr) throw fetchErr;
+            if (fetchErr) {
+                console.warn('[consultasService] Erro na busca exata por UUIDs, tentando busca ampla:', fetchErr);
+                throw fetchErr;
+            }
+            dbBookings = data || [];
+        } catch {
+            // Fallback resiliente: busca agendamentos gerais para matching
+            const { data: allBookings } = await supabase
+                .from('consultas_agendamentos')
+                .select(`
+                    id,
+                    status,
+                    priority,
+                    solicitation_date,
+                    appointment_date,
+                    appointment_time,
+                    tipo_atendimento,
+                    prestador,
+                    municipio,
+                    convenio,
+                    vaga_id,
+                    created_at,
+                    procedimento_id,
+                    patient_id,
+                    paciente:consultas_pacientes(id, name, cpf, sus_number),
+                    procedimento:consultas_procedimentos(id, name, code, type)
+                `)
+                .limit(200);
+            dbBookings = (allBookings || []).filter((b: any) =>
+                bookingIds.some(bid => b.id === bid || b.id.toLowerCase().startsWith(bid.toLowerCase()))
+            );
+        }
 
         const bookingMap = new Map((dbBookings || []).map((b: any) => [b.id, b]));
         const successfulTransfers: TransferredBookingInfo[] = [];
 
         // 3. Processar cada solicitação individualmente com tolerância a falhas
         for (let i = 0; i < bookingIds.length; i++) {
-            const id = bookingIds[i];
-            const currentBooking: any = bookingMap.get(id);
+            let id = bookingIds[i];
+            let currentBooking: any = bookingMap.get(id);
+
+            // Resiliência de identificador (caso venha protocolo curto ou ID em caixa diferente)
+            if (!currentBooking) {
+                const found = Array.from(bookingMap.values()).find((b: any) => 
+                    b.id.toLowerCase() === id.toLowerCase() ||
+                    b.id.toLowerCase().startsWith(id.toLowerCase())
+                );
+                if (found) {
+                    currentBooking = found;
+                    id = found.id;
+                }
+            }
 
             if (!currentBooking) {
                 result.failureCount++;
@@ -7237,6 +7162,7 @@ export const batchTransferAgendamentos = async (params: BatchTransferParams): Pr
                     bookingId: id,
                     patientId: currentBooking.patient_id,
                     patientName: currentBooking.paciente?.name || 'Paciente',
+                    patientCpf: currentBooking.paciente?.cpf,
                     previousProcedimentoId: currentBooking.procedimento_id,
                     previousProcedimentoCode: currentBooking.procedimento?.code || '',
                     previousProcedimentoName: currentBooking.procedimento?.name || 'Procedimento Anterior',
@@ -7267,9 +7193,10 @@ export const batchTransferAgendamentos = async (params: BatchTransferParams): Pr
         // Registrar no histórico de transferências para viabilizar DESFAZER TRANSFERÊNCIA
         if (successfulTransfers.length > 0) {
             const firstItem = successfulTransfers[0];
+            const isSingle = bookingIds.length === 1;
             const transferRecord: TransferRecord = {
-                id: `transfer_batch_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-                type: 'batch',
+                id: `transfer_${isSingle ? 'single' : 'batch'}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                type: isSingle ? 'individual' : 'batch',
                 timestamp: new Date().toISOString(),
                 userId: user.id,
                 userName: user.name || 'Servidor Municipal',
@@ -7277,7 +7204,7 @@ export const batchTransferAgendamentos = async (params: BatchTransferParams): Pr
                     id: firstItem.previousProcedimentoId,
                     code: firstItem.previousProcedimentoCode || '',
                     name: firstItem.previousProcedimentoName || 'Procedimento Anterior',
-                    type: undefined
+                    type: (firstItem as any).previousProcedimentoType
                 },
                 targetProcedimento: {
                     id: targetProcedimentoId,
@@ -7296,10 +7223,13 @@ export const batchTransferAgendamentos = async (params: BatchTransferParams): Pr
         await recalculateAndPersistQueuePositions();
 
         // 5. Registrar log de auditoria detalhado
+        const isSingleOp = bookingIds.length === 1 && successfulTransfers.length === 1;
         await auditLogService.logAction({
-            action_type: 'BATCH_TRANSFER_AGENDAMENTOS',
+            action_type: isSingleOp ? 'TRANSFERENCIA_PROCEDIMENTO' : 'BATCH_TRANSFER_AGENDAMENTOS',
             module: 'Regulação - Acompanhar',
-            description: `Transferência em lote de ${result.successCount} solicitação(ões) para o procedimento "${targetProc.name}". Todos os dados de agendamento foram integralmente preservados.`,
+            description: isSingleOp
+                ? `Procedimento da solicitação do paciente ${successfulTransfers[0].patientName} transferido de "${successfulTransfers[0].previousProcedimentoName}" para "${targetProc.name}". Todos os dados de agendamento foram integralmente preservados.`
+                : `Transferência em lote de ${result.successCount} solicitação(ões) para o procedimento "${targetProc.name}". Todos os dados de agendamento foram integralmente preservados.`,
             details: {
                 target_procedimento_id: targetProcedimentoId,
                 target_procedimento_name: targetProc.name,
