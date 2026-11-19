@@ -305,38 +305,47 @@ export const VehicleServiceOrderPreview: React.FC<VehicleServiceOrderPreviewProp
                                                 </h3>
                                             </div>
                                             <div className="bg-white">
-                                                <table className="w-full text-left border-collapse">
+                                                <table className="w-full table-fixed text-left border-collapse">
                                                     <thead>
-                                                        <tr className="bg-slate-50 border-b border-slate-200 text-[6pt] font-black uppercase tracking-widest text-slate-400">
-                                                            <th className="p-2 pl-3 w-1/3">Nome</th>
-                                                            <th className="p-2 w-1/5">Tipo</th>
-                                                            <th className="p-2 w-1/6">Horário</th>
-                                                            <th className="p-2">Local de embarque</th>
+                                                        <tr className="bg-slate-50 border-b border-slate-200 text-[6.5pt] font-black uppercase tracking-widest text-slate-500">
+                                                            <th className="p-2 pl-3 w-[32%]">Passageiro</th>
+                                                            <th className="p-2 w-[14%] text-center">Horário</th>
+                                                            <th className="p-2 w-[27%]">Local de embarque</th>
+                                                            <th className="p-2 w-[27%]">Ponto de destino</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="divide-y divide-slate-100">
                                                         {schedule.passengers.map((p, idx) => {
                                                             const isAcomp = p.type === 'acompanhante' || Boolean(p.companionForPatientId);
                                                             return (
-                                                                <tr key={idx} className="text-[7pt] font-medium text-slate-700">
-                                                                    <td className="p-2 pl-3 font-bold uppercase text-slate-800 truncate">
-                                                                        {p.name}
-                                                                        {isAcomp && p.companionForPatientName && (
-                                                                            <span className="text-[5.5pt] text-purple-700 font-bold block uppercase">
-                                                                                Acompanhando: {p.companionForPatientName}
-                                                                            </span>
-                                                                        )}
-                                                                        {!isAcomp && p.companionName && (
-                                                                            <span className="text-[5.5pt] text-slate-500 font-bold block uppercase">
-                                                                                Acompanhante: {p.companionName}
-                                                                            </span>
-                                                                        )}
+                                                                <tr key={idx} className={`text-[7pt] font-medium text-slate-700 ${isAcomp ? 'bg-purple-50/25' : ''}`}>
+                                                                    <td className="p-2 pl-3 font-bold uppercase text-slate-800 break-words align-top">
+                                                                        <div className="flex items-start gap-1">
+                                                                            <span className="text-slate-400 font-mono text-[6pt] shrink-0">{idx + 1}.</span>
+                                                                            <div className="min-w-0">
+                                                                                <span>{p.name}</span>
+                                                                                {p.nickname && <span className="text-[6pt] text-indigo-700 block font-normal lowercase">({p.nickname})</span>}
+                                                                                {isAcomp ? (
+                                                                                    <span className="inline-block mt-0.5 px-1 py-0.2 bg-purple-100 text-purple-900 text-[5.5pt] font-black uppercase rounded">
+                                                                                        Acompanhante {p.companionForPatientName ? `• de ${p.companionForPatientName}` : ''}
+                                                                                    </span>
+                                                                                ) : p.companionName ? (
+                                                                                    <span className="text-[5.5pt] text-slate-500 font-bold block uppercase mt-0.5">
+                                                                                        Acompanhante: {p.companionName}
+                                                                                    </span>
+                                                                                ) : null}
+                                                                            </div>
+                                                                        </div>
                                                                     </td>
-                                                                    <td className="p-2 uppercase font-semibold text-slate-700">
-                                                                        {isAcomp ? 'Acompanhante' : 'Paciente'}
+                                                                    <td className="p-2 font-mono font-bold text-slate-900 text-center whitespace-nowrap align-top">
+                                                                        {p.departureTime || p.appointmentTime || '---'}
                                                                     </td>
-                                                                    <td className="p-2 font-mono font-bold text-slate-900">{p.departureTime || p.appointmentTime || '---'}</td>
-                                                                    <td className="p-2 uppercase truncate">{p.departureLocation || p.appointmentLocation || 'Ponto Central'}</td>
+                                                                    <td className="p-2 uppercase break-words whitespace-normal align-top">
+                                                                        {p.departureLocation || 'Ponto Central'}
+                                                                    </td>
+                                                                    <td className="p-2 font-semibold text-slate-800 break-words whitespace-normal align-top">
+                                                                        {p.destinationPoint || p.appointmentLocation || schedule.destination || '---'}
+                                                                    </td>
                                                                 </tr>
                                                             );
                                                         })}

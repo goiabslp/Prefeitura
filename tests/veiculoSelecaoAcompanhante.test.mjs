@@ -73,15 +73,17 @@ function validarSelecaoAcompanhante({
   return { valido: true };
 }
 
-// 2. Validação de Submissão de Passageiro com Acompanhante
+// 2. Validação de Submissão de Passageiro com Acompanhante e Ponto de Destino
 function validarSubmissaoComAcompanhante({
   selectedPatient,
   departureTime,
   departureLocation,
+  destinationPoint,
   tripDate,
   selectedCompanion,
   companionDepartureTime,
-  companionDepartureLocation
+  companionDepartureLocation,
+  companionDestinationPoint
 }) {
   if (!selectedPatient) {
     return { valido: false, erro: 'Nenhum paciente selecionado.' };
@@ -93,6 +95,10 @@ function validarSubmissaoComAcompanhante({
 
   if (!departureLocation || !departureLocation.trim()) {
     return { valido: false, erro: 'Local de embarque do paciente obrigatório.' };
+  }
+
+  if (!destinationPoint || !destinationPoint.trim()) {
+    return { valido: false, erro: 'Ponto de destino do paciente obrigatório.' };
   }
 
   const birthDate = selectedPatient.birth_date || '';
@@ -109,12 +115,16 @@ function validarSubmissaoComAcompanhante({
   if (selectedCompanion) {
     const cTime = (companionDepartureTime || departureTime).trim();
     const cLoc = (companionDepartureLocation || departureLocation).trim();
+    const cDest = (companionDestinationPoint || destinationPoint).trim();
 
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(cTime)) {
       return { valido: false, erro: 'Horário de embarque do acompanhante inválido.' };
     }
     if (!cLoc) {
       return { valido: false, erro: 'Local de embarque do acompanhante obrigatório.' };
+    }
+    if (!cDest) {
+      return { valido: false, erro: 'Ponto de destino do acompanhante obrigatório.' };
     }
 
     companionData = {
@@ -124,6 +134,8 @@ function validarSubmissaoComAcompanhante({
       birthDate: selectedCompanion.birth_date,
       departureTime: cTime,
       departureLocation: cLoc,
+      destinationPoint: cDest,
+      appointmentLocation: cDest,
       type: 'acompanhante',
       companionForPatientId: selectedPatient.id,
       companionForPatientName: selectedPatient.name.toUpperCase()
@@ -137,6 +149,8 @@ function validarSubmissaoComAcompanhante({
     birthDate,
     departureTime: departureTime.trim(),
     departureLocation: departureLocation.trim(),
+    destinationPoint: destinationPoint.trim(),
+    appointmentLocation: destinationPoint.trim(),
     type: 'paciente',
     isMinor,
     needsCompanion: Boolean(selectedCompanion),
@@ -189,6 +203,7 @@ test('1. Menor de 18 anos na data da viagem exige obrigatoriamente acompanhante'
     selectedPatient: menor,
     departureTime: '06:00',
     departureLocation: 'UBS Central',
+    destinationPoint: 'Hospital Infantil João Paulo II',
     tripDate,
     selectedCompanion: null
   });
@@ -272,7 +287,7 @@ test('5. Contabilização de assentos: passageiro + acompanhante ocupam 2 assent
   assert.equal(canAdd, false); // 2 + 2 = 4 > 3 -> Deve bloquear por excesso de lotação!
 });
 
-test('6. Campos de embarque individuais (horário e local) são editáveis e preservados individualmente', () => {
+test('6. Campos de embarque e ponto de destino individuais são editáveis e preservados individualmente', () => {
   const tripDate = '2026-11-20';
   const paciente = { id: 'p-1', name: 'FERNANDO DIAS', cpf: '12345678900', birth_date: '1980-05-15' };
   const acompanhante = { id: 'p-2', name: 'JULIANA DIAS', cpf: '98765432100', birth_date: '1982-10-20' };
@@ -281,41 +296,45 @@ test('6. Campos de embarque individuais (horário e local) são editáveis e pre
     selectedPatient: paciente,
     departureTime: '06:15',
     departureLocation: 'Praça Central de São José do Goiabal',
+    destinationPoint: 'Hospital Márcio Cunha - Unidade I',
     tripDate,
     selectedCompanion: acompanhante,
     companionDepartureTime: '06:30', // Horário individual do acompanhante
-    companionDepartureLocation: 'Entroncamento BR-262 / Trevo' // Local individual
+    companionDepartureLocation: 'Entroncamento BR-262 / Trevo', // Local individual
+    companionDestinationPoint: 'Clínica Oftalmológica de Ipatinga' // Ponto de destino individual
   });
 
   assert.equal(submissao.valido, true);
   assert.equal(submissao.passengerData.departureTime, '06:15');
   assert.equal(submissao.passengerData.departureLocation, 'Praça Central de São José do Goiabal');
+  assert.equal(submissao.passengerData.destinationPoint, 'Hospital Márcio Cunha - Unidade I');
   assert.equal(submissao.companionData.departureTime, '06:30');
   assert.equal(submissao.companionData.departureLocation, 'Entroncamento BR-262 / Trevo');
+  assert.equal(submissao.companionData.destinationPoint, 'Clínica Oftalmológica de Ipatinga');
   assert.notEqual(submissao.passengerData.departureTime, submissao.companionData.departureTime);
   assert.notEqual(submissao.passengerData.departureLocation, submissao.companionData.departureLocation);
+  assert.notEqual(submissao.passengerData.destinationPoint, submissao.companionData.destinationPoint);
 });
 
-test('7. Comprovante PDF exibe as colunas estritas: Nome | Tipo | Horário | Local de embarque', () => {
+test('7. Comprovante PDF exibe as 4 colunas estritas: Passageiro | Horário | Local de embarque | Ponto de destino', () => {
   const rowPaciente = {
-    nome: 'MARIA DA SILVA',
-    tipo: 'Paciente',
+    passageiro: 'MARIA DA SILVA (Dona Maria)',
     horario: '06:30',
-    localDeEmbarque: 'Rua Principal, 100'
+    localDeEmbarque: 'Rua Principal, 100, Bairro Centro',
+    pontoDeDestino: 'Hospital Márcio Cunha'
   };
 
   const rowAcompanhante = {
-    nome: 'JOÃO DA SILVA',
-    tipo: 'Acompanhante',
+    passageiro: 'JOÃO DA SILVA [Acompanhante de MARIA DA SILVA]',
     horario: '06:30',
-    localDeEmbarque: 'Rua Principal, 100'
+    localDeEmbarque: 'Rua Principal, 100, Bairro Centro',
+    pontoDeDestino: 'Hospital Márcio Cunha'
   };
 
-  const pdfColumns = ['Nome', 'Tipo', 'Horário', 'Local de embarque'];
+  const pdfColumns = ['Passageiro', 'Horário', 'Local de embarque', 'Ponto de destino'];
 
-  assert.deepEqual(Object.keys(rowPaciente), ['nome', 'tipo', 'horario', 'localDeEmbarque']);
-  assert.equal(rowPaciente.tipo, 'Paciente');
-  assert.equal(rowAcompanhante.tipo, 'Acompanhante');
+  assert.deepEqual(Object.keys(rowPaciente), ['passageiro', 'horario', 'localDeEmbarque', 'pontoDeDestino']);
+  assert.deepEqual(pdfColumns, ['Passageiro', 'Horário', 'Local de embarque', 'Ponto de destino']);
   assert.equal(pdfColumns.length, 4);
 });
 
@@ -353,4 +372,32 @@ test('8. Validação de integridade no backend bloqueia agendamento com menor de
 
   const resValida = validateCrewIntegrity(crewValida, tripDate);
   assert.equal(resValida.isValid, true);
+});
+
+test('9. Local de embarque e Ponto de destino são obrigatórios e validam preenchimento', () => {
+  const paciente = { id: 'p-1', name: 'ANA SOUZA', cpf: '55566677788', birth_date: '1990-01-01' };
+
+  // Falha sem local de embarque
+  const semLocalEmbarque = validarSubmissaoComAcompanhante({
+    selectedPatient: paciente,
+    departureTime: '07:00',
+    departureLocation: '',
+    destinationPoint: 'Hospital das Clínicas',
+    tripDate: '2026-11-20',
+    selectedCompanion: null
+  });
+  assert.equal(semLocalEmbarque.valido, false);
+  assert.match(semLocalEmbarque.erro, /Local de embarque do paciente obrigatório/);
+
+  // Falha sem ponto de destino
+  const semPontoDestino = validarSubmissaoComAcompanhante({
+    selectedPatient: paciente,
+    departureTime: '07:00',
+    departureLocation: 'Rua das Flores, 120',
+    destinationPoint: '',
+    tripDate: '2026-11-20',
+    selectedCompanion: null
+  });
+  assert.equal(semPontoDestino.valido, false);
+  assert.match(semPontoDestino.erro, /Ponto de destino do paciente obrigatório/);
 });

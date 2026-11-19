@@ -10,7 +10,8 @@ import {
   UserPlus, 
   Car, 
   ShieldAlert,
-  Clock
+  Clock,
+  Building2
 } from 'lucide-react';
 import { CrewMember, Vehicle } from '../../types';
 import { maskCpfPartial } from '../../utils/cpfUtils';
@@ -191,7 +192,7 @@ export const TripulacaoTable: React.FC<TripulacaoTableProps> = ({
                 <th className="py-3 px-4 min-w-[220px]">Passageiro</th>
                 <th className="py-3 px-4 w-36">CPF</th>
                 <th className="py-3 px-4 w-36">Embarque</th>
-                <th className="py-3 px-4 min-w-[180px]">Compromisso</th>
+                <th className="py-3 px-4 min-w-[200px]">Destino / Procedimento</th>
                 <th className="py-3 px-4 w-24 text-center">Acomp.</th>
                 <th className="py-3 px-4 w-24 text-center">Ações</th>
               </tr>
@@ -323,16 +324,26 @@ export const TripulacaoTable: React.FC<TripulacaoTableProps> = ({
                         </div>
                       </td>
 
-                      {/* 5. Procedimento / Compromisso */}
+                      {/* 5. Destino / Procedimento */}
                       <td className="py-3.5 px-4">
-                        <span className="inline-block px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-900 text-xs font-bold">
-                          {p.procedureName || p.appointmentLocation || 'Consulta / Exame'}
-                        </span>
-                        {p.appointmentTime && (
-                          <span className="text-[10px] text-slate-400 font-mono ml-2">
-                            ({p.appointmentTime})
-                          </span>
-                        )}
+                        <div className="flex flex-col gap-1 max-w-[240px]">
+                          {(p.destinationPoint || p.appointmentLocation) && (
+                            <span className="inline-flex items-center gap-1 font-bold text-xs text-slate-900" title={p.destinationPoint || p.appointmentLocation}>
+                              <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                              <span className="truncate">{p.destinationPoint || p.appointmentLocation}</span>
+                            </span>
+                          )}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="inline-block px-2 py-0.5 rounded-lg bg-indigo-50 border border-indigo-100/80 text-indigo-900 text-[11px] font-semibold w-fit">
+                              {p.procedureName || 'Consulta / Exame'}
+                            </span>
+                            {p.appointmentTime && (
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                ({p.appointmentTime})
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </td>
 
                       {/* 6. Acompanhante Vinculado */}

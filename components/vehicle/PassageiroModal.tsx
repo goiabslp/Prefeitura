@@ -17,7 +17,8 @@ import {
   Database,
   User,
   ShieldAlert,
-  HeartHandshake
+  HeartHandshake,
+  Building2
 } from 'lucide-react';
 import { CrewMember, ConsultaPaciente } from '../../types';
 import { searchPacientesInteligente } from '../../services/consultasService';
@@ -59,6 +60,7 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
   const [birthDateDisplay, setBirthDateDisplay] = useState('');
   const [departureLocation, setDepartureLocation] = useState('');
   const [departureTime, setDepartureTime] = useState('');
+  const [destinationPoint, setDestinationPoint] = useState('');
   const [procedureName, setProcedureName] = useState('');
   const [needsCompanion, setNeedsCompanion] = useState(false);
   const [needsAdaptedTransport, setNeedsAdaptedTransport] = useState(false);
@@ -69,6 +71,7 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
   const [selectedCompanion, setSelectedCompanion] = useState<ConsultaPaciente | null>(null);
   const [companionDepartureTime, setCompanionDepartureTime] = useState('');
   const [companionDepartureLocation, setCompanionDepartureLocation] = useState('');
+  const [companionDestinationPoint, setCompanionDestinationPoint] = useState('');
   const [isSelectCompanionOpen, setIsSelectCompanionOpen] = useState(false);
 
   // 4. Modal de Cadastro Rápido de Paciente (caso não exista na base)
@@ -105,12 +108,14 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       setBirthDateDisplay('');
       setDepartureLocation('');
       setDepartureTime('');
+      setDestinationPoint('');
       setProcedureName('');
       setNeedsCompanion(false);
       setNeedsAdaptedTransport(false);
       setSelectedCompanion(null);
       setCompanionDepartureTime('');
       setCompanionDepartureLocation('');
+      setCompanionDestinationPoint('');
       setIsSelectCompanionOpen(false);
       setErrorMessage('');
       setSuccessMessage('');
@@ -133,6 +138,7 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       setNicknameDisplay(editingPassenger.nickname ? editingPassenger.nickname : 'Não informado');
       setDepartureLocation(editingPassenger.departureLocation || '');
       setDepartureTime(editingPassenger.departureTime || editingPassenger.appointmentTime || '');
+      setDestinationPoint(editingPassenger.destinationPoint || editingPassenger.appointmentLocation || '');
       setProcedureName(editingPassenger.procedureName || '');
       setNeedsAdaptedTransport(Boolean(editingPassenger.needsAdaptedTransport));
       setErrorMessage('');
@@ -155,6 +161,7 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
         });
         setCompanionDepartureTime(companionMember.departureTime || companionMember.appointmentTime || editingPassenger.departureTime || '');
         setCompanionDepartureLocation(companionMember.departureLocation || editingPassenger.departureLocation || '');
+        setCompanionDestinationPoint(companionMember.destinationPoint || companionMember.appointmentLocation || editingPassenger.destinationPoint || editingPassenger.appointmentLocation || '');
         setNeedsCompanion(true);
       } else if (editingPassenger.companionName) {
         setSelectedCompanion({
@@ -167,11 +174,13 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
         });
         setCompanionDepartureTime(editingPassenger.departureTime || '');
         setCompanionDepartureLocation(editingPassenger.departureLocation || '');
+        setCompanionDestinationPoint(editingPassenger.destinationPoint || editingPassenger.appointmentLocation || '');
         setNeedsCompanion(true);
       } else {
         setSelectedCompanion(null);
         setCompanionDepartureTime('');
         setCompanionDepartureLocation('');
+        setCompanionDestinationPoint('');
         setNeedsCompanion(Boolean(editingPassenger.needsCompanion));
       }
 
@@ -189,12 +198,14 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       setBirthDateDisplay('');
       setDepartureLocation('');
       setDepartureTime('');
+      setDestinationPoint('');
       setProcedureName('');
       setNeedsCompanion(false);
       setNeedsAdaptedTransport(false);
       setSelectedCompanion(null);
       setCompanionDepartureTime('');
       setCompanionDepartureLocation('');
+      setCompanionDestinationPoint('');
       setIsSelectCompanionOpen(false);
       setErrorMessage('');
       setSuccessMessage('');
@@ -287,13 +298,7 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
     const localNick = (paciente.nickname || (paciente as any).apelido || '').trim();
     setNicknameDisplay(localNick || 'Não informado');
 
-    // Sugere local de embarque se estiver vazio e o paciente possuir endereço cadastrado
-    if (!departureLocation.trim()) {
-      const parts = [paciente.street, paciente.neighborhood].filter(Boolean);
-      if (parts.length > 0) {
-        setDepartureLocation(parts.join(' - '));
-      }
-    }
+    // REGRA 1: Local de Embarque e Ponto de Destino iniciam completamente vazios (sem preenchimento automático)
 
     // Consulta oficial no Supabase para garantir sincronização estrita
     const dbNick = await fetchPatientNicknameFromDb(paciente.id);
@@ -310,9 +315,11 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
     setBirthDateDisplay('');
     setDepartureLocation('');
     setDepartureTime('');
+    setDestinationPoint('');
     setSelectedCompanion(null);
     setCompanionDepartureTime('');
     setCompanionDepartureLocation('');
+    setCompanionDestinationPoint('');
     setSearchResults([]);
     setIsDropdownOpen(false);
     setIsSelectCompanionOpen(false);
@@ -331,9 +338,11 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       setBirthDateDisplay('');
       setDepartureLocation('');
       setDepartureTime('');
+      setDestinationPoint('');
       setSelectedCompanion(null);
       setCompanionDepartureTime('');
       setCompanionDepartureLocation('');
+      setCompanionDestinationPoint('');
       setSuccessMessage('');
     }
   };
@@ -350,10 +359,9 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       setCompanionDepartureTime(departureTime.trim() || '06:30');
     }
 
-    // Preenche automaticamente o local de embarque do acompanhante se vazio
-    if (!companionDepartureLocation.trim()) {
-      const compAddress = [companion.street, companion.neighborhood].filter(Boolean).join(' - ');
-      setCompanionDepartureLocation(departureLocation.trim() || compAddress || 'Ponto Central');
+    // Ponto de destino do acompanhante pré-preenchido com o do paciente como padrão, mas editável livremente
+    if (!companionDestinationPoint.trim() && destinationPoint.trim()) {
+      setCompanionDestinationPoint(destinationPoint.trim());
     }
 
     setSuccessMessage(`Acompanhante "${companion.name}" selecionado com sucesso!`);
@@ -431,11 +439,17 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       return;
     }
 
+    // REGRA OBRIGATÓRIA 2: Ponto de Destino é individual por passageiro e obrigatório
+    if (!destinationPoint.trim()) {
+      setErrorMessage('O campo Ponto de Destino é obrigatório para este passageiro.');
+      return;
+    }
+
     const birthDate = selectedPatient.birth_date || (selectedPatient as any).birthDate || '';
     const isMinor = isMenorDeIdadeNaViagem(birthDate, tripDate);
     const idadeCalculada = calcularIdadeNaDataViagem(birthDate, tripDate);
 
-    // REGRA OBRIGATÓRIA 2: Menores de 18 anos exigem acompanhante obrigatório vinculado
+    // REGRA OBRIGATÓRIA 3: Menores de 18 anos exigem acompanhante obrigatório vinculado
     if (isMinor && !selectedCompanion) {
       setErrorMessage('Este paciente possui menos de 18 anos e deverá estar acompanhado durante a viagem. Selecione um acompanhante cadastrado para continuar.');
       setIsSelectCompanionOpen(true);
@@ -455,6 +469,10 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       }
       if (!companionDepartureLocation.trim() && !departureLocation.trim()) {
         setErrorMessage('Informe o Local de Embarque do acompanhante.');
+        return;
+      }
+      if (!companionDestinationPoint.trim() && !destinationPoint.trim()) {
+        setErrorMessage('Informe o Ponto de Destino do acompanhante.');
         return;
       }
     }
@@ -478,8 +496,9 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       phone: selectedPatient.phone || '',
       departureLocation: departureLocation.trim(),
       departureTime: departureTime.trim(),
+      destinationPoint: destinationPoint.trim(),
       appointmentTime: departureTime.trim(),
-      appointmentLocation: editingPassenger?.appointmentLocation || '',
+      appointmentLocation: destinationPoint.trim(),
       procedureName: procedureName.trim() || 'Consulta / Exame',
       type: 'paciente',
       isMinor,
@@ -496,6 +515,7 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       const compBirth = selectedCompanion.birth_date || (selectedCompanion as any).birthDate || '';
       const compTime = companionDepartureTime.trim() || departureTime.trim();
       const compLocation = companionDepartureLocation.trim() || departureLocation.trim();
+      const compDest = companionDestinationPoint.trim() || destinationPoint.trim();
 
       companionData = {
         id: acompId,
@@ -507,8 +527,9 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
         phone: selectedCompanion.phone || '',
         departureLocation: compLocation,
         departureTime: compTime,
+        destinationPoint: compDest,
         appointmentTime: compTime,
-        appointmentLocation: passengerData.appointmentLocation || '',
+        appointmentLocation: compDest,
         procedureName: `Acompanhante de ${passengerData.name}`,
         type: 'acompanhante',
         companionForPatientId: passengerData.patientId || passengerData.id,
@@ -804,7 +825,26 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
                 </div>
               </div>
 
-              {/* 4. CAMPO PROCEDIMENTO / COMPROMISSO */}
+              {/* 4. NOVO CAMPO: PONTO DE DESTINO * */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase tracking-wider text-slate-600 block">
+                  Ponto de destino *
+                </label>
+                <div className="relative">
+                  <Building2 className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    required
+                    value={destinationPoint}
+                    onChange={e => setDestinationPoint(e.target.value)}
+                    placeholder="Ex.: Hospital Municipal, Clínica São Lucas, UBS Central..."
+                    className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 focus:border-indigo-600 rounded-xl text-xs font-semibold text-slate-800 outline-none transition-all shadow-2xs placeholder:text-slate-400"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 font-medium">Unidade de saúde, hospital, clínica ou endereço de destino deste passageiro.</p>
+              </div>
+
+              {/* 5. CAMPO PROCEDIMENTO / COMPROMISSO */}
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase tracking-wider text-slate-600 block">
                   Procedimento / Compromisso
@@ -997,6 +1037,24 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
                             />
                           </div>
                           <p className="text-[10px] text-slate-400 font-medium">Ponto de encontro ou residência do acompanhante.</p>
+                        </div>
+
+                        <div className="space-y-1 sm:col-span-2">
+                          <label className="text-[10px] font-black uppercase tracking-wider text-slate-600 block">
+                            Ponto de destino do acompanhante *
+                          </label>
+                          <div className="relative">
+                            <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            <input
+                              type="text"
+                              required
+                              value={companionDestinationPoint}
+                              onChange={e => setCompanionDestinationPoint(e.target.value)}
+                              placeholder="Hospital, clínica ou unidade de saúde de destino do acompanhante"
+                              className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 focus:border-purple-600 rounded-xl text-xs font-semibold text-slate-800 outline-none transition-all shadow-2xs placeholder:text-slate-400"
+                            />
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-medium">Preenchido com o do paciente por padrão, editável.</p>
                         </div>
                       </div>
                     </div>

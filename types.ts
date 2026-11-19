@@ -553,6 +553,7 @@ export interface CrewMember {
   phone?: string;
   departureLocation?: string;
   departureTime?: string;
+  destinationPoint?: string;
   appointmentTime?: string;
   appointmentLocation?: string;
   procedureName?: string;
