@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { 
     Phone, 
     AlertTriangle, 
@@ -220,9 +221,9 @@ export const RegularizacaoTelefoneModal: React.FC<RegularizacaoTelefoneModalProp
 
     const isNovoTelefoneValido = validateBrazilianPhone(novoTelefone, { required: true }).isValid;
 
-    return (
+    const modalContent = (
         <div 
-            className="fixed inset-0 z-[10000] flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs select-none animate-in fade-in duration-150"
+            className="fixed inset-0 z-[10005] flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs select-none animate-in fade-in duration-150"
             role="dialog"
             aria-modal="true"
         >
@@ -472,4 +473,9 @@ export const RegularizacaoTelefoneModal: React.FC<RegularizacaoTelefoneModalProp
             </div>
         </div>
     );
+
+    if (typeof document !== 'undefined') {
+        return createPortal(modalContent, document.body);
+    }
+    return modalContent;
 };

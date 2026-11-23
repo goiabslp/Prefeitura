@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { ConsultaAgendamento, User } from '../../types';
+import { ConsultaAgendamento, ConsultaPaciente, User } from '../../types';
 import { 
     Check, 
     X, 
@@ -32,9 +32,11 @@ import {
     maskPhoneInput, 
     isSuspiciousPhone, 
     getPhoneInconsistencyReason, 
+    isTelefoneIrregularParaOperacao,
     TELEFONE_INVALIDO_MSG 
 } from '../../utils/phoneValidation';
 import { ConfirmarAcaoAtendimentoModal } from './ConfirmarAcaoAtendimentoModal';
+import { RegularizacaoTelefoneModal } from '../common/RegularizacaoTelefoneModal';
 
 // Helpers para formatação e máscara de telefone
 const formatPhoneNumber = (phone?: string | null): string => {
@@ -188,6 +190,75 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
         booking: ConsultaAgendamento;
         situacao: 'Realizado' | 'Não Realizado';
     } | null>(null);
+
+    // Modal de Regularização Compulsória de Telefone para Confirmação (Realizado / Faltou)
+    const [isPhoneRegularizacaoOpen, setIsPhoneRegularizacaoOpen] = useState(false);
+    const [phoneIrregularPatient, setPhoneIrregularPatient] = useState<ConsultaPaciente | null>(null);
+    const [pendingActionAfterPhone, setPendingActionAfterPhone] = useState<{
+        booking: ConsultaAgendamento;
+        situacao: 'Realizado' | 'Não Realizado';
+    } | null>(null);
+
+    const handleTriggerSituacao = (booking: ConsultaAgendamento, situacao: 'Realizado' | 'Não Realizado') => {
+        if (isReadOnlyUser || !hasOperational) return;
+        const isProcessing = Boolean(processingIds[booking.id]);
+        if (isProcessing) return;
+
+        const pId = booking.patient_id || booking.paciente?.id;
+        const effectivePhone = (pId && patientPhoneOverrides[pId] !== undefined)
+            ? patientPhoneOverrides[pId]
+            : (booking.paciente?.phone || '');
+
+        if (isTelefoneIrregularParaOperacao(effectivePhone)) {
+            const pat: ConsultaPaciente = booking.paciente ? {
+                ...booking.paciente,
+                phone: effectivePhone
+            } : {
+                id: pId || booking.id,
+                name: booking.paciente?.name || 'Paciente',
+                cpf: booking.paciente?.cpf || '',
+                phone: effectivePhone
+            } as ConsultaPaciente;
+
+            setPhoneIrregularPatient(pat);
+            setPendingActionAfterPhone({ booking, situacao });
+            setIsPhoneRegularizacaoOpen(true);
+            return;
+        }
+
+        setConfirmTarget({ booking, situacao });
+    };
+
+    const handlePhoneRegularizadoSuccess = (updatedPatient: ConsultaPaciente) => {
+        if (updatedPatient?.id) {
+            setPatientPhoneOverrides(prev => ({
+                ...prev,
+                [updatedPatient.id]: updatedPatient.phone || ''
+            }));
+        }
+        if (pendingActionAfterPhone?.booking?.paciente) {
+            pendingActionAfterPhone.booking.paciente.phone = updatedPatient.phone;
+        }
+        setIsPhoneRegularizacaoOpen(false);
+        setPhoneIrregularPatient(null);
+
+        if (pendingActionAfterPhone) {
+            const nextAction = pendingActionAfterPhone;
+            setPendingActionAfterPhone(null);
+            setConfirmTarget(nextAction);
+        }
+    };
+
+    const handlePhoneExceptionAllowed = () => {
+        setIsPhoneRegularizacaoOpen(false);
+        setPhoneIrregularPatient(null);
+
+        if (pendingActionAfterPhone) {
+            const nextAction = pendingActionAfterPhone;
+            setPendingActionAfterPhone(null);
+            setConfirmTarget(nextAction);
+        }
+    };
 
     // Controle de Edição Rápida de Telefone do Paciente
     const [patientPhoneOverrides, setPatientPhoneOverrides] = useState<Record<string, string>>({});
@@ -947,10 +1018,7 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
                                                                 {/* Botão Realizado */}
                                                                 <button
                                                                     type="button"
-                                                                    onClick={() => {
-                                                                        if (isReadOnlyUser || !hasOperational || isProcessing) return;
-                                                                        setConfirmTarget({ booking, situacao: 'Realizado' });
-                                                                    }}
+                                                                    onClick={() => handleTriggerSituacao(booking, 'Realizado')}
                                                                     disabled={isProcessing}
                                                                     className="flex-1 md:flex-initial px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-[11px] sm:text-xs rounded-xl shadow-xs shadow-emerald-600/20 transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
                                                                     title="Confirmar comparecimento do paciente (Realizado)"
@@ -966,10 +1034,7 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
                                                                 {/* Botão Faltou */}
                                                                 <button
                                                                     type="button"
-                                                                    onClick={() => {
-                                                                        if (isReadOnlyUser || !hasOperational || isProcessing) return;
-                                                                        setConfirmTarget({ booking, situacao: 'Não Realizado' });
-                                                                    }}
+                                                                    onClick={() => handleTriggerSituacao(booking, 'Não Realizado')}
                                                                     disabled={isProcessing}
                                                                     className="flex-1 md:flex-initial px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-rose-50 hover:bg-rose-100 hover:border-rose-300 active:scale-95 text-rose-700 font-extrabold text-[11px] sm:text-xs rounded-xl border border-rose-200 transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
                                                                     title="Registrar ausência do paciente (Faltou)"
@@ -1039,6 +1104,23 @@ export const ConfirmacaoAtendimentosModal: React.FC<ConfirmacaoAtendimentosModal
                     onConfirm={async (contatoInfo) => {
                         await handleAction(confirmTarget.booking.id, confirmTarget.situacao, contatoInfo);
                     }}
+                />
+            )}
+
+            {/* 6. MODAL DE REGULARIZAÇÃO OBRIGATÓRIA DE TELEFONE DO PACIENTE */}
+            {isPhoneRegularizacaoOpen && phoneIrregularPatient && (
+                <RegularizacaoTelefoneModal
+                    isOpen={isPhoneRegularizacaoOpen}
+                    onClose={() => {
+                        setIsPhoneRegularizacaoOpen(false);
+                        setPhoneIrregularPatient(null);
+                        setPendingActionAfterPhone(null);
+                    }}
+                    patient={phoneIrregularPatient}
+                    currentUser={currentUser}
+                    moduloOrigem="Regulação - Confirmação de Atendimentos"
+                    onSuccess={handlePhoneRegularizadoSuccess}
+                    onExceptionAllowed={handlePhoneExceptionAllowed}
                 />
             )}
         </div>

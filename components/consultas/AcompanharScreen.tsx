@@ -28,6 +28,8 @@ import { TransferSuccessModal } from './TransferSuccessModal';
 import { CancelarAgendamentoModal } from './CancelarAgendamentoModal';
 import { SolicitarExclusaoModal } from './SolicitarExclusaoModal';
 import { procedureMatchesSearch, scoreProcedimentoMatch } from '../../utils/procedimentoSearchMatcher';
+import { RegularizacaoTelefoneModal } from '../common/RegularizacaoTelefoneModal';
+import { isTelefoneIrregularParaOperacao } from '../../utils/phoneValidation';
 
 const formatPatientName = (patient?: ConsultaPaciente | null) => {
     if (!patient) return '';
@@ -1097,6 +1099,10 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                         <button
                                             type="button"
                                             onClick={() => {
+                                                if (isTelefoneIrregularParaOperacao(booking.paciente?.phone)) {
+                                                    onStatusUpdate(booking.id, 'Realizado');
+                                                    return;
+                                                }
                                                 if (window.confirm(`Deseja marcar este agendamento como REALIZADO para ${patientName}?`)) {
                                                     onStatusUpdate(booking.id, 'Realizado');
                                                 }
@@ -1513,6 +1519,10 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                                 type="button"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
+                                                    if (isTelefoneIrregularParaOperacao(booking.paciente?.phone)) {
+                                                        onStatusUpdate(booking.id, 'Realizado');
+                                                        return;
+                                                    }
                                                     if (window.confirm(`Deseja marcar o agendamento de ${patientName} (${formatProcedimentoLabel(booking.procedimento)}) como REALIZADO?`)) {
                                                         onStatusUpdate(booking.id, 'Realizado');
                                                     }
@@ -2161,6 +2171,14 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [isBatchProcessing, setIsBatchProcessing] = useState(false);
     const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
 
+    // Estados de regularização compulsória de telefone para marcação de Realizado / Faltou
+    const [isPhoneRegularizacaoOpen, setIsPhoneRegularizacaoOpen] = useState(false);
+    const [phoneIrregularPatient, setPhoneIrregularPatient] = useState<ConsultaPaciente | null>(null);
+    const [pendingStatusUpdate, setPendingStatusUpdate] = useState<{
+        id: string;
+        newStatus: ConsultaAgendamento['status'];
+    } | null>(null);
+
     // REGRA OBRIGATÓRIA: Limpar a seleção anterior ao alterar qualquer termo pesquisado ou filtro ativo
     useEffect(() => {
         setSelectedBookingIds(new Set());
@@ -2577,6 +2595,29 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
 
     const handleStatusUpdate = async (id: string, newStatus: ConsultaAgendamento['status']) => {
         if (isReadOnly) return;
+
+        // Validação compulsória: Bloqueia REALIZADO ou NÃO REALIZADO (FALTOU) se o paciente não tiver telefone válido
+        if (newStatus === 'Realizado' || newStatus === 'Não Realizado') {
+            const targetBooking = allBookings.find(b => b.id === id);
+            const pat = targetBooking?.paciente;
+            const patientPhone = pat?.phone;
+
+            if (isTelefoneIrregularParaOperacao(patientPhone)) {
+                const pId = targetBooking?.patient_id || pat?.id || id;
+                const irregularPat: ConsultaPaciente = pat ? { ...pat } : {
+                    id: pId,
+                    name: pat?.name || 'Paciente',
+                    cpf: pat?.cpf || '',
+                    phone: patientPhone || ''
+                } as ConsultaPaciente;
+
+                setPhoneIrregularPatient(irregularPat);
+                setPendingStatusUpdate({ id, newStatus });
+                setIsPhoneRegularizacaoOpen(true);
+                return;
+            }
+        }
+
         setOperatingId(id);
         try {
             const updated = await db.updateAgendamentoStatus(id, newStatus);
@@ -2590,6 +2631,55 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             await loadData(true);
         } finally {
             setOperatingId(null);
+        }
+    };
+
+    const handlePhoneRegularizadoSuccess = async (updatedPatient: ConsultaPaciente) => {
+        if (updatedPatient?.id) {
+            setAllBookings(prev => prev.map(b => {
+                if (b.patient_id === updatedPatient.id || b.paciente?.id === updatedPatient.id) {
+                    return {
+                        ...b,
+                        paciente: {
+                            ...(b.paciente || {}),
+                            ...updatedPatient
+                        }
+                    };
+                }
+                return b;
+            }));
+        }
+        setIsPhoneRegularizacaoOpen(false);
+        setPhoneIrregularPatient(null);
+
+        if (pendingStatusUpdate) {
+            const { id, newStatus } = pendingStatusUpdate;
+            setPendingStatusUpdate(null);
+            await handleStatusUpdate(id, newStatus);
+        }
+    };
+
+    const handlePhoneExceptionAllowed = async () => {
+        setIsPhoneRegularizacaoOpen(false);
+        setPhoneIrregularPatient(null);
+
+        if (pendingStatusUpdate) {
+            const { id, newStatus } = pendingStatusUpdate;
+            setPendingStatusUpdate(null);
+            setOperatingId(id);
+            try {
+                const updated = await db.updateAgendamentoStatus(id, newStatus);
+                if (updated) {
+                    setAllBookings(prev => prev.map(b => b.id === id ? updated : b));
+                }
+                window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+                await loadData(true);
+            } catch (error: any) {
+                alert(error.message || 'Erro ao alterar o status do agendamento.');
+                await loadData(true);
+            } finally {
+                setOperatingId(null);
+            }
         }
     };
 
@@ -5017,6 +5107,23 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 onUndoTransfer={handleUndoTransferFromModal}
                 isReverting={isRevertingTransfer}
             />
+
+            {/* Modal de Regularização Obrigatória de Telefone para Marcação de Realizado / Faltou */}
+            {isPhoneRegularizacaoOpen && phoneIrregularPatient && (
+                <RegularizacaoTelefoneModal
+                    isOpen={isPhoneRegularizacaoOpen}
+                    onClose={() => {
+                        setIsPhoneRegularizacaoOpen(false);
+                        setPhoneIrregularPatient(null);
+                        setPendingStatusUpdate(null);
+                    }}
+                    patient={phoneIrregularPatient}
+                    currentUser={currentUser}
+                    moduloOrigem="Regulação - Acompanhar"
+                    onSuccess={handlePhoneRegularizadoSuccess}
+                    onExceptionAllowed={handlePhoneExceptionAllowed}
+                />
+            )}
         </div>
     );
 };
