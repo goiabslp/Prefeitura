@@ -50,6 +50,7 @@ import {
   DEFAULT_JOBS
 } from './constants';
 import { FloatingNotification } from './components/FloatingNotification';
+import PurchaseAccountingNoticeModal from './components/PurchaseAccountingNoticeModal';
 
 import * as comprasService from './services/comprasService';
 import * as diariasService from './services/diariasService';
@@ -5658,6 +5659,9 @@ timestamp: ${new Date().toISOString()}`);
       <ChatProvider>
         <div className="flex h-screen w-full overflow-hidden bg-slate-50 font-sans flex-col">
           <FloatingNotification />
+          <PurchaseAccountingNoticeModal
+            visible={Boolean(currentUser && activeBlock === 'compras' && ['home', 'editor', 'tracking'].includes(currentView))}
+          />
           <ToastNotification
             message={toast.message}
             type={toast.type}
