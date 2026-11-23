@@ -343,15 +343,58 @@ export const updateLicitacaoProcess = async (id: string, updates: Partial<Licita
 export const getLicitacaoProcesses = async (): Promise<LicitacaoProcesso[]> => {
     try {
         const LICITACAO_COLUMNS = 'id, protocolo, finalidade, prioridade, solicitante_nome, solicitante_cargo, solicitante_setor, status, criado_por, criado_em, atualizado_em, fase, ficha_orcamentaria, resolucao_descricao, resolucao_numero, checkin_finalizado, aprovado_em, enviado_kanban_em, apresentado_animacao, oculto_kanban_view';
+        
+        let procData: any[] | null = null;
+        let lastError: any = null;
+
+        // 1. Tenta consulta padrão à tabela
         const { data, error } = await supabase
             .from('licitacao_processos')
             .select(LICITACAO_COLUMNS)
             .order('criado_em', { ascending: false });
 
-        if (error) throw error;
+        if (!error && Array.isArray(data)) {
+            procData = data;
+        } else {
+            lastError = error;
+            // 2. Fallback para visualização de TV / aba anônima (erro 42501 ou sessão deslogada)
+            try {
+                const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_licitacao_kanban_tv');
+                if (!rpcError && Array.isArray(rpcData)) {
+                    procData = rpcData;
+                    lastError = null;
+                }
+            } catch (rpcErr) {
+                console.warn('[LicitacaoService] Fallback RPC get_licitacao_kanban_tv falhou:', rpcErr);
+            }
+        }
+
+        // 3. Fallback de resiliência via cache do localStorage caso a TV perca conexão
+        if (lastError && !procData) {
+            try {
+                const cached = localStorage.getItem('licitacao_kanban_cached_processes');
+                if (cached) {
+                    const parsed = JSON.parse(cached);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        procData = parsed;
+                        lastError = null;
+                    }
+                }
+            } catch {}
+        }
+
+        if (lastError && !procData) throw lastError;
+
+        // Salva cache de contingência no localStorage
+        if (procData && procData.length > 0) {
+            try {
+                localStorage.setItem('licitacao_kanban_cached_processes', JSON.stringify(procData));
+            } catch {}
+        }
+
         const localMap = getLocalConveniosMap();
         const localOcultoMap = getLocalOcultoMap();
-        return (data || []).map((proc: any) => {
+        return (procData || []).map((proc: any) => {
             const localEntry = localMap[proc.id];
             const isConvenio = localEntry?.tem_convenio !== undefined
                 ? localEntry.tem_convenio
@@ -380,6 +423,7 @@ export const getLicitacaoProcesses = async (): Promise<LicitacaoProcesso[]> => {
 
 export const getLicitacaoProcessById = async (id: string): Promise<LicitacaoProcesso | null> => {
     try {
+        let proc: any = null;
         const { data, error } = await supabase
             .from('licitacao_processos')
             .select(`
@@ -392,10 +436,28 @@ export const getLicitacaoProcessById = async (id: string): Promise<LicitacaoProc
             .eq('id', id)
             .single();
 
-        if (error) throw error;
+        if (!error && data) {
+            proc = data;
+        } else {
+            // Fallback para modo anônimo/TV com apenas itens (sem tabelas com RLS restrita a authenticated)
+            const { data: simpleData, error: simpleError } = await supabase
+                .from('licitacao_processos')
+                .select(`
+                    *,
+                    licitacao_itens (*)
+                `)
+                .eq('id', id)
+                .single();
+
+            if (!simpleError && simpleData) {
+                proc = simpleData;
+            } else {
+                throw error || simpleError;
+            }
+        }
+
         const localMap = getLocalConveniosMap();
         const localOcultoMap = getLocalOcultoMap();
-        const proc: any = data;
         const localEntry = localMap[proc.id];
         const isConvenio = localEntry?.tem_convenio !== undefined
             ? localEntry.tem_convenio

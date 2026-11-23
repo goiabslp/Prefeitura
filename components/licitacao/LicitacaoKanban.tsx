@@ -123,7 +123,7 @@ export const LICITACAO_PHASES: PhaseConfig[] = [
 
 export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, users: usersProp = [], onBack, isViewOnly = false }) => {
     const queryClient = useQueryClient();
-    const { data: processes = [], isLoading } = useLicitacaoProcesses({ refetchInterval: isViewOnly ? 10 * 60 * 1000 : false });
+    const { data: processes = [], isLoading } = useLicitacaoProcesses({ refetchInterval: isViewOnly ? 30 * 1000 : false });
     const updateMutation = useUpdateLicitacaoProcess();
 
     const [searchTerm, setSearchTerm] = useState('');
