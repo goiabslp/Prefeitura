@@ -50,56 +50,17 @@ USING (
 );
 
 -- 4. FUNÇÃO RPC COM SECURITY DEFINER: get_licitacao_kanban_tv
--- Permite entrega otimizada e blindada dos processos do Kanban TV mesmo em caso de variações de RLS
+-- Retorna diretamente o conjunto de registros da tabela licitacao_processos (SETOF public.licitacao_processos),
+-- garantindo correspondência exata de tipos (evitando discrepâncias entre jsonb/boolean/text).
+DROP FUNCTION IF EXISTS public.get_licitacao_kanban_tv();
 CREATE OR REPLACE FUNCTION public.get_licitacao_kanban_tv()
-RETURNS TABLE (
-  id uuid,
-  protocolo text,
-  finalidade text,
-  prioridade text,
-  solicitante_nome text,
-  solicitante_cargo text,
-  solicitante_setor text,
-  status text,
-  criado_por uuid,
-  criado_em timestamptz,
-  atualizado_em timestamptz,
-  fase text,
-  ficha_orcamentaria text,
-  resolucao_descricao text,
-  resolucao_numero text,
-  checkin_finalizado boolean,
-  aprovado_em timestamptz,
-  enviado_kanban_em timestamptz,
-  apresentado_animacao boolean,
-  oculto_kanban_view boolean
-)
+RETURNS SETOF public.licitacao_processos
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
-  SELECT 
-    lp.id,
-    lp.protocolo,
-    lp.finalidade,
-    lp.prioridade,
-    lp.solicitante_nome,
-    lp.solicitante_cargo,
-    lp.solicitante_setor,
-    lp.status,
-    lp.criado_por,
-    lp.criado_em,
-    lp.atualizado_em,
-    lp.fase,
-    lp.ficha_orcamentaria,
-    lp.resolucao_descricao,
-    lp.resolucao_numero,
-    lp.checkin_finalizado,
-    lp.aprovado_em,
-    lp.enviado_kanban_em,
-    lp.apresentado_animacao,
-    lp.oculto_kanban_view
+  SELECT lp.*
   FROM public.licitacao_processos lp
   WHERE (lp.status IN ('Aprovado', 'aprovado', 'Approved', 'approved') OR lp.aprovado_em IS NOT NULL)
     AND (lp.status NOT IN ('Rejeitado', 'rejeitado', 'Rejected', 'rejected', 'Rascunho', 'rascunho'))
