@@ -84,24 +84,31 @@ export const TripulacaoTable: React.FC<TripulacaoTableProps> = ({
     const item = passengers[index];
     if (!item) return;
 
-    // Se estiver tentando excluir um acompanhante vinculado a um menor
+    // Se estiver tentando excluir um acompanhante vinculado a um ou mais menores
     if (item.type === 'acompanhante' || item.companionForPatientId) {
-      const menorAcompanhado = passengers.find(
-        p => (p.isMinor || p.type === 'paciente') && 
-             (p.patientId === item.companionForPatientId || p.id === item.companionForPatientId || p.companionId === item.id)
+      const menoresAcompanhados = passengers.filter(
+        p => p.isMinor && (
+          (p.companionId && p.companionId === item.id) ||
+          (p.companionName && p.companionName.toUpperCase() === item.name.toUpperCase()) ||
+          (item.companionForPatientId && p.patientId === item.companionForPatientId)
+        )
       );
 
-      if (menorAcompanhado && menorAcompanhado.isMinor) {
-        // Verifica se há outro acompanhante vinculado a este menor
-        const outrosAcompanhantes = passengers.filter(
-          (p, idx) => idx !== index && 
-                     (p.type === 'acompanhante') && 
-                     (p.companionForPatientId === menorAcompanhado.patientId || p.companionForPatientId === menorAcompanhado.id)
-        );
+      if (menoresAcompanhados.length > 0) {
+        const menoresSemOutro = menoresAcompanhados.filter(menor => {
+          const outros = passengers.filter(
+            (p, idx) => idx !== index && (p.type === 'acompanhante') && (
+              (p.companionForPatientId && (p.companionForPatientId === menor.patientId || p.companionForPatientId === menor.id)) ||
+              (menor.companionId && p.id === menor.companionId)
+            )
+          );
+          return outros.length === 0;
+        });
 
-        if (outrosAcompanhantes.length === 0) {
+        if (menoresSemOutro.length > 0) {
+          const nomes = menoresSemOutro.map(m => `"${m.name}"`).join(', ');
           setDeleteWarning(
-            `Este acompanhante é obrigatório, pois está vinculado ao paciente menor de 18 anos "${menorAcompanhado.name}". Cadastre outro acompanhante antes de removê-lo.`
+            `Este acompanhante é obrigatório, pois está vinculado ao(s) paciente(s) menor(es) de 18 anos ${nomes}. Cadastre outro acompanhante antes de removê-lo.`
           );
           setTimeout(() => setDeleteWarning(null), 6000);
           return;
@@ -292,11 +299,21 @@ export const TripulacaoTable: React.FC<TripulacaoTableProps> = ({
                               </p>
                             )}
 
-                            {/* Se for acompanhante, exibe a quem acompanha */}
-                            {isAcompanhante && p.companionForPatientName && (
+                            {/* Se for acompanhante, exibe dinamicamente a quem acompanha */}
+                            {isAcompanhante && (
                               <p className="text-[10px] font-extrabold text-purple-800 flex items-center gap-1 mt-0.5">
                                 <span>Acompanhando:</span>
-                                <strong className="uppercase">{p.companionForPatientName}</strong>
+                                <strong className="uppercase">
+                                  {(() => {
+                                    const acompanhados = passengers
+                                      .filter(other => other.type === 'paciente' && (
+                                        (other.companionId && other.companionId === p.id) ||
+                                        (other.companionName && other.companionName.toUpperCase() === p.name.toUpperCase())
+                                      ))
+                                      .map(other => other.name);
+                                    return acompanhados.length > 0 ? acompanhados.join(', ') : (p.companionForPatientName || 'Paciente');
+                                  })()}
+                                </strong>
                               </p>
                             )}
                           </div>
