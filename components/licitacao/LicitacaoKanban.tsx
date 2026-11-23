@@ -11,7 +11,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { User } from '../../types';
 import { LicitacaoProcesso } from '../../types/licitacao';
 import { useLicitacaoProcesses, useUpdateLicitacaoProcess, licitacaoKeys } from '../../hooks/useLicitacaoModule';
-import { fetchObjetoResumidoMap } from '../../services/licitacaoService';
+import { fetchObjetoResumidoMap, syncTvProcessesToOrganizationSettings } from '../../services/licitacaoService';
 import { LicitacaoWizard } from './LicitacaoWizard';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -919,8 +919,13 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
                     triggerModalForProcess(proc);
                 }
             });
+
+            // Sincroniza processos aprovados para exibição instantânea em Smart TVs e modo anônimo
+            if (!isViewOnly && currentUser?.id && currentUser.id !== 'public') {
+                syncTvProcessesToOrganizationSettings(processes);
+            }
         }
-    }, [processes]);
+    }, [processes, isViewOnly, currentUser]);
 
     const toggleQueuePriority = async (processId: string) => {
         const targetProcess = processes.find(p => p.id === processId);
@@ -2093,6 +2098,16 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
             )}
 
             <div className="flex-1 min-h-0 flex flex-col w-full h-full p-1.5 md:p-2 xl:p-2.5 2xl:p-3 overflow-hidden">
+                {isViewOnly && processes.length === 0 && !isLoading && (
+                    <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-2 rounded-xl text-xs mb-1.5 flex items-center justify-between gap-3 shadow-2xs shrink-0 animate-fade-in">
+                        <div className="flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                            <span>
+                                <strong>Quadro da TV aguardando processos:</strong> Para liberar a visualização contínua sem login nesta tela, execute o script <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-900 font-bold">EXECUTAR_NO_SUPABASE_KANBAN_TV_PUBLICO.sql</code> no SQL Editor do Supabase.
+                            </span>
+                        </div>
+                    </div>
+                )}
                 {isLoading ? (
                     <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3">
                         <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>

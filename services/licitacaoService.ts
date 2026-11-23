@@ -369,7 +369,28 @@ export const getLicitacaoProcesses = async (): Promise<LicitacaoProcesso[]> => {
             }
         }
 
-        // 3. Fallback de resiliência via cache do localStorage caso a TV perca conexão
+        // 3. Fallback de alta resiliência via organization_settings (onde anon possui leitura pública liberada)
+        if (lastError && !procData) {
+            try {
+                const { data: orgData, error: orgErr } = await supabase
+                    .from('organization_settings')
+                    .select('ui_config')
+                    .eq('id', 'global_config')
+                    .single();
+
+                if (!orgErr && orgData?.ui_config?.licitacao_kanban_tv_processes) {
+                    const tvProcesses = orgData.ui_config.licitacao_kanban_tv_processes;
+                    if (Array.isArray(tvProcesses) && tvProcesses.length > 0) {
+                        procData = tvProcesses;
+                        lastError = null;
+                    }
+                }
+            } catch (orgErr) {
+                console.warn('[LicitacaoService] Fallback organization_settings falhou:', orgErr);
+            }
+        }
+
+        // 4. Fallback de resiliência via cache do localStorage caso a TV perca conexão
         if (lastError && !procData) {
             try {
                 const cached = localStorage.getItem('licitacao_kanban_cached_processes');
@@ -383,7 +404,14 @@ export const getLicitacaoProcesses = async (): Promise<LicitacaoProcesso[]> => {
             } catch {}
         }
 
-        if (lastError && !procData) throw lastError;
+        // Se for erro de permissão (42501 - RLS table sem permissão anon) e ainda não houver dados, retorna [] graciosamente
+        if (lastError && !procData) {
+            if (lastError?.code === '42501' || lastError?.message?.includes('permission denied')) {
+                console.warn('[LicitacaoService] Acesso anônimo restrito pelo Supabase (Erro 42501). Execute o script EXECUTAR_NO_SUPABASE_KANBAN_TV_PUBLICO.sql no Supabase SQL Editor para liberar o acesso das Smart TVs.');
+                return [];
+            }
+            throw lastError;
+        }
 
         // Salva cache de contingência no localStorage
         if (procData && procData.length > 0) {
@@ -845,4 +873,44 @@ export const fetchObjetoResumidoMap = async (): Promise<Record<string, string>> 
         }
     }
 };
+
+/**
+ * Sincroniza a lista de processos aprovados da TV em organization_settings.
+ * Permite que Smart TVs e monitores de sala em modo anônimo exibam os processos
+ * mesmo quando a role anon ainda não tiver permissão direta na tabela Postgres.
+ */
+export const syncTvProcessesToOrganizationSettings = async (processes: LicitacaoProcesso[]): Promise<void> => {
+    try {
+        if (!Array.isArray(processes) || processes.length === 0) return;
+
+        const tvList = processes.filter(p => {
+            const st = (p.status || '').toString().trim().toLowerCase();
+            const isApproved = st === 'aprovado' || st === 'approved' || !!p.aprovado_em;
+            return isApproved && st !== 'rejeitado' && st !== 'rejected' && st !== 'finalizado' && st !== 'finalized' && st !== 'rascunho' && !p.oculto_kanban_view;
+        });
+
+        const { data: orgData } = await supabase
+            .from('organization_settings')
+            .select('ui_config')
+            .eq('id', 'global_config')
+            .single();
+
+        const currentUi = orgData?.ui_config || {};
+        const updatedUi = {
+            ...currentUi,
+            licitacao_kanban_tv_processes: tvList,
+            licitacao_kanban_tv_synced_at: new Date().toISOString()
+        };
+
+        await supabase
+            .from('organization_settings')
+            .upsert({
+                id: 'global_config',
+                ui_config: updatedUi
+            });
+    } catch (e) {
+        console.warn('[LicitacaoService] Erro ao sincronizar processos de TV em organization_settings:', e);
+    }
+};
+
 

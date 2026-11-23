@@ -25,6 +25,8 @@ describe('Validação da visualização TV do Kanban de Licitações', () => {
     const content = fs.readFileSync(servicePath, 'utf8');
     assert.ok(content.includes('get_licitacao_kanban_tv'), 'licitacaoService deve chamar a RPC de TV em caso de erro/modo anônimo');
     assert.ok(content.includes('licitacao_kanban_cached_processes'), 'Deve conter fallback de cache');
+    assert.ok(content.includes('licitacao_kanban_tv_processes'), 'Deve conter fallback de organization_settings');
+    assert.ok(content.includes('syncTvProcessesToOrganizationSettings'), 'Deve conter sincronização de TV');
   });
 
   it('O componente LicitacaoKanban deve usar refetchInterval otimizado de 30s na visão TV', () => {
