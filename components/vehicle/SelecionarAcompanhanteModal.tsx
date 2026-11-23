@@ -113,17 +113,8 @@ export const SelecionarAcompanhanteModal: React.FC<SelecionarAcompanhanteModalPr
       return;
     }
 
-    // REGRA 2: Não permitir duplicidade na tripulação (alguém que já está na viagem)
-    const isAlreadyInTrip = existingCrew.some(p => {
-      const pCpfClean = normalizeCpf(p.cpf);
-      return (p.patientId && p.patientId === candidate.id) ||
-             (candidateCpfClean && pCpfClean && candidateCpfClean === pCpfClean);
-    });
-
-    if (isAlreadyInTrip) {
-      setValidationError(`"${candidate.name}" já está na tripulação desta viagem e não pode ser duplicado.`);
-      return;
-    }
+    // REGRA 2: O mesmo acompanhante PODE acompanhar múltiplos pacientes na mesma viagem (ex: mãe com 2 filhos).
+    // Não bloqueia duplicidade de acompanhante na tripulação.
 
     // REGRA 3: Se o paciente principal for menor de 18 anos, o acompanhante DEVE ser maior de 18 anos na data da viagem
     const candidateBirth = candidate.birth_date || (candidate as any).birthDate || '';
@@ -280,7 +271,8 @@ export const SelecionarAcompanhanteModal: React.FC<SelecionarAcompanhanteModalPr
                            (candidateCpfClean && pCpf && candidateCpfClean === pCpf);
                   });
 
-                  const isDisabled = isCurrentPatient || isAlreadyInCrew || (isMandatoryForMinor && isMinorCandidate);
+                  // O mesmo acompanhante pode ser selecionado para mais de um paciente
+                  const isDisabled = isCurrentPatient || (isMandatoryForMinor && isMinorCandidate);
 
                   return (
                     <div
@@ -319,18 +311,19 @@ export const SelecionarAcompanhanteModal: React.FC<SelecionarAcompanhanteModalPr
                             </span>
                           </div>
 
-                          {/* Motivo do bloqueio caso desabilitado */}
+                          {/* Motivo do bloqueio caso desabilitado ou indicador amigável se já na viagem */}
                           {isCurrentPatient && (
                             <span className="text-[10px] font-bold text-rose-600 block mt-0.5">
                               • Não pode ser o próprio paciente
                             </span>
                           )}
                           {isAlreadyInCrew && !isCurrentPatient && (
-                            <span className="text-[10px] font-bold text-rose-600 block mt-0.5">
-                              • Já adicionado à viagem
+                            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1 mt-0.5 w-fit">
+                              <Check className="w-3 h-3 text-indigo-600" />
+                              Já na viagem • Acompanhará múltiplos pacientes
                             </span>
                           )}
-                          {isMandatoryForMinor && isMinorCandidate && !isCurrentPatient && !isAlreadyInCrew && (
+                          {isMandatoryForMinor && isMinorCandidate && !isCurrentPatient && (
                             <span className="text-[10px] font-bold text-amber-700 block mt-0.5">
                               • Acompanhante deve ser maior de 18 anos
                             </span>

@@ -747,8 +747,19 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     let currentPassengers = [...(formData.passengers || [])];
     const isEditing = editingPassengerIndex !== null && editingPassengerIndex >= 0;
 
-    // 1. Validação de Capacidade do Veículo (cada passageiro e acompanhante consome 1 assento)
-    const seatsNeeded = companionData ? 2 : 1;
+    // 1. Validação de Capacidade do Veículo
+    // Verifica se o acompanhante informado já existe na tripulação (acompanhando outro paciente)
+    const companionAlreadyInTrip = companionData ? currentPassengers.some((p, idx) => {
+      if (isEditing && idx === editingPassengerIndex) return false;
+      const oldTarget = isEditing ? currentPassengers[editingPassengerIndex] : null;
+      if (oldTarget && oldTarget.companionId === p.id) return false;
+      return (companionData.patientId && p.patientId === companionData.patientId) ||
+             (companionData.cpf && p.cpf && normalizeCpf(p.cpf) === normalizeCpf(companionData.cpf));
+    }) : false;
+
+    // Se o acompanhante já estiver no veículo, ele consome 0 novos assentos físicos, apenas o paciente consome 1 assento!
+    const seatsNeeded = 1 + (companionData && !companionAlreadyInTrip ? 1 : 0);
+
     if (selectedVehicle && selectedVehicle.passengerCapacity !== undefined) {
       let existingCount = currentPassengers.length;
       if (isEditing) {
@@ -759,7 +770,12 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
             (oldTarget.companionId && p.id === oldTarget.companionId)
           )
         );
-        existingCount -= (1 + (oldCompanion ? 1 : 0));
+        // Só desconta o acompanhante antigo se ele não acompanhar outro paciente que permanece
+        const oldCompUsedByOther = oldCompanion ? currentPassengers.some(
+          (p, idx) => idx !== editingPassengerIndex && p.type === 'paciente' && p.companionId === oldCompanion.id
+        ) : false;
+
+        existingCount -= (1 + (oldCompanion && !oldCompUsedByOther ? 1 : 0));
       }
 
       // 1 Motorista + ocupantes
@@ -771,26 +787,82 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
 
     if (isEditing) {
       const oldTarget = currentPassengers[editingPassengerIndex];
-      currentPassengers[editingPassengerIndex] = passengerData;
+      const oldAcompId = oldTarget.companionId;
 
       // Localiza acompanhante antigo vinculado a este paciente
       const oldAcompIdx = currentPassengers.findIndex(
         (p, idx) => idx !== editingPassengerIndex && (
-          (p.companionForPatientId && (p.companionForPatientId === (oldTarget.patientId || oldTarget.id))) ||
-          (oldTarget.companionId && p.id === oldTarget.companionId)
+          (oldAcompId && p.id === oldAcompId) ||
+          (p.companionForPatientId && (p.companionForPatientId === (oldTarget.patientId || oldTarget.id)))
         )
       );
 
+      // Verifica se o novo acompanhante já existe na viagem
+      let newCompAlreadyInTripIdx = -1;
       if (companionData) {
-        if (oldAcompIdx >= 0) {
+        newCompAlreadyInTripIdx = currentPassengers.findIndex(
+          (p, idx) => idx !== editingPassengerIndex && idx !== oldAcompIdx && (
+            (companionData.patientId && p.patientId === companionData.patientId) ||
+            (companionData.cpf && p.cpf && normalizeCpf(p.cpf) === normalizeCpf(companionData.cpf))
+          )
+        );
+      }
+
+      if (companionData) {
+        if (newCompAlreadyInTripIdx >= 0) {
+          // O novo acompanhante já é uma pessoa física existente na viagem
+          const existingComp = currentPassengers[newCompAlreadyInTripIdx];
+          passengerData.companionId = existingComp.id;
+          passengerData.companionName = existingComp.name;
+
+          const currNames = existingComp.companionForPatientName ? existingComp.companionForPatientName.split(', ') : [];
+          if (!currNames.includes(passengerData.name)) {
+            currNames.push(passengerData.name);
+          }
+          currentPassengers[newCompAlreadyInTripIdx] = {
+            ...existingComp,
+            companionForPatientName: currNames.join(', '),
+            procedureName: `Acompanhante de ${currNames.join(', ')}`
+          };
+
+          // Se o acompanhante antigo era outra pessoa, verifica se ela ainda acompanha outro paciente
+          if (oldAcompIdx >= 0 && oldAcompIdx !== newCompAlreadyInTripIdx) {
+            const oldComp = currentPassengers[oldAcompIdx];
+            const otherUsesOld = currentPassengers.some(
+              (p, idx) => idx !== editingPassengerIndex && p.type === 'paciente' && (p.companionId === oldComp.id || (p.companionName && p.companionName.toUpperCase() === oldComp.name.toUpperCase()))
+            );
+            if (!otherUsesOld) {
+              currentPassengers.splice(oldAcompIdx, 1);
+            }
+          }
+        } else if (oldAcompIdx >= 0) {
+          // Reaproveita o registro do acompanhante existente
           currentPassengers[oldAcompIdx] = companionData;
         } else {
+          // Adiciona novo acompanhante
           currentPassengers.push(companionData);
         }
       } else if (oldAcompIdx >= 0) {
-        currentPassengers.splice(oldAcompIdx, 1);
+        // Paciente não tem mais acompanhante: remove o antigo somente se não acompanhar outro paciente
+        const oldComp = currentPassengers[oldAcompIdx];
+        const otherUsesOld = currentPassengers.some(
+          (p, idx) => idx !== editingPassengerIndex && p.type === 'paciente' && (p.companionId === oldComp.id || (p.companionName && p.companionName.toUpperCase() === oldComp.name.toUpperCase()))
+        );
+        if (!otherUsesOld) {
+          currentPassengers.splice(oldAcompIdx, 1);
+        } else {
+          const remainingNames = currentPassengers
+            .filter((p, idx) => idx !== editingPassengerIndex && p.type === 'paciente' && (p.companionId === oldComp.id || (p.companionName && p.companionName.toUpperCase() === oldComp.name.toUpperCase())))
+            .map(p => p.name);
+          currentPassengers[oldAcompIdx] = {
+            ...oldComp,
+            companionForPatientName: remainingNames.join(', '),
+            procedureName: `Acompanhante de ${remainingNames.join(', ')}`
+          };
+        }
       }
 
+      currentPassengers[editingPassengerIndex] = passengerData;
       showToast(`Passageiro ${passengerData.name} atualizado com sucesso!`, "success");
     } else {
       // Prevenção de duplicidade do paciente
@@ -803,16 +875,14 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         return;
       }
 
-      // Prevenção de duplicidade do acompanhante
+      // Verificação do acompanhante:
+      // O mesmo acompanhante PODE acompanhar múltiplos pacientes na mesma viagem!
+      let companionAlreadyInTripIdx = -1;
       if (companionData) {
-        const companionExists = currentPassengers.some(
+        companionAlreadyInTripIdx = currentPassengers.findIndex(
           p => (p.patientId && companionData.patientId && p.patientId === companionData.patientId) ||
                (p.cpf && companionData.cpf && normalizeCpf(p.cpf) === normalizeCpf(companionData.cpf))
         );
-        if (companionExists) {
-          showToast(`O acompanhante ${companionData.name} já foi adicionado a esta viagem.`, "warning");
-          return;
-        }
       }
 
       // Restrições de viagem oncológica / hemodiálise
@@ -830,16 +900,36 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         }
       }
 
-      currentPassengers.push(passengerData);
       if (companionData) {
-        currentPassengers.push(companionData);
+        if (companionAlreadyInTripIdx >= 0) {
+          // O acompanhante já está na viagem! Associa ao paciente sem duplicar o assento
+          const existingComp = currentPassengers[companionAlreadyInTripIdx];
+          passengerData.companionId = existingComp.id;
+          passengerData.companionName = existingComp.name;
+
+          // Atualiza lista de pacientes acompanhados no registro do acompanhante
+          const currNames = existingComp.companionForPatientName ? existingComp.companionForPatientName.split(', ') : [];
+          if (!currNames.includes(passengerData.name)) {
+            currNames.push(passengerData.name);
+          }
+          currentPassengers[companionAlreadyInTripIdx] = {
+            ...existingComp,
+            companionForPatientName: currNames.join(', '),
+            procedureName: `Acompanhante de ${currNames.join(', ')}`
+          };
+
+          currentPassengers.push(passengerData);
+          showToast(`Passageiro ${passengerData.name} adicionado à tripulação (acompanhado por ${existingComp.name})!`, "success");
+        } else {
+          // Acompanhante novo
+          currentPassengers.push(passengerData);
+          currentPassengers.push(companionData);
+          showToast(`Passageiro ${passengerData.name} e acompanhante adicionados à tripulação!`, "success");
+        }
+      } else {
+        currentPassengers.push(passengerData);
+        showToast(`Passageiro ${passengerData.name} adicionado à tripulação!`, "success");
       }
-      showToast(
-        companionData 
-          ? `Passageiro ${passengerData.name} e acompanhante adicionados à tripulação!` 
-          : `Passageiro ${passengerData.name} adicionado à tripulação!`, 
-        "success"
-      );
     }
 
     const pCount = currentPassengers.filter(p => p.type === 'paciente').length;
@@ -920,20 +1010,48 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
 
     let nextPassengers = (formData.passengers || []).filter((_, i) => i !== index);
 
-    // Se remover o paciente (seja menor ou maior), remove também o acompanhante vinculado exclusivamente a ele
+    // Se remover o paciente (seja menor ou maior), verifica se o acompanhante dele ainda acompanha algum outro paciente na viagem
     if (target.companionId || target.type === 'paciente') {
-      nextPassengers = nextPassengers.filter(
-        p => !(
-          (target.companionId && p.id === target.companionId) ||
-          (p.companionForPatientId && (p.companionForPatientId === (target.patientId || target.id)))
-        )
+      const acompId = target.companionId;
+      const acompPatientId = target.patientId || target.id;
+
+      // Localiza o acompanhante na lista restante
+      const acompIdx = nextPassengers.findIndex(
+        p => (acompId && p.id === acompId) || (p.companionForPatientId && p.companionForPatientId === acompPatientId)
       );
+
+      if (acompIdx >= 0) {
+        const acomp = nextPassengers[acompIdx];
+        // Verifica se algum outro paciente ainda usa este mesmo acompanhante
+        const stillUsedByOther = nextPassengers.some(
+          p => p.type === 'paciente' && (
+            (p.companionId && p.companionId === acomp.id) ||
+            (p.companionName && acomp.name && p.companionName.toUpperCase() === acomp.name.toUpperCase())
+          )
+        );
+
+        if (!stillUsedByOther) {
+          // Nenhum outro paciente usa esse acompanhante: remove-o liberando o assento
+          nextPassengers = nextPassengers.filter((_, i) => i !== acompIdx);
+        } else {
+          // Outro paciente continua usando: atualiza companionForPatientName
+          const remainingNames = nextPassengers
+            .filter(p => p.type === 'paciente' && (p.companionId === acomp.id || (p.companionName && p.companionName.toUpperCase() === acomp.name.toUpperCase())))
+            .map(p => p.name);
+
+          nextPassengers[acompIdx] = {
+            ...acomp,
+            companionForPatientName: remainingNames.join(', '),
+            procedureName: `Acompanhante de ${remainingNames.join(', ')}`
+          };
+        }
+      }
     }
 
-    // Se remover o acompanhante, atualiza o paciente responsável para limpar o vínculo
+    // Se remover o acompanhante, atualiza todos os pacientes que tinham ele vinculado para limpar o vínculo
     if (target.type === 'acompanhante' || target.companionForPatientId) {
       nextPassengers = nextPassengers.map(p => {
-        if (p.companionId === target.id || (p.patientId && p.patientId === target.companionForPatientId)) {
+        if (p.companionId === target.id || (p.companionName && target.name && p.companionName.toUpperCase() === target.name.toUpperCase()) || (p.patientId && p.patientId === target.companionForPatientId)) {
           return {
             ...p,
             companionId: undefined,

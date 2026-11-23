@@ -354,6 +354,25 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
     setIsSelectCompanionOpen(false);
     setErrorMessage('');
 
+    // Se o acompanhante já estiver na tripulação (acompanhando outro paciente), reaproveita horário e locais
+    const compCpfClean = normalizeCpf(companion.cpf);
+    const existingCompInTrip = existingPassengers.find(p =>
+      (p.patientId && p.patientId === companion.id) ||
+      (compCpfClean && p.cpf && normalizeCpf(p.cpf) === compCpfClean)
+    );
+
+    if (existingCompInTrip) {
+      if (existingCompInTrip.departureTime) {
+        setCompanionDepartureTime(existingCompInTrip.departureTime);
+      }
+      if (existingCompInTrip.departureLocation) {
+        setCompanionDepartureLocation(existingCompInTrip.departureLocation);
+      }
+      if (existingCompInTrip.destinationPoint) {
+        setCompanionDestinationPoint(existingCompInTrip.destinationPoint);
+      }
+    }
+
     // Preenche automaticamente o horário do acompanhante se vazio
     if (!companionDepartureTime.trim()) {
       setCompanionDepartureTime(departureTime.trim() || '06:30');
@@ -477,8 +496,10 @@ export const PassageiroModal: React.FC<PassageiroModalProps> = ({
       }
     }
 
-    // Busca acompanhante pré-existente na tripulação em caso de edição
+    // Busca acompanhante pré-existente na tripulação (seja por ID de paciente, CPF ou em caso de edição)
     const existingCompanionMember = existingPassengers.find(p => 
+      (selectedCompanion && p.patientId && p.patientId === selectedCompanion.id) ||
+      (selectedCompanion && selectedCompanion.cpf && p.cpf && normalizeCpf(p.cpf) === normalizeCpf(selectedCompanion.cpf)) ||
       (editingPassenger?.companionId && p.id === editingPassenger.companionId) ||
       (p.companionForPatientId && (p.companionForPatientId === (editingPassenger?.patientId || editingPassenger?.id)))
     );
