@@ -31,6 +31,7 @@ export interface RegularizacaoTelefoneModalProps {
     patient: ConsultaPaciente | null;
     currentUser?: User | null;
     moduloOrigem?: string; // ex: "Regulação - Novo Agendamento", "Farmácia Popular - Retirar"
+    zIndex?: string;
     onSuccess: (updatedPatient: ConsultaPaciente) => void;
     onExceptionAllowed?: (patient: ConsultaPaciente, justificativa: string) => void;
 }
@@ -41,6 +42,7 @@ export const RegularizacaoTelefoneModal: React.FC<RegularizacaoTelefoneModalProp
     patient,
     currentUser,
     moduloOrigem = 'Regulação / Farmácia',
+    zIndex,
     onSuccess,
     onExceptionAllowed
 }) => {
@@ -223,7 +225,7 @@ export const RegularizacaoTelefoneModal: React.FC<RegularizacaoTelefoneModalProp
 
     const modalContent = (
         <div 
-            className="fixed inset-0 z-[10005] flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs select-none animate-in fade-in duration-150"
+            className={`fixed inset-0 ${zIndex || 'z-[999999]'} flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-xs select-none animate-in fade-in duration-150`}
             role="dialog"
             aria-modal="true"
         >

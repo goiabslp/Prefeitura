@@ -170,14 +170,18 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
     const procName = formatProcedimentoLabel(booking.procedimento) || 'Procedimento';
     const procType = booking.procedimento?.type || 'Consulta';
 
-    const executarGravacaoAgendamento = async () => {
-        if (!selectedSlot) return;
+    const executarGravacaoAgendamento = async (slotOverride?: ConsultaVaga) => {
+        const slot = slotOverride || selectedSlot || (timesForSelectedDate.length > 0 ? (timesForSelectedDate.find(s => s.id === selectedSlotId) || timesForSelectedDate[0]) : null);
+        if (!slot) {
+            setErrorMsg('Nenhuma vaga de horário disponível selecionada.');
+            return;
+        }
         setSubmitting(true);
         setErrorMsg('');
         setSuccessMsg('');
 
         try {
-            const updated = await db.confirmarDataAgendamento(booking.id, selectedDate, selectedSlot.hora, selectedSlot);
+            const updated = await db.confirmarDataAgendamento(booking.id, selectedDate, slot.hora, slot);
             if (!updated) {
                 throw new Error('Não foi possível registrar o agendamento no banco de dados.');
             }
@@ -220,7 +224,16 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
             setErrorMsg('Por favor, selecione uma data para o agendamento.');
             return;
         }
-        if (!selectedSlot) {
+
+        let slot = selectedSlot;
+        if (!slot && timesForSelectedDate.length > 0) {
+            slot = timesForSelectedDate.find(s => s.id === selectedSlotId) || timesForSelectedDate[0];
+            if (slot) {
+                setSelectedSlotId(slot.id);
+            }
+        }
+
+        if (!slot) {
             setErrorMsg('Por favor, selecione uma vaga de horário para o agendamento.');
             return;
         }
@@ -232,7 +245,7 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
             return;
         }
 
-        await executarGravacaoAgendamento();
+        await executarGravacaoAgendamento(slot);
     };
 
     const handlePhoneRegularizadoSuccess = async (updated: ConsultaPaciente) => {
@@ -309,6 +322,27 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
                                     <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
                                         SUS: {susNumber}
                                     </span>
+                                )}
+                                {booking.paciente?.phone && !isTelefoneIrregularParaOperacao(booking.paciente.phone) ? (
+                                    <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 flex items-center gap-1">
+                                        <Phone className="w-2.5 h-2.5" />
+                                        {booking.paciente.phone}
+                                    </span>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (booking.paciente) {
+                                                setPhoneIrregularPatient(booking.paciente);
+                                                setIsPhoneRegularizacaoOpen(true);
+                                            }
+                                        }}
+                                        className="text-amber-800 bg-amber-50 hover:bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300 flex items-center gap-1 cursor-pointer transition-colors text-[10px] font-black"
+                                        title="Clique para regularizar o telefone"
+                                    >
+                                        <Phone className="w-2.5 h-2.5 text-amber-600" />
+                                        <span>Sem telefone cadastrado</span>
+                                    </button>
                                 )}
                             </div>
                         </div>
@@ -699,6 +733,7 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
             {isPhoneRegularizacaoOpen && phoneIrregularPatient && (
                 <RegularizacaoTelefoneModal
                     isOpen={isPhoneRegularizacaoOpen}
+                    zIndex="z-[9999999]"
                     onClose={() => {
                         setIsPhoneRegularizacaoOpen(false);
                         setPhoneIrregularPatient(null);
